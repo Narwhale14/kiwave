@@ -4,11 +4,11 @@ export type MidiNote = { note: string, octave: number };
 
 export class Keyboard {
     private keys: number[];
-    private range: { start: number, end: number };
+    private range: { min: number, max: number };
 
-    constructor(start: MidiNote, end: MidiNote) {
-        const startMidi = noteToMidi(start.note, start.octave);
-        const endMidi = noteToMidi(end.note, end.octave);
+    constructor(min: MidiNote, max: MidiNote) {
+        const startMidi = noteToMidi(min.note, min.octave);
+        const endMidi = noteToMidi(max.note, max.octave);
 
         if(startMidi > endMidi) throw new Error('Start note must be lower than end note');
 
@@ -17,14 +17,14 @@ export class Keyboard {
             this.keys.push(midi);
         }
 
-        this.range = { start: startMidi, end: endMidi };
+        this.range = { min: startMidi, max: endMidi };
     }
 
     public getKeys(): readonly number[] {
         return this.keys;
     }
 
-    public getRange(): { start: number, end: number } {
+    public getRange(): { min: number, max: number } {
         return { ...this.range };
     }
 
