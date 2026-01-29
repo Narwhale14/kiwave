@@ -8,8 +8,8 @@ import { noteToMidi } from '../audio/midiUtils';
 
 const synth = new MiniSynth();
 const keyboard = new Keyboard({note: 'C', octave: 0}, {note: 'C', octave: 10});
-const notes = keyboard.getKeyboardInfo();
-const roll = new PianoRoll(keyboard.getRange())
+const roll = new PianoRoll(keyboard.getRange(), keyboard.getKeyboardInfo());
+const notes = roll.getKeyboardNotes();
 
 const state = reactive({
   hoverCell: null as Cell | null,
@@ -17,7 +17,6 @@ const state = reactive({
   cachedLength: 1 // default note length
 });
 
-// div containers for keyboard, workspace, and overall roll
 const workSpaceContainer = ref<HTMLDivElement | null>(null);
 const pianoRollContainer = ref<HTMLDivElement | null>(null);
 
@@ -47,11 +46,6 @@ function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
   const pointerX = event.clientX - pianoRoll.left;
   const noteRightX = (note.col + note.length) * colWidth;
   return Math.abs(pointerX - noteRightX) <= 15 * note.length;
-}
-
-function rowToMidi(row: number): number {
-  const index = notes.length - 1 - row;
-  return notes[index] ? notes[index].midi : -1;
 }
 
 function handlePointerMove(event: PointerEvent) {
@@ -84,10 +78,9 @@ function handlePointerDown(event: PointerEvent) {
 
   // place
   if(!hovered?.note) {
-    roll.addNote(state.hoverCell, state.cachedLength);
-    const noteMidi = rowToMidi(state.hoverCell.row);
-    playNote(noteMidi);
-    setTimeout(() => stopNote(noteMidi), 200);
+    const midi = roll.addNote(state.hoverCell, state.cachedLength);
+    playNote(midi);
+    setTimeout(() => stopNote(midi), 200);
     return;
   }
 
@@ -148,7 +141,7 @@ onMounted(async () => {
       }"
     >
       <!-- notes -->
-      <div v-for="(block, i) in roll.getNotes()" :key="i" class="absolute bg-blue-500 opacity-80 rounded-lg"
+      <div v-for="(block, i) in roll.getNoteBlocks()" :key="i" class="absolute bg-blue-500 opacity-80 rounded-lg"
         :style="{
           top: `${block.row * rowHeight}px`,
           left: `${block.col * colWidth}px`,
