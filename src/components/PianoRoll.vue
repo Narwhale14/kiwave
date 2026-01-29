@@ -4,6 +4,7 @@ import { MiniSynth } from '../audio/MiniSynth'
 import { resumeAudioContext } from '../audio/audio';
 import { Keyboard } from '../audio/Keyboard';
 import { PianoRoll, type NoteBlock, type Cell } from '../audio/PianoRoll'
+import { noteToMidi } from '../audio/midiUtils';
 
 const synth = new MiniSynth();
 const keyboard = new Keyboard({note: 'C', octave: 0}, {note: 'C', octave: 10});
@@ -13,13 +14,14 @@ const roll = new PianoRoll(keyboard.getRange())
 const state = reactive({
   hoverCell: null as Cell | null,
   hoverNote: null as NoteBlock | null,
+  cachedLength: 1 // default note length
 });
 
-// div containers for keyboard and roll
-const pianoKeysContainer = ref<HTMLDivElement | null>(null);
+// div containers for keyboard, workspace, and overall roll
+const workSpaceContainer = ref<HTMLDivElement | null>(null);
 const pianoRollContainer = ref<HTMLDivElement | null>(null);
 
-const rowHeight = ref(24);
+const rowHeight = ref(25);
 const colWidth = 80;
 const beatsPerBar = 4;
 
@@ -33,24 +35,34 @@ function stopNote(midi: number) {
 }
 
 function getCellFromPointer(event: PointerEvent) {
-  if(!pianoRollContainer.value) return { row: 0, col: 0};
-  const rect = pianoRollContainer.value.getBoundingClientRect();
+  if(!workSpaceContainer.value) return { row: 0, col: 0};
+  const rect = workSpaceContainer.value.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
   return { row: Math.floor(y / rowHeight.value), col: Math.floor(x / colWidth) };
 }
 
 function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
-  const pianoRoll = pianoRollContainer.value!.getBoundingClientRect();
+  const pianoRoll = workSpaceContainer.value!.getBoundingClientRect();
   const pointerX = event.clientX - pianoRoll.left;
   const noteRightX = (note.col + note.length) * colWidth;
-  return Math.abs(pointerX - noteRightX) <= 15;
+  return Math.abs(pointerX - noteRightX) <= 15 * note.length;
+}
+
+function rowToMidi(row: number): number {
+  const index = notes.length - 1 - row;
+  return notes[index] ? notes[index].midi : -1;
 }
 
 function handlePointerMove(event: PointerEvent) {
   if(roll.isResizing()) {
-    const pointerX = event.clientX - pianoRollContainer.value!.getBoundingClientRect().left;
-    roll.resize(Math.floor(pointerX / colWidth));
+    const pointerX = event.clientX - workSpaceContainer.value!.getBoundingClientRect().left;
+    const newLength = pointerX / colWidth;
+
+    if(newLength > state.cachedLength)
+      state.cachedLength = roll.resize(Math.ceil(newLength));
+    else
+      state.cachedLength = roll.resize(Math.floor(newLength));
     return;
   }
 
@@ -62,10 +74,8 @@ function handlePointerMove(event: PointerEvent) {
 }
 
 function handlePointerLeave() {
-  if(!roll.isResizing) {
-    state.hoverCell = null;
-    state.hoverNote = null;
-  }
+  state.hoverCell = null;
+  state.hoverNote = null;
 }
 
 function handlePointerDown(event: PointerEvent) {
@@ -74,7 +84,10 @@ function handlePointerDown(event: PointerEvent) {
 
   // place
   if(!hovered?.note) {
-    roll.addNote(state.hoverCell);
+    roll.addNote(state.hoverCell, state.cachedLength);
+    const noteMidi = rowToMidi(state.hoverCell.row);
+    playNote(noteMidi);
+    setTimeout(() => stopNote(noteMidi), 200);
     return;
   }
 
@@ -93,16 +106,19 @@ function handlePointerUp() {
 
 onMounted(async () => {
   await nextTick();
-  if(pianoKeysContainer.value) {
-    const firstKey = pianoKeysContainer.value.querySelector('button');
-    if(firstKey) rowHeight.value = firstKey.getBoundingClientRect().height;
+
+  if(pianoRollContainer.value) {
+    const centerMidi = noteToMidi('C', 5); // start note of piano roll
+    const index = notes.findIndex(n => n.midi === centerMidi);
+    const row = notes.length - 1 - index;
+    pianoRollContainer.value.scrollTop = row * rowHeight.value - pianoRollContainer.value.clientHeight / 2;
   }
 });
 </script>
 
 <template>
   <!-- piano roll -->
-  <div class="h-screen w-screen overflow-y-auto grid grid-cols-[64px_1fr] overflow-hidden">
+  <div ref="pianoRollContainer" class="h-screen w-screen overflow-y-auto grid grid-cols-[64px_1fr] overflow-hidden">
     <!-- notes column -->
     <div class="flex flex-col-reverse" ref="pianoKeysContainer">
       <button v-for="key in notes" :key="key.midi" 
@@ -110,15 +126,16 @@ onMounted(async () => {
         @pointerup="stopNote(key.midi)"
         @pointerleave="stopNote(key.midi)"
         :class="[
-          'w-full text-sm border select-none',
+          'w-full text-sm border select-none flex items-center justify-center',
           key.isBlack ? 'bg-[#1a1a1a] text-white' : 'bg-[#f5f5f5] text-black'
-        ]"> 
+        ]"
+        :style="{ height: rowHeight + 'px' }"> 
         {{ key.note }} 
       </button>
     </div>
 
     <!-- workspace -->
-    <div class="relative piano-roll-grid" ref="pianoRollContainer"
+    <div class="relative piano-roll-grid" ref="workSpaceContainer"
       @pointermove="handlePointerMove"
       @pointerleave="handlePointerLeave"
       @pointerdown="handlePointerDown"
@@ -141,11 +158,11 @@ onMounted(async () => {
       ></div>
 
       <!-- hover cell -->
-      <div v-if="state.hoverCell" class="absolute border-2 border-blue-400 opacity-50 pointer-events-none rounded-lg"
+      <div v-if="state.hoverCell && !state.hoverNote" class="absolute border-2 border-blue-400 opacity-50 pointer-events-none rounded-lg"
         :style="{
           top: `${state.hoverCell.row * rowHeight}px`,
           left: `${state.hoverCell.col * colWidth}px`,
-          width: `${colWidth}px`,
+          width: `${colWidth * state.cachedLength}px`,
           height: `${rowHeight}px`
         }"
       ></div>

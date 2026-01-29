@@ -30,11 +30,11 @@ export class PianoRoll {
         return index === -1 ? null : { note: this.notesBlocks[index], index };
     }
 
-    public addNote(cell: Cell) {
+    public addNote(cell: Cell, length: number) {
         if(cell.row < 0 || cell.row > (this.range.max - this.range.min))
             return new Error(`Row ${cell.row} out of range (${this.range.min} to ${this.range.max})`);
 
-        this.notesBlocks.push({ ...cell, length: 1 });
+        this.notesBlocks.push({ ...cell, length });
     }
 
     public deleteNote(index: number) {
@@ -45,9 +45,11 @@ export class PianoRoll {
         this.resizingNote = note;
     }
 
-    public resize(targetCol: number) {
-        if(!this.resizingNote) return;
+    public resize(targetCol: number): number {
+        if(!this.resizingNote) return 1; // default length
         this.resizingNote.length = Math.max(1, Math.round(targetCol - this.resizingNote.col));
+
+        return this.resizingNote.length;
     }
 
     public stopResize() {
