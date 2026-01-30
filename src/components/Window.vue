@@ -55,8 +55,15 @@ onBeforeUnmount(() => {
 
     <!-- title bar -->
     <div class="titlebar flex justify-between items-center px-2" @pointerdown.stop="onTitlePointerDown">
-      {{ title }}
-      <button class="text-gray-400 hover:text-white" @click="emit('close')">✕</button>
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="text-sm font-medium truncate">{{ title }}</span>
+        <slot name="header-left" />
+      </div>
+      <div class="flex items-center gap-1">
+        <slot name="header-right" />
+      </div>
+
+      <button class="w-6 h-6 text-gray-400 hover:text-white hover:bg-red-600 rounded" @pointerdown.stop @click="emit('close')">✕</button>
     </div>
 
     <!-- content -->

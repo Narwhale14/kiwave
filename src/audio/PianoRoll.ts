@@ -58,6 +58,10 @@ export class PianoRoll {
         this.resizingNote = note;
     }
 
+    public getResizingNoteCol(): number {
+        return this.resizingNote?.col ?? 0;
+    }
+
     public resize(targetCol: number): number {
         if(!this.resizingNote) return 1; // default length
         this.resizingNote.length = Math.max(1, Math.round(targetCol - this.resizingNote.col));

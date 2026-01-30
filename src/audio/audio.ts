@@ -5,7 +5,7 @@ export function getAudioContext(): AudioContext {
     return actx;
 }
 
-export function resumeAudioContext() {
+export async function resumeAudioContext() {
     const context = getAudioContext();
-    if(context.state === 'suspended') context.resume();
+    if(context.state === 'suspended') await context.resume();
 }

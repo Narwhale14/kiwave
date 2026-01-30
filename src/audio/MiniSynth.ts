@@ -2,49 +2,91 @@ import { midiToFrequency } from "./midiUtils";
 import { getAudioContext } from "./audio";
 
 export class MiniSynth {
-  private actx: AudioContext;
-  private activeVoices = new Map<number, {osc: OscillatorNode; gain: GainNode}>();
-  private readonly declick: number = 0.001; // 0.1 ms
+  private context: AudioContext;
+  private voices = new Map<number, {oscNode: OscillatorNode; gainNode: GainNode; volume: number}>();
+  private masterGain: GainNode;
+  private readonly declick: number = 0.002;
 
   constructor() {
-    this.actx = getAudioContext();
+    this.context = getAudioContext();
+
+    this.masterGain = this.context.createGain();
+    this.masterGain.gain.value = 1;
+    this.masterGain.connect(this.context.destination);
   }
 
   public noteOn(midi: number, type: OscillatorType = 'sine', volume = 0.2) {
-    if(this.activeVoices.has(midi)) return;
+    if(this.voices.has(midi)) this.noteOff(midi);
 
-    const osc = this.actx.createOscillator();
-    const gain = this.actx.createGain();
-    const now = this.actx.currentTime;
+    const oscNode = this.context.createOscillator();
+    const gainNode = this.context.createGain();
+    const now = this.context.currentTime;
 
-    osc.type = type;
-    osc.frequency.value = midiToFrequency(midi);
+    oscNode.type = type;
+    oscNode.frequency.value = midiToFrequency(midi);
 
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(volume, now + this.declick);
+    const normalization = volume / (this.voices.size + 1);
 
-    osc.connect(gain);
-    gain.connect(this.actx.destination);
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(normalization, now + this.declick);
 
-    osc.start();
-    this.activeVoices.set(midi, {osc, gain});
+    oscNode.connect(gainNode);
+    gainNode.connect(this.masterGain);
+
+    oscNode.start();
+    this.voices.set(midi, {oscNode, gainNode, volume: normalization});
   }
 
   public noteOff(midi: number) {
-    const voice = this.activeVoices.get(midi);
+    const voice = this.voices.get(midi);
     if(!voice) return;
 
-    const { osc, gain } = voice;
-    const now = this.actx.currentTime;
-    
-    gain.gain.cancelScheduledValues(now);
-    gain.gain.setValueAtTime(gain.gain.value, now);
-    gain.gain.linearRampToValueAtTime(0, now + this.declick);
+    const { oscNode, gainNode, volume } = voice;
+    const now = this.context.currentTime;
 
-    osc.stop(now + this.declick);
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.setValueAtTime(volume, now);
+    gainNode.gain.linearRampToValueAtTime(0, now + this.declick);
 
-    this.activeVoices.delete(midi);
+    oscNode.stop(now + this.declick);
+
+    this.voices.delete(midi);
   }
 
-  
+  public noteOnAtTime(midi: number, time: number, type: OscillatorType = 'sine', volume = 0.2) {
+    if(this.voices.has(midi)) return;
+
+    const oscNode = this.context.createOscillator();
+    const gainNode = this.context.createGain();
+
+    oscNode.type = type;
+    oscNode.frequency.value = midiToFrequency(midi);
+
+    gainNode.gain.setValueAtTime(0, time);
+    gainNode.gain.linearRampToValueAtTime(volume, time + this.declick);
+
+    oscNode.connect(gainNode);
+    gainNode.connect(this.masterGain);
+
+    oscNode.start(time);
+    this.voices.set(midi, {oscNode, gainNode, volume});
+  }
+
+  public noteOffAtTime(midi: number, time: number) {
+    const voice = this.voices.get(midi);
+    if(!voice) return;
+
+    const { oscNode, gainNode, volume } = voice;
+
+    gainNode.gain.setValueAtTime(volume, time - this.declick);
+    gainNode.gain.linearRampToValueAtTime(0, time);
+
+    oscNode.stop(time);
+
+    oscNode.onended = () => {
+      if(this.voices.get(midi)?.oscNode === oscNode) {
+        this.voices.delete(midi);
+      }
+    };
+  }
 }
