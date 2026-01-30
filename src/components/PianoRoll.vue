@@ -111,7 +111,7 @@ onMounted(async () => {
 
 <template>
   <!-- piano roll -->
-  <div ref="pianoRollContainer" class="h-screen w-screen overflow-y-auto grid grid-cols-[64px_1fr] overflow-hidden">
+  <div ref="pianoRollContainer" class="w-full h-full overflow-auto grid grid-cols-[64px_1fr]">
     <!-- notes column -->
     <div class="flex flex-col-reverse" ref="pianoKeysContainer">
       <button v-for="key in notes" :key="key.midi" 
@@ -135,6 +135,7 @@ onMounted(async () => {
       @pointerup="handlePointerUp"
       :style="{
         height: `${notes.length * rowHeight}px`,
+        width: `${128 * beatsPerBar * colWidth}px`,
         '--row-h': `${rowHeight}px`,
         '--col-w': `${colWidth}px`,
         '--bar-w': `${colWidth * beatsPerBar}px`
