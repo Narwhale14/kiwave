@@ -20,15 +20,15 @@ export class Keyboard {
         this.range = { min: startMidi, max: endMidi };
     }
 
-    public getKeys(): readonly number[] {
+    getKeys(): readonly number[] {
         return this.keys;
     }
 
-    public getRange(): { min: number, max: number } {
+    getRange(): { min: number, max: number } {
         return { ...this.range };
     }
 
-    public getKeyboardInfo() {
+    getKeyboardInfo() {
         return this.keys.map(midi => ({
             midi,
             note: midiToNoteName(midi),

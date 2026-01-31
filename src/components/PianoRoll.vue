@@ -1,21 +1,59 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, nextTick, onBeforeUnmount } from 'vue';
+import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref } from 'vue';
 import { MiniSynth } from '../audio/MiniSynth'
-import { resumeAudioContext } from '../audio/audio';
 import { Keyboard } from '../audio/Keyboard';
 import { PianoRoll, type NoteBlock, type Cell } from '../audio/PianoRoll'
 import { noteToMidi } from '../audio/midiUtils';
+import { isWindowActive } from '../services/windowManager';
+import { Scheduler, type SchedulerNote } from '../audio/Scheduler';
 
-const synth = new MiniSynth();
-const keyboard = new Keyboard({note: 'C', octave: 0}, {note: 'C', octave: 10});
+let synth: MiniSynth | null = null;
+let scheduler: Scheduler | null = null;
+
+function initAudio() {
+  if(synth) return;
+  synth = new MiniSynth();
+  scheduler = new Scheduler(synth, { bpm: tempo });
+
+  scheduler.onPlayhead((beat) => {
+    playhead.col = beat;
+  });
+
+  scheduler.onPlayStateChange((playing) => {
+    playhead.playing = playing;
+  });
+
+  syncNotesToScheduler();
+}
+
+function syncNotesToScheduler() {
+  if (!scheduler) return;
+  
+  const schedulerNotes: SchedulerNote[] = roll.getNoteBlocks().map((block, i) => ({
+    id: `note-${i}-${block.row}-${block.col}`,
+    pitch: block.midi,
+    startTime: block.col,
+    duration: block.length,
+    velocity: 0.8,
+  }));
+  
+  scheduler.setNotes(schedulerNotes);
+}
+
+// SETUP
+
+const keyboard = new Keyboard({ note: 'C', octave: 0 }, { note: 'C', octave: 10 });
 const roll = new PianoRoll(keyboard.getRange(), keyboard.getKeyboardInfo());
 const notes = roll.getKeyboardNotes();
-const activeNotes = new Set<NoteBlock>();
+
+const windowElement = inject<Ref<HTMLElement | null>>('windowElement');
+const windowId = inject<string>('windowId');
+if(!windowElement) throw new Error('PianoRoll must be in a window');
 
 const state = reactive({
   hoverCell: null as Cell | null,
   hoverNote: null as NoteBlock | null,
-  cachedLength: 1 // default note length
+  cachedLength: 1
 });
 
 const playhead = reactive({
@@ -23,10 +61,7 @@ const playhead = reactive({
   playing: false
 });
 
-const tempo = 240;
-
-let playheadStartTime: number | null = null;
-let playheadRAF: number;
+const tempo = 120;
 
 const workSpaceContainer = ref<HTMLDivElement | null>(null);
 const pianoRollContainer = ref<HTMLDivElement | null>(null);
@@ -35,58 +70,30 @@ const rowHeight = ref(25);
 const colWidth = 80;
 const beatsPerBar = 4;
 
+// LIVE PREVIEW (keyboard sidebar)
+
 async function playNote(midi: number) {
-  if(!playhead.playing) {
-    await resumeAudioContext();
-    synth.noteOn(midi);
-  }
+  initAudio();
+  await synth!.resume();
+  synth!.noteOn(midi);
 }
 
 function stopNote(midi: number) {
-  synth.noteOff(midi);
+  synth?.noteOff(midi);
 }
 
-async function startPlayhead(columnIntervalMs: number) {
-  if(!workSpaceContainer.value) return;
-
-  await resumeAudioContext();
-  playhead.playing = true;
-  playhead.col = 0;
-  activeNotes.clear();
-  const intervalSec = columnIntervalMs / 1000;
-  playheadStartTime = performance.now();
-
-  function animate() { 
-    if(!playhead.playing) return;
-
-    const elapsed = (performance.now() - playheadStartTime!) / 1000;
-
-    const prevCol = playhead.col;
-    playhead.col = elapsed / intervalSec;
-
-    roll.getNoteBlocks().forEach(note => {
-      const crossedStart = prevCol <= note.col && playhead.col >= note.col;
-      if(!activeNotes.has(note) && crossedStart) {
-        synth.noteOn(note.midi);
-        activeNotes.add(note);
-
-        synth.noteOffAtTime(note.midi, synth['context'].currentTime + note.length * (columnIntervalMs / 1000))
-      }
-    });
-
-    playheadRAF = requestAnimationFrame(animate);
-  }
-
-  playheadRAF = requestAnimationFrame(animate);
-}
+// CONTROLS
 
 function stopPlayhead() {
-  playhead.playing = false;
-  cancelAnimationFrame(playheadRAF);
-
-  activeNotes.forEach(n => synth.noteOff(n.midi));
-  activeNotes.clear();
+  scheduler!.stop();
 }
+
+async function togglePlayhead() {
+  initAudio();
+  await scheduler!.toggle();
+}
+
+// POINTER HANDLING
 
 function getCellFromPointer(event: PointerEvent) {
   if(!workSpaceContainer.value) return { row: 0, col: 0};
@@ -122,15 +129,18 @@ function handlePointerLeave() {
   state.hoverNote = null;
 }
 
-function handlePointerDown(event: PointerEvent) {
+async function handlePointerDown(event: PointerEvent) {
   if(!state.hoverCell) return;
   const hovered = roll.getHoveredNote(state.hoverCell);
 
   // place
   if(!hovered?.note) {
     const midi = roll.addNote(state.hoverCell, state.cachedLength);
-    playNote(midi);
-    setTimeout(() => stopNote(midi), 200);
+    syncNotesToScheduler();
+
+    // preview note
+    await playNote(midi);
+    setTimeout(() => stopNote(midi), 150);
     return;
   }
 
@@ -140,32 +150,68 @@ function handlePointerDown(event: PointerEvent) {
     return;
   }
 
+  // delete
   roll.deleteNote(hovered.index);
+  syncNotesToScheduler();
 }
 
 function handlePointerUp() {
-  roll.stopResize();
-}
-
-function onKeyDown(event: KeyboardEvent) {
-  const target = event.target as HTMLElement;
-  if(['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
-
-  if(event.code === 'Space') {
-    event.preventDefault();
-
-    if(playhead.playing) {
-      stopPlayhead();
-    } else {
-      startPlayhead(60000 / tempo);
-    }
+  if(roll.isResizing()) {
+    roll.stopResize();
+    syncNotesToScheduler();
   }
 }
 
-onMounted(async () => {
-  window.addEventListener('keydown', onKeyDown);
+function onPianoRollKeyDown(event: KeyboardEvent) {
+  if(!isWindowActive(windowId!)) return;
 
+  const target = event.target as HTMLElement;
+  if(['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
+
+  const element = pianoRollContainer.value;
+  if(!element) return;
+
+  if(event.code === 'Space') {
+    event.preventDefault();
+    togglePlayhead();
+    return;
+  }
+
+  if(event.code === 'Enter') {
+    event.preventDefault();
+    stopPlayhead();
+    return;
+  }
+
+  const stepInterval = 0.5;
+  const fastScrollMult = event.shiftKey ? 8 : 1;
+  switch(event.code) {
+    case 'ArrowUp':
+      event.preventDefault();
+      element.scrollTop -= rowHeight.value * fastScrollMult;
+      break;
+    case 'ArrowDown':
+      event.preventDefault();
+      element.scrollTop += rowHeight.value * fastScrollMult;
+      break;
+    case 'ArrowLeft':
+      event.preventDefault();
+      element.scrollLeft -= colWidth * stepInterval * fastScrollMult;
+      break;
+    case 'ArrowRight':
+      event.preventDefault();
+      element.scrollLeft += colWidth * stepInterval * fastScrollMult;
+      break;
+  }
+}
+
+// LIFECYCLE
+
+onMounted(async () => {
   await nextTick();
+
+  windowElement.value?.addEventListener('keydown', onPianoRollKeyDown);
+
   if(pianoRollContainer.value) {
     const centerMidi = noteToMidi('C', 5); // start note of piano roll
     const index = notes.findIndex(n => n.midi === centerMidi);
@@ -175,13 +221,16 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeyDown);
-});
+  windowElement.value?.removeEventListener('keydown', onPianoRollKeyDown);
+  scheduler?.dispose();
+  synth?.dispose();
+})
 </script>
 
 <template>
   <!-- piano roll -->
-  <div ref="pianoRollContainer" class="w-full h-full overflow-auto grid grid-cols-[64px_1fr]">
+  <div ref="pianoRollContainer" class="w-full h-full overflow-auto grid grid-cols-[64px_1fr]"
+  >
     <!-- notes column -->
     <div class="flex flex-col-reverse" ref="pianoKeysContainer">
       <button v-for="key in notes" :key="key.midi" 
@@ -250,11 +299,13 @@ onBeforeUnmount(() => {
         }"
       ></div>
 
-      <div v-if="playhead.playing" class="absolute bg-green-400 w-2 z-50 pointer-events-none shadow-[0_0_6px_rgba(74,222,128,0.9)"
+      <!-- playhead -->
+      <div v-if="playhead.playing || playhead.col > 0"
+        class="absolute bg-green-400 w-0.75 z-50 pointer-events-none shadow-[0_0_6px_rgba(74,222,128,0.9)]"
         :style="{
           transform: `translateX(${playhead.col * colWidth}px)`,
           top: '0',
-          height: `${notes.length * rowHeight}px`
+          height: `${notes.length * rowHeight}px`,
         }"
       ></div>
     </div>

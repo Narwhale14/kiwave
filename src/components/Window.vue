@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue';
-import { registerWindow, focusWindow, beginMove, beginResize, type Window, windows, unregisterWindow } from '../services/windowManager';
+import { onBeforeUnmount, onMounted, ref, watch, nextTick, provide } from 'vue';
+import { registerWindow, focusWindow, beginMove, beginResize, type Window, windows, unregisterWindow, activeWindowId } from '../services/windowManager';
 
 const props = defineProps<{
   id: string;
@@ -11,6 +11,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'close'): void
 }>();
+
+const rootElement = ref<HTMLElement | null>(null);
+provide('windowElement', rootElement);
+provide('windowId', props.id);
+
+watch(activeWindowId, id => {
+  if(id === props.id)
+    nextTick(() => rootElement.value?.focus());
+});
 
 function onTitlePointerDown(event: PointerEvent) {
   focusWindow(props.id);
@@ -42,7 +51,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="visible" class="fixed bg-[#1e1e1e] text-white flex flex-col overflow-visible select-none" 
+  <div ref="rootElement" v-if="visible" tabindex="0" class="fixed bg-[#1e1e1e] text-white flex flex-col overflow-visible select-none focus:outline-none" 
     :style="{
       left: windows.find(w => w.id === id)?.x + 'px',
       top: windows.find(w => w.id === id)?.y + 'px',
@@ -50,7 +59,7 @@ onBeforeUnmount(() => {
       height: windows.find(w => w.id === id)?.height + 'px',
       zIndex: windows.find(w => w.id === id)?.z
     }"
-    @pointerdown.prevent="focusWindow(id)"
+    @pointerdown.stop="focusWindow(id)"
   >
 
     <!-- title bar -->

@@ -64,6 +64,10 @@ export function beginResize(id: string, edge: ResizeEdge, e: PointerEvent) {
     };
 }
 
+export function isWindowActive(id: string) {
+    return activeWindowId.value === id;
+}
+
 window.addEventListener('pointermove', event => {
     if(!activeWindow || !dragState.value) return;
 
