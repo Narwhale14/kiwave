@@ -31,8 +31,8 @@ onMounted(() => {
     id: props.id,
     x: 100,
     y: 100,
-    width: 400,
-    height: 300,
+    width: 1200,
+    height: 600,
     z: 0
   }
 

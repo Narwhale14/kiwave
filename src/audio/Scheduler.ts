@@ -113,6 +113,22 @@ export class Scheduler {
 
     // SCHEDULING
 
+    addNote(note: SchedulerNote) {
+        this.notes.push(note);
+    }
+
+    removeNote(id: string) {
+        const index = this.notes.findIndex(n => n.id === id);
+        if(index !== -1) this.notes.splice(index, 1);
+    }
+
+    updateNote(id: string, updates: Partial<SchedulerNote>) {
+        const note = this.notes.find(n => n.id === id);
+        if(note) {
+            Object.assign(note, updates);
+        }
+    } 
+
     // the lookahead
     private schedulerTick = () => {
         const now = this.audioContext.currentTime;

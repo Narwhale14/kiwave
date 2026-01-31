@@ -5,15 +5,18 @@ import { Keyboard } from '../audio/Keyboard';
 import { PianoRoll, type NoteBlock, type Cell } from '../audio/PianoRoll'
 import { noteToMidi } from '../audio/midiUtils';
 import { isWindowActive } from '../services/windowManager';
-import { Scheduler, type SchedulerNote } from '../audio/Scheduler';
+import { Scheduler } from '../audio/Scheduler';
 
 let synth: MiniSynth | null = null;
 let scheduler: Scheduler | null = null;
+let noteIdCounter = 0;
 
 function initAudio() {
   if(synth) return;
   synth = new MiniSynth();
+  console.log('synth init success');
   scheduler = new Scheduler(synth, { bpm: tempo });
+  console.log('scheduler init success');
 
   scheduler.onPlayhead((beat) => {
     playhead.col = beat;
@@ -22,22 +25,10 @@ function initAudio() {
   scheduler.onPlayStateChange((playing) => {
     playhead.playing = playing;
   });
-
-  syncNotesToScheduler();
 }
 
-function syncNotesToScheduler() {
-  if (!scheduler) return;
-  
-  const schedulerNotes: SchedulerNote[] = roll.getNoteBlocks().map((block, i) => ({
-    id: `note-${i}-${block.row}-${block.col}`,
-    pitch: block.midi,
-    startTime: block.col,
-    duration: block.length,
-    velocity: 0.8,
-  }));
-  
-  scheduler.setNotes(schedulerNotes);
+function generateNoteId(): string {
+  return `note-${noteIdCounter++}-${Date.now()}`;
 }
 
 // SETUP
@@ -53,7 +44,8 @@ if(!windowElement) throw new Error('PianoRoll must be in a window');
 const state = reactive({
   hoverCell: null as Cell | null,
   hoverNote: null as NoteBlock | null,
-  cachedLength: 1
+  cachedLength: 1,
+  resizingNote: null as NoteBlock | null
 });
 
 const playhead = reactive({
@@ -73,7 +65,6 @@ const beatsPerBar = 4;
 // LIVE PREVIEW (keyboard sidebar)
 
 async function playNote(midi: number) {
-  initAudio();
   await synth!.resume();
   synth!.noteOn(midi);
 }
@@ -89,7 +80,6 @@ function stopPlayhead() {
 }
 
 async function togglePlayhead() {
-  initAudio();
   await scheduler!.toggle();
 }
 
@@ -135,8 +125,23 @@ async function handlePointerDown(event: PointerEvent) {
 
   // place
   if(!hovered?.note) {
-    const midi = roll.addNote(state.hoverCell, state.cachedLength);
-    syncNotesToScheduler();
+    const noteId = generateNoteId();
+    const midi = roll.addNote(state.hoverCell, state.cachedLength, noteId);
+
+    // add note to scheduler
+    if(scheduler) {
+      const noteBlocks = roll.getNoteBlocks();
+      const newNote = noteBlocks[noteBlocks.length - 1];
+      if (newNote) {
+        scheduler.addNote({
+          id: newNote.id,
+          pitch: newNote.midi,
+          startTime: newNote.col,
+          duration: newNote.length,
+          velocity: 0.8,
+        });
+      }
+    }
 
     // preview note
     await playNote(midi);
@@ -146,19 +151,33 @@ async function handlePointerDown(event: PointerEvent) {
 
   // resize
   if(isNearRightEdge(event, hovered.note)) {
+    state.resizingNote = hovered.note;
     roll.startResize(hovered.note);
     return;
   }
 
   // delete
+  const noteToDelete = hovered.note;
   roll.deleteNote(hovered.index);
-  syncNotesToScheduler();
+
+  // remove note from scheduler
+  if (scheduler) {
+    scheduler.removeNote(noteToDelete.id);
+  }
 }
 
 function handlePointerUp() {
-  if(roll.isResizing()) {
+  if(roll.isResizing() && state.resizingNote) {
     roll.stopResize();
-    syncNotesToScheduler();
+
+    // update note duration in scheduler
+    if (scheduler) {
+      scheduler.updateNote(state.resizingNote.id, {
+        duration: state.resizingNote.length
+      });
+    }
+
+    state.resizingNote = null;
   }
 }
 
@@ -209,6 +228,7 @@ function onPianoRollKeyDown(event: KeyboardEvent) {
 
 onMounted(async () => {
   await nextTick();
+  initAudio();
 
   windowElement.value?.addEventListener('keydown', onPianoRollKeyDown);
 

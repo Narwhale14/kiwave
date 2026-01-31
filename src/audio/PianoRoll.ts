@@ -1,7 +1,7 @@
 import { reactive } from 'vue';
 
 export type Cell = { row: number; col: number };
-export type NoteBlock = { row: number; col: number, length: number, midi: number };
+export type NoteBlock = { id: string; row: number; col: number, length: number, midi: number };
 
 export class PianoRoll {
     private notesBlocks: NoteBlock[] = [];
@@ -41,12 +41,12 @@ export class PianoRoll {
         return index === -1 ? null : { note: this.notesBlocks[index], index };
     }
 
-    public addNote(cell: Cell, length: number): number {
+    public addNote(cell: Cell, length: number, id: string): number {
         if(cell.row < 0 || cell.row > (this.range.max - this.range.min))
             return -1;
 
         const midi = this.rowToMidi(cell.row);
-        this.notesBlocks.push({ ...cell, length, midi });
+        this.notesBlocks.push({ id, ...cell, length, midi });
         return midi;
     }
 
