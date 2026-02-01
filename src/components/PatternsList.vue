@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { addPattern, patterns, togglePattern } from '../state/patterns';
+import { addPattern, patterns, togglePattern } from '../services/patternsListManager';
 
 const name = ref('');
 

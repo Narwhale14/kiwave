@@ -1,7 +1,7 @@
 import { ref } from 'vue';
 import { PianoRoll } from '../audio/PianoRoll';
 import { Keyboard } from '../audio/Keyboard';
-import { focusWindow } from '../services/windowManager';
+import { focusWindow } from './windowManager';
 
 interface Pattern {
     id: string;

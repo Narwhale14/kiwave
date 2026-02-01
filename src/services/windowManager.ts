@@ -1,6 +1,6 @@
 import { reactive, ref, computed } from 'vue'
 
-export type Window = {
+export interface Window {
     id: string,
     x: number,
     y: number,
@@ -38,7 +38,8 @@ export function focusWindow(id: string) {
 }
 
 export function beginMove(id: string, event: PointerEvent) {
-    if(id !== activeWindowId.value && !activeWindow) return;
+    if(id !== activeWindowId.value && activeWindow) return;
+    focusWindow(id);
 
     dragState.value = {
         type: 'move',
@@ -47,7 +48,7 @@ export function beginMove(id: string, event: PointerEvent) {
     };
 }
 
-export function beginResize(id: string, edge: ResizeEdge, e: PointerEvent) {
+export function beginResize(id: string, edge: ResizeEdge, event: PointerEvent) {
     focusWindow(id);
     const win = windows.find(w => w.id === id);
     if(!win) return;
@@ -55,8 +56,8 @@ export function beginResize(id: string, edge: ResizeEdge, e: PointerEvent) {
     dragState.value = {
         type: 'resize',
         edge,
-        startX: e.clientX,
-        startY: e.clientY,
+        startX: event.clientX,
+        startY: event.clientY,
         startW: win.width,
         startH: win.height,
         startWinX: win.x,
@@ -69,7 +70,7 @@ export function isWindowActive(id: string) {
 }
 
 window.addEventListener('pointermove', event => {
-    if(!activeWindow || !dragState.value) return;
+    if(!dragState.value) return;
 
     if(dragState.value.type === 'move') {
         activeWindow.value!.x = event.clientX - dragState.value.offsetX;

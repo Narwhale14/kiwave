@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch, nextTick, provide } from 'vue';
-import { registerWindow, focusWindow, beginMove, beginResize, windows, unregisterWindow, activeWindowId } from '../services/windowManager';
+import { registerWindow, focusWindow, beginResize, beginMove, windows, unregisterWindow, activeWindowId } from '../services/windowManager';
 
 const props = defineProps<{
   id: string;
   title: string;
-  visible: boolean
+  visible: boolean;
+  alterable: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -20,11 +21,6 @@ watch(activeWindowId, id => {
   if(id === props.id)
     nextTick(() => rootElement.value?.focus());
 });
-
-function onTitlePointerDown(event: PointerEvent) {
-  focusWindow(props.id);
-  beginMove(props.id, event);
-}
 
 onMounted(() => {
   registerWindow({
@@ -55,7 +51,9 @@ onBeforeUnmount(() => {
   >
 
     <!-- title bar -->
-    <div class="titlebar flex justify-between items-center px-2" @pointerdown.stop="onTitlePointerDown">
+    <div class="titlebar flex justify-between items-center px-2" 
+      :class="{ 'pointer-events-none': !props.alterable }"
+      @pointerdown.stop="beginMove(props.id, $event)">
       <div class="flex items-center gap-2 min-w-0">
         <span class="text-sm font-medium truncate">{{ title }}</span>
         <slot name="header-left" />
@@ -72,16 +70,18 @@ onBeforeUnmount(() => {
       <slot />
     </div>
 
-    <!-- resize edges -->
-    <div class="absolute inset-y-0 -left-1 w-2 cursor-w-resize" @pointerdown.stop="beginResize(id, 'left', $event)" />
-    <div class="absolute inset-y-0 -right-1 w-2 cursor-e-resize" @pointerdown.stop="beginResize(id, 'right', $event)" />
-    <div class="absolute inset-x-0 -top-1 h-2 cursor-n-resize" @pointerdown.stop="beginResize(id, 'top', $event)" />
-    <div class="absolute inset-x-0 -bottom-1 h-2 cursor-s-resize" @pointerdown.stop="beginResize(id, 'bottom', $event)" />
+    <div v-if="props.alterable">
+      <!-- resize edges -->
+      <div class="absolute inset-y-0 -left-1 w-2 cursor-w-resize" @pointerdown.stop="beginResize(id, 'left', $event)" />
+      <div class="absolute inset-y-0 -right-1 w-2 cursor-e-resize" @pointerdown.stop="beginResize(id, 'right', $event)" />
+      <div class="absolute inset-x-0 -top-1 h-2 cursor-n-resize" @pointerdown.stop="beginResize(id, 'top', $event)" />
+      <div class="absolute inset-x-0 -bottom-1 h-2 cursor-s-resize" @pointerdown.stop="beginResize(id, 'bottom', $event)" />
 
-    <!-- resize corners -->
-    <div class="absolute -top-1 -left-1 w-3 h-3 cursor-nw-resize" @pointerdown.stop="beginResize(id, 'top-left', $event)" />
-    <div class="absolute -top-1 -right-1 w-3 h-3 cursor-ne-resize" @pointerdown.stop="beginResize(id, 'top-right', $event)" />
-    <div class="absolute -bottom-1 -left-1 w-3 h-3 cursor-sw-resize" @pointerdown.stop="beginResize(id, 'bottom-left', $event)" />
-    <div class="absolute -bottom-1 -right-1 w-3 h-3 cursor-se-resize" @pointerdown.stop="beginResize(id, 'bottom-right', $event)" />
+      <!-- resize corners -->
+      <div class="absolute -top-1 -left-1 w-3 h-3 cursor-nw-resize" @pointerdown.stop="beginResize(id, 'top-left', $event)" />
+      <div class="absolute -top-1 -right-1 w-3 h-3 cursor-ne-resize" @pointerdown.stop="beginResize(id, 'top-right', $event)" />
+      <div class="absolute -bottom-1 -left-1 w-3 h-3 cursor-sw-resize" @pointerdown.stop="beginResize(id, 'bottom-left', $event)" />
+      <div class="absolute -bottom-1 -right-1 w-3 h-3 cursor-se-resize" @pointerdown.stop="beginResize(id, 'bottom-right', $event)" />
+    </div>
   </div>
 </template>
