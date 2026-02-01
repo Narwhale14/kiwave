@@ -13,9 +13,7 @@ let noteIdCounter = 0;
 function initAudio() {
   if(synth) return;
   synth = new MiniSynth();
-  console.log('synth init success');
   scheduler = new Scheduler(synth, { bpm: tempo });
-  console.log('scheduler init success');
 
   scheduler.onPlayhead((beat) => {
     playhead.col = beat;

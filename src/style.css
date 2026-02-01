@@ -28,11 +28,9 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  border-radius: 0.25rem;
   cursor: pointer;
   align-items: center;
-  justify-content: center;
-  display: flex
+  display: flex;
 }
 
 button:hover {

@@ -18,7 +18,6 @@ const keyboard = new Keyboard(
 export const patterns = ref<Pattern[]>([]);
 
 export function addPattern(name: string) {
-    console.log('pattern added');
     patterns.value.push({
         id: crypto.randomUUID(),
         name,

@@ -6,10 +6,10 @@ import { closePattern, patterns } from './services/patternsListManager';
 </script>
 
 <template>
-  <div class="w-screen h-screen">
+  <div class="flex w-screen h-screen">
     <PatternsList />
 
-    <Window v-for="pattern in patterns" :key="pattern.id" :id="pattern.id" :title="pattern.name" :visible="pattern.visible" :alterable="false" @close="closePattern(pattern.id)">
+    <Window v-for="pattern in patterns" :key="pattern.id" :id="pattern.id" :title="pattern.name" :visible="pattern.visible" :alterable="true" @close="closePattern(pattern.id)">
       <PianoRoll :roll="pattern.roll"/>
     </Window>
   </div>

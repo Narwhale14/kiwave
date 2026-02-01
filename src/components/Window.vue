@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch, nextTick, provide } from 'vue';
-import { registerWindow, focusWindow, beginResize, beginMove, windows, unregisterWindow, activeWindowId } from '../services/windowManager';
+import { registerWindow, beginResize, beginMove, windows, unregisterWindow, activeWindowId } from '../services/windowManager';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   id: string;
   title: string;
   visible: boolean;
-  alterable: boolean;
-}>();
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+}>(), { x: 100, y: 100, width: 1200, height: 600 });
 
 const emit = defineEmits<{
   (event: 'close'): void
@@ -25,10 +28,10 @@ watch(activeWindowId, id => {
 onMounted(() => {
   registerWindow({
     id: props.id,
-    x: 100,
-    y: 100,
-    width: 1200,
-    height: 600,
+    x: props.x,
+    y: props.x,
+    width: props.width,
+    height: props.height,
     z: 0
   });
 });
@@ -47,12 +50,9 @@ onBeforeUnmount(() => {
       height: windows.find(w => w.id === id)?.height + 'px',
       zIndex: windows.find(w => w.id === id)?.z
     }"
-    @pointerdown.stop="focusWindow(id)"
   >
-
     <!-- title bar -->
-    <div class="titlebar flex justify-between items-center px-2" 
-      :class="{ 'pointer-events-none': !props.alterable }"
+    <div class="titlebar flex justify-between items-center px-2 " 
       @pointerdown.stop="beginMove(props.id, $event)">
       <div class="flex items-center gap-2 min-w-0">
         <span class="text-sm font-medium truncate">{{ title }}</span>
@@ -70,7 +70,7 @@ onBeforeUnmount(() => {
       <slot />
     </div>
 
-    <div v-if="props.alterable">
+    <div>
       <!-- resize edges -->
       <div class="absolute inset-y-0 -left-1 w-2 cursor-w-resize" @pointerdown.stop="beginResize(id, 'left', $event)" />
       <div class="absolute inset-y-0 -right-1 w-2 cursor-e-resize" @pointerdown.stop="beginResize(id, 'right', $event)" />

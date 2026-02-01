@@ -38,7 +38,6 @@ export function focusWindow(id: string) {
 }
 
 export function beginMove(id: string, event: PointerEvent) {
-    if(id !== activeWindowId.value && activeWindow) return;
     focusWindow(id);
 
     dragState.value = {
@@ -50,6 +49,7 @@ export function beginMove(id: string, event: PointerEvent) {
 
 export function beginResize(id: string, edge: ResizeEdge, event: PointerEvent) {
     focusWindow(id);
+
     const win = windows.find(w => w.id === id);
     if(!win) return;
 
@@ -73,8 +73,9 @@ window.addEventListener('pointermove', event => {
     if(!dragState.value) return;
 
     if(dragState.value.type === 'move') {
-        activeWindow.value!.x = event.clientX - dragState.value.offsetX;
-        activeWindow.value!.y = event.clientY - dragState.value.offsetY;
+        const win = activeWindow.value!;
+        win.x = Math.max(0, Math.min(window.innerWidth - win.width, event.clientX - dragState.value.offsetX));
+        win.y = Math.max(0, Math.min(window.innerHeight - win.height, event.clientY - dragState.value.offsetY));
     }
 
     if(dragState.value.type === 'resize') {
