@@ -4,9 +4,9 @@ export type Cell = { row: number; col: number };
 export type NoteBlock = { id: string; row: number; col: number, length: number, midi: number };
 
 export class PianoRoll {
-    private notesBlocks: NoteBlock[] = [];
-    private keyboardNotes: { midi: number; note: string; isBlack: boolean }[];
-    private resizingNote: NoteBlock | null = null;
+    readonly _noteData: NoteBlock[] = [];
+    readonly _keyboardNotes: { midi: number; note: string; isBlack: boolean }[];
+    resizingNote: NoteBlock | null = null;
 
     readonly range: { min: number, max: number };
 
@@ -15,61 +15,61 @@ export class PianoRoll {
             throw new Error('Range min cannot be greater than max!');
 
         this.range = range;
-        this.notesBlocks = reactive([]);
-        this.keyboardNotes = keyboardNotes;
+        this._noteData = reactive([]);
+        this._keyboardNotes = keyboardNotes;
     }
 
-    public getNoteBlocks(): NoteBlock[] {
-        return [...this.notesBlocks];
+    get getNoteData(): NoteBlock[] {
+        return [...this._noteData];
     }
 
-    public getKeyboardNotes(): { midi: number; note: string; isBlack: boolean }[] {
-        return [...this.keyboardNotes];
+    get getKeyboardNotes(): { midi: number; note: string; isBlack: boolean }[] {
+        return [...this._keyboardNotes];
     }
 
-    public isResizing(): boolean {
+    isResizing(): boolean {
         return this.resizingNote !== null;
     }
 
-    public rowToMidi(row: number): number {
-        const index = this.keyboardNotes.length - 1 - row;
-        return this.keyboardNotes[index] ? this.keyboardNotes[index].midi : -1;
+    rowToMidi(row: number): number {
+        const index = this._keyboardNotes.length - 1 - row;
+        return this._keyboardNotes[index] ? this._keyboardNotes[index].midi : -1;
     }
 
-    public getHoveredNote(cell: Cell) {
-        const index = this.notesBlocks.findIndex(n => n.row === cell.row && cell.col >= n.col && cell.col < n.col + n.length);
-        return index === -1 ? null : { note: this.notesBlocks[index], index };
+    getHoveredNote(cell: Cell) {
+        const index = this._noteData.findIndex(n => n.row === cell.row && cell.col >= n.col && cell.col < n.col + n.length);
+        return index === -1 ? null : { note: this._noteData[index], index };
     }
 
-    public addNote(cell: Cell, length: number, id: string): number {
+    addNote(cell: Cell, length: number, id: string): number {
         if(cell.row < 0 || cell.row > (this.range.max - this.range.min))
             return -1;
 
         const midi = this.rowToMidi(cell.row);
-        this.notesBlocks.push({ id, ...cell, length, midi });
+        this._noteData.push({ id, ...cell, length, midi });
         return midi;
     }
 
-    public deleteNote(index: number) {
-        this.notesBlocks.splice(index, 1);
+    deleteNote(index: number) {
+        this._noteData.splice(index, 1);
     }
 
-    public startResize(note: NoteBlock) {
+    startResize(note: NoteBlock) {
         this.resizingNote = note;
     }
 
-    public getResizingNoteCol(): number {
+    getResizingNoteCol(): number {
         return this.resizingNote?.col ?? 0;
     }
 
-    public resize(targetCol: number): number {
+    resize(targetCol: number): number {
         if(!this.resizingNote) return 1; // default length
         this.resizingNote.length = Math.max(1, Math.round(targetCol - this.resizingNote.col));
 
         return this.resizingNote.length;
     }
 
-    public stopResize() {
+    stopResize() {
         this.resizingNote = null;
     }
 }

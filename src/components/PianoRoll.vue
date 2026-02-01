@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref } from 'vue';
 import { MiniSynth } from '../audio/MiniSynth'
-import { Keyboard } from '../audio/Keyboard';
 import { PianoRoll, type NoteBlock, type Cell } from '../audio/PianoRoll'
 import { noteToMidi } from '../audio/midiUtils';
 import { isWindowActive } from '../services/windowManager';
@@ -33,9 +32,14 @@ function generateNoteId(): string {
 
 // SETUP
 
-const keyboard = new Keyboard({ note: 'C', octave: 0 }, { note: 'C', octave: 10 });
-const roll = new PianoRoll(keyboard.getRange(), keyboard.getKeyboardInfo());
-const notes = roll.getKeyboardNotes();
+const props = defineProps<{
+  roll: PianoRoll;
+}>();
+
+const workSpaceContainer = ref<HTMLDivElement | null>(null);
+const pianoRollContainer = ref<HTMLDivElement | null>(null);
+
+const notes = props.roll.getKeyboardNotes;
 
 const windowElement = inject<Ref<HTMLElement | null>>('windowElement');
 const windowId = inject<string>('windowId');
@@ -55,16 +59,15 @@ const playhead = reactive({
 
 const tempo = 120;
 
-const workSpaceContainer = ref<HTMLDivElement | null>(null);
-const pianoRollContainer = ref<HTMLDivElement | null>(null);
-
-const rowHeight = ref(25);
+const rowHeight = ref(20);
 const colWidth = 80;
 const beatsPerBar = 4;
 
 // LIVE PREVIEW (keyboard sidebar)
 
 async function playNote(midi: number) {
+  if(scheduler?.isPlaying) return;
+
   await synth!.resume();
   synth!.noteOn(midi);
 }
@@ -101,16 +104,16 @@ function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
 }
 
 function handlePointerMove(event: PointerEvent) {
-  if(roll.isResizing()) {
+  if(props.roll.isResizing()) {
     const pointerX = event.clientX - workSpaceContainer.value!.getBoundingClientRect().left;
-    state.cachedLength = roll.resize(pointerX / colWidth);
+    state.cachedLength = props.roll.resize(pointerX / colWidth);
     return;
   }
 
   const cell = getCellFromPointer(event);
   state.hoverCell = cell;
 
-  const hovered = roll.getHoveredNote(cell);
+  const hovered = props.roll.getHoveredNote(cell);
   state.hoverNote = hovered?.note ?? null;
 }
 
@@ -121,16 +124,16 @@ function handlePointerLeave() {
 
 async function handlePointerDown(event: PointerEvent) {
   if(!state.hoverCell) return;
-  const hovered = roll.getHoveredNote(state.hoverCell);
+  const hovered = props.roll.getHoveredNote(state.hoverCell);
 
   // place
   if(!hovered?.note) {
     const noteId = generateNoteId();
-    const midi = roll.addNote(state.hoverCell, state.cachedLength, noteId);
+    const midi = props.roll.addNote(state.hoverCell, state.cachedLength, noteId);
 
     // add note to scheduler
     if(scheduler) {
-      const noteBlocks = roll.getNoteBlocks();
+      const noteBlocks = props.roll.getNoteData;
       const newNote = noteBlocks[noteBlocks.length - 1];
       if (newNote) {
         scheduler.addNote({
@@ -152,13 +155,13 @@ async function handlePointerDown(event: PointerEvent) {
   // resize
   if(isNearRightEdge(event, hovered.note)) {
     state.resizingNote = hovered.note;
-    roll.startResize(hovered.note);
+    props.roll.startResize(hovered.note);
     return;
   }
 
   // delete
   const noteToDelete = hovered.note;
-  roll.deleteNote(hovered.index);
+  props.roll.deleteNote(hovered.index);
 
   // remove note from scheduler
   if (scheduler) {
@@ -167,8 +170,8 @@ async function handlePointerDown(event: PointerEvent) {
 }
 
 function handlePointerUp() {
-  if(roll.isResizing() && state.resizingNote) {
-    roll.stopResize();
+  if(props.roll.isResizing() && state.resizingNote) {
+    props.roll.stopResize();
 
     // update note duration in scheduler
     if (scheduler) {
@@ -230,6 +233,20 @@ onMounted(async () => {
   await nextTick();
   initAudio();
 
+  // Add existing notes from PianoRoll to scheduler
+  if(scheduler) {
+    const existingNotes = props.roll.getNoteData;
+    existingNotes.forEach(note => {
+      scheduler!.addNote({
+        id: note.id,
+        pitch: note.midi,
+        startTime: note.col,
+        duration: note.length,
+        velocity: 0.8,
+      });
+    });
+  }
+
   windowElement.value?.addEventListener('keydown', onPianoRollKeyDown);
 
   if(pianoRollContainer.value) {
@@ -290,7 +307,7 @@ onBeforeUnmount(() => {
       ></div>
 
       <!-- notes -->
-      <div v-for="(block, i) in roll.getNoteBlocks()" :key="i" class="absolute bg-blue-500 opacity-80 rounded-lg"
+      <div v-for="(block, i) in roll.getNoteData" :key="i" class="absolute bg-blue-500 opacity-80 rounded-lg"
         :style="{
           top: `${block.row * rowHeight}px`,
           left: `${block.col * colWidth}px`,

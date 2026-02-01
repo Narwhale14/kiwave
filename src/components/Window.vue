@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch, nextTick, provide } from 'vue';
-import { registerWindow, focusWindow, beginMove, beginResize, type Window, windows, unregisterWindow, activeWindowId } from '../services/windowManager';
+import { registerWindow, focusWindow, beginMove, beginResize, windows, unregisterWindow, activeWindowId } from '../services/windowManager';
 
 const props = defineProps<{
   id: string;
@@ -27,22 +27,14 @@ function onTitlePointerDown(event: PointerEvent) {
 }
 
 onMounted(() => {
-  const window: Window = {
+  registerWindow({
     id: props.id,
     x: 100,
     y: 100,
     width: 1200,
     height: 600,
     z: 0
-  }
-
-  registerWindow(window);
-
-  console.log(windows.find(w => w.id === props.id)?.x);
-  console.log(windows.find(w => w.id === props.id)?.y);
-  console.log(windows.find(w => w.id === props.id)?.width);
-  console.log(windows.find(w => w.id === props.id)?.height);
-  console.log(windows.find(w => w.id === props.id)?.z);
+  });
 });
 
 onBeforeUnmount(() => {
