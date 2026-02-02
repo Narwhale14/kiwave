@@ -1,24 +1,73 @@
 <script setup lang="ts">
-defineProps<{ visible: boolean }>();
-defineEmits<{
+import { ref, watch, nextTick, onUnmounted } from 'vue';
+
+const props = defineProps<{
+  visible: boolean;
+  x?: number;
+  y?: number;
+}>();
+
+const emit = defineEmits<{
   confirm: [];
   cancel: [];
 }>();
+
+const modalRef = ref<HTMLElement | null>(null);
+
+function onKeyDown(event: KeyboardEvent) {
+  if(event.key === 'Escape') emit('cancel');
+  if(event.key === 'Enter') emit('confirm');
+}
+
+const pos = ref({ left: '0px', top: '0px' });
+
+watch(() => props.visible, async (visible) => {
+  if(visible) window.addEventListener('keydown', onKeyDown);
+  else window.removeEventListener('keydown', onKeyDown);
+
+  if(!visible || props.x == null || props.y == null) return;
+
+  const gap = 8;
+  let left = props.x + gap;
+  let top = props.y;
+
+  await nextTick();
+  const el = modalRef.value;
+  if(!el) return;
+
+  const rect = el.getBoundingClientRect();
+  if(left + rect.width > window.innerWidth) {
+    left = props.x - rect.width - gap;
+  }
+  if(top + rect.height > window.innerHeight) {
+    top = window.innerHeight - rect.height;
+  }
+
+  pos.value = { left: `${left}px`, top: `${top}px` };
+});
+
+onUnmounted(() => window.removeEventListener('keydown', onKeyDown));
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="fixed flex flex-col justify-center gap-2 z-50 bg-black p-3 rounded-md">
-      <slot />
+    <div v-if="visible" class="fixed inset-0 z-40">
+      <!-- focuses only on modal -->
+      <div class="absolute inset-0" @click.stop />
 
-      <div class="flex items-center gap-2.5">
-        <button class="w-6 h-6 justify-center hover:text-white hover:bg-red-600 rounded" @click="$emit('cancel')">
-          <span class="pi pi-times"></span>
-        </button>
+      <!-- modal -->
+      <div ref="modalRef" class="absolute flex flex-col justify-center gap-2 z-50 bg-black p-3 rounded-md" :style="x != null ? pos : undefined">
+        <slot />
 
-        <button class="w-6 h-6 justify-center hover:text-white hover:bg-green-600 rounded" @click="$emit('confirm')">
-          <span class="pi pi-check"></span>
-        </button>
+        <div class="flex items-center gap-2.5">
+          <button class="w-6 h-6 justify-center hover:text-white hover:bg-red-600 rounded" @click="$emit('cancel')">
+            <span class="pi pi-times" />
+          </button>
+
+          <button class="w-6 h-6 justify-center hover:text-white hover:bg-green-600 rounded" @click="$emit('confirm')">
+            <span class="pi pi-check" />
+          </button>
+        </div>
       </div>
     </div>
   </Teleport>

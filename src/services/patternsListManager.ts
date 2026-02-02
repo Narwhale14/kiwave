@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { ref, computed, nextTick, watch } from 'vue';
 import { PianoRoll } from '../audio/PianoRoll';
 import { Keyboard } from '../audio/Keyboard';
 import { focusWindow } from './windowManager';
@@ -17,6 +17,9 @@ const keyboard = new Keyboard(
 );
 
 export const patterns = ref<Pattern[]>([]);
+export const activePattern = computed(() => {
+    return patterns.value.find(p => p.visible) ?? null;
+});
 
 export function getNextNum(): number {
     const used = new Set(patterns.value.map(p => p.num));
@@ -25,7 +28,7 @@ export function getNextNum(): number {
     return n;
 }
 
-export function addPattern(name: string) {
+export function addPattern(name?: string) {
     const num = getNextNum();
     const pattern = {
         id: `pattern-${num}`,
@@ -36,7 +39,6 @@ export function addPattern(name: string) {
     }
 
     patterns.value.push(pattern);
-    pattern.visible = true;
 }
 
 export function removePattern(num: number) {
@@ -57,8 +59,13 @@ export function togglePattern(num: number) {
         patterns.value.forEach(p => {
             if(p.num !== num) p.visible = false;
         });
-        focusWindow(pattern.id);
     }
 
     pattern.visible = !pattern.visible;
 }
+
+watch(activePattern, (pattern) => {
+    if(pattern && pattern.visible) {
+        nextTick(() => focusWindow('pattern-window'));
+    }
+});

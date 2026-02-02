@@ -2,7 +2,7 @@
 import PatternsList from './components/PatternsList.vue'
 import Window from './components/Window.vue';
 import PianoRoll from './components/PianoRoll.vue';
-import { closePattern, patterns } from './services/patternsListManager';
+import { closePattern, activePattern } from './services/patternsListManager';
 </script>
 
 <template>
@@ -10,15 +10,14 @@ import { closePattern, patterns } from './services/patternsListManager';
     <!-- patterns list -->
     <PatternsList />
 
-    <!-- all patterns -->
-    <Window v-for="pattern in patterns" :key="pattern.num" 
-      :id="pattern.id" 
-      :title="pattern.name" 
-      :visible="pattern.visible" 
-      :alterable="true" 
-      @close="closePattern(pattern.num)"
+    <!-- active pattern -->
+    <Window
+      id="pattern-window"
+      :title="activePattern?.name ?? ''"
+      :visible="activePattern !== null"
+      @close="closePattern(activePattern!.num)"
     >
-      <PianoRoll :roll="pattern.roll"/>
+      <PianoRoll v-if="activePattern" :roll="activePattern.roll"/>
     </Window>
   </div>
 </template>

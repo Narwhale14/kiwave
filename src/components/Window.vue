@@ -64,7 +64,9 @@ onBeforeUnmount(() => {
         <slot name="header-right" />
       </div>
 
-      <button class="justify-center w-6 h-6 text-gray-400 hover:text-white hover:bg-red-600 rounded" @pointerdown.stop @click="emit('close')">✕</button>
+      <button class="justify-center w-6 h-6 text-gray-400 hover:text-white hover:bg-red-600 rounded" @pointerdown.stop @click="emit('close')">
+        <span class="pi pi-times" />
+      </button>
     </div>
 
     <!-- content -->
