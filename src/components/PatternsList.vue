@@ -68,7 +68,14 @@ watch(addModalVisible, async (visible) => {
 
     <ul class="overflow-x-auto p-2.5 space-y-2.5">
       <li v-for="pattern in patterns" :key="pattern.num" class="relative" @contextmenu.prevent="confirmDelete($event, pattern.num)">
-        <button class="w-full text-left px-2 bg-gray-700 border-2 border-gray-800 rounded-md" @click="togglePattern(pattern.num)">
+        <button @click="togglePattern(pattern.num)"
+          :class="[
+            'w-full text-left px-2 border-2 rounded-md',
+            pattern.num === activePattern?.num
+              ? 'bg-gray-500 border-gray-700'
+              : 'bg-gray-700 border-gray-800 text-white'
+          ]"
+        >
           {{ pattern.name }}
         </button>
 
@@ -81,7 +88,7 @@ watch(addModalVisible, async (visible) => {
 
   <!-- add pattern modal -->
   <ConfirmationModal :visible="addModalVisible" :x="addPos.x" :y="addPos.y" @confirm="createPattern" @cancel="addModalVisible = false; name = ''">
-    <input ref="nameInput" v-model="name" @keydown="onKeyDown" :placeholder="`Pattern ${getNextNum()} name`" class="p-2 rounded" autofocus />
+    <input ref="nameInput" v-model="name" @keydown="onKeyDown" :placeholder="`Pattern ${getNextNum()} name`" class="focus:bg-gray-600 p-2 rounded-md" autofocus />
   </ConfirmationModal>
 
   <!-- remove pattern modal -->

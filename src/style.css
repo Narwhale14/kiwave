@@ -48,6 +48,7 @@ button {
 
 button:hover {
   border-color: #646cff;
+  transition: background-color 250ms ease;
 }
 
 .piano-roll-grid {
@@ -73,4 +74,9 @@ button:hover {
       transparent 2px,
       transparent var(--bar-w)
     );
+}
+
+input:focus {
+  outline: none;
+  transition: background-color 250ms ease;
 }

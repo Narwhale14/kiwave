@@ -56,7 +56,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown));
       <div class="absolute inset-0" @click.stop />
 
       <!-- modal -->
-      <div ref="modalRef" class="absolute flex flex-col justify-center gap-2 z-50 bg-black p-3 rounded-md" :style="x != null ? pos : undefined">
+      <div ref="modalRef" class="absolute flex flex-col justify-center gap-2 z-50 bg-gray-500 border-5 border-gray-400 p-3 rounded-md" :style="x != null ? pos : undefined">
         <slot />
 
         <div class="flex items-center gap-2.5">
