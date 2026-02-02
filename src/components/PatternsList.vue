@@ -58,37 +58,39 @@ watch(addModalVisible, async (visible) => {
 </script>
 
 <template>
-  <div class="flex flex-col w-55 bg-gray-600 border-5 border-gray-500">
-    <div class="flex flex-row justify-between items-center p-5 border-b-5 border-gray-500">
+  <div class="flex flex-col w-50 border-2 bg-mix-15 border-mix-30">
+    <!-- header -->
+    <div class="flex flex-row justify-between items-center p-2.5 border-b-2 border-mix-30">
       <h2 class="font-bold">Patterns</h2>
       <button ref="addButton" @click="openAddModal">
-        <span class="pi pi-plus"></span>
+        <span class="pi pi-plus util-button"></span>
       </button>
     </div>
 
-    <ul class="overflow-x-auto p-2.5 space-y-2.5">
+    <!-- list of patterns in list -->
+    <ul class="overflow-x-auto p-1 space-y-1">
       <li v-for="pattern in patterns" :key="pattern.num" class="relative" @contextmenu.prevent="confirmDelete($event, pattern.num)">
         <button @click="togglePattern(pattern.num)"
           :class="[
-            'w-full text-left px-2 border-2 rounded-md',
+            'w-full text-left px-2 border-2 rounded-sm h-8',
             pattern.num === activePattern?.num
-              ? 'bg-gray-500 border-gray-700'
-              : 'bg-gray-700 border-gray-800 text-white'
+              ? 'bg-mix-40 border-mix-80'
+              : 'bg-mix-25 border-mix-50 text-white'
           ]"
         >
-          {{ pattern.name }}
-        </button>
+          <span class="truncate w-full">{{ pattern.name }}</span>
 
-        <div v-if="pattern.num === activePattern?.num" class="absolute top-1/2 -translate-y-1/2 -left-2">
-          <span class="pi pi-angle-right text-white-600 font-bold" />
-        </div>
+          <div v-if="pattern.num === activePattern?.num">
+            <span class="pi pi-circle text-white-600 font-bold p-1 opacity-50" />
+          </div>
+        </button>
       </li>
     </ul>
   </div>
 
   <!-- add pattern modal -->
   <ConfirmationModal :visible="addModalVisible" :x="addPos.x" :y="addPos.y" @confirm="createPattern" @cancel="addModalVisible = false; name = ''">
-    <input ref="nameInput" v-model="name" @keydown="onKeyDown" :placeholder="`Pattern ${getNextNum()} name`" class="focus:bg-gray-600 p-2 rounded-md" autofocus />
+    <input ref="nameInput" v-model="name" @keydown="onKeyDown" :placeholder="`Pattern ${getNextNum()} name`" class="bg-mix-25 p-2 rounded-md" autofocus />
   </ConfirmationModal>
 
   <!-- remove pattern modal -->

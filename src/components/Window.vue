@@ -44,7 +44,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="rootElement" v-if="visible" tabindex="0" class="fixed bg-[#1e1e1e] text-white flex flex-col overflow-visible select-none focus:outline-none" 
+  <div ref="rootElement" v-if="visible" tabindex="0" class="fixed text-white flex flex-col overflow-visible select-none focus:outline-none bg-mix-15 border-mix-30" 
     :style="{
       left: windows.find(w => w.id === id)?.x + 'px',
       top: windows.find(w => w.id === id)?.y + 'px',
@@ -64,7 +64,7 @@ onBeforeUnmount(() => {
         <slot name="header-right" />
       </div>
 
-      <button class="justify-center w-6 h-6 text-gray-400 hover:text-white hover:bg-red-600 rounded" @pointerdown.stop @click="emit('close')">
+      <button class="justify-center w-6 h-6 rounded util-button" @pointerdown.stop @click="emit('close')">
         <span class="pi pi-times" />
       </button>
     </div>

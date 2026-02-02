@@ -56,15 +56,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown));
       <div class="absolute inset-0" @click.stop />
 
       <!-- modal -->
-      <div ref="modalRef" class="absolute flex flex-col justify-center gap-2 z-50 bg-gray-500 border-5 border-gray-400 p-3 rounded-md" :style="x != null ? pos : undefined">
+      <div ref="modalRef" class="absolute flex flex-col justify-center gap-2 z-50 border-2 p-3 rounded-md bg-mix-20 border-mix-40" :style="x != null ? pos : undefined">
         <slot />
 
         <div class="flex items-center gap-2.5">
-          <button class="w-6 h-6 justify-center hover:text-white hover:bg-red-600 rounded" @click="$emit('cancel')">
+          <button class="w-4 h-4 justify-center rounded util-button" @click="$emit('cancel')">
             <span class="pi pi-times" />
           </button>
 
-          <button class="w-6 h-6 justify-center hover:text-white hover:bg-green-600 rounded" @click="$emit('confirm')">
+          <button class="w-4 h-4 justify-center rounded util-button" @click="$emit('confirm')">
             <span class="pi pi-check" />
           </button>
         </div>

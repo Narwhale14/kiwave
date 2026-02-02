@@ -7,6 +7,7 @@ export class PianoRoll {
     readonly _noteData: NoteBlock[] = [];
     readonly _keyboardNotes: { midi: number; note: string; isBlack: boolean }[];
     resizingNote: NoteBlock | null = null;
+    private _snapDivision = 4; // cannot surpass 1/32.
 
     readonly range: { min: number, max: number };
 
@@ -17,6 +18,31 @@ export class PianoRoll {
         this.range = range;
         this._noteData = reactive([]);
         this._keyboardNotes = keyboardNotes;
+    }
+
+    get snapDivision(): number {
+        return this._snapDivision;
+    }
+
+    set snapDivision(value: number) {
+        this._snapDivision = Math.max(0, value);
+    }
+
+    // lowest possible 1/32
+    get snapSize(): number {
+        return this._snapDivision > 0 ? 1 / this._snapDivision : 1 / 32;
+    }
+
+    // snap a value down to the current grid (for placement)
+    snap(value: number): number {
+        if(this._snapDivision === 0) return value;
+        return Math.floor(value * this._snapDivision) / this._snapDivision;
+    }
+
+    // snap a value to the nearest grid line (for resize edges)
+    snapRound(value: number): number {
+        if(this._snapDivision === 0) return value;
+        return Math.round(value * this._snapDivision) / this._snapDivision;
     }
 
     get getNoteData(): NoteBlock[] {
@@ -37,7 +63,16 @@ export class PianoRoll {
     }
 
     getHoveredNote(cell: Cell) {
-        const index = this._noteData.findIndex(n => n.row === cell.row && cell.col >= n.col && cell.col < n.col + n.length);
+        const gridCol = Math.round(cell.col * this._snapDivision);
+        const index = this._noteData.findIndex(n => {
+            if(n.row !== cell.row) return false;
+
+            const noteStart = Math.round(n.col * this._snapDivision);
+            const noteEnd = Math.round((n.col + n.length) * this._snapDivision);
+
+            return gridCol >= noteStart && gridCol < noteEnd;
+        });
+
         return index === -1 ? null : { note: this._noteData[index], index };
     }
 
@@ -63,13 +98,23 @@ export class PianoRoll {
     }
 
     resize(targetCol: number): number {
-        if(!this.resizingNote) return 1; // default length
-        this.resizingNote.length = Math.max(1, Math.round(targetCol - this.resizingNote.col));
+        if(!this.resizingNote) return this.snapSize;
+        const snappedTarget = this.snapRound(targetCol);
+        this.resizingNote.length = Math.max(this.snapSize, snappedTarget - this.resizingNote.col);
 
         return this.resizingNote.length;
     }
 
     stopResize() {
         this.resizingNote = null;
+    }
+
+    move(noteId: string, newRow: number, newCol: number) {
+        const note = this._noteData.find(n => n.id === noteId);
+        if(!note) return;
+
+        note.row = Math.max(0, Math.min(newRow, this._keyboardNotes.length - 1));
+        note.col = Math.max(0, newCol);
+        note.midi = this.rowToMidi(note.row);
     }
 }

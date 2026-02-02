@@ -47,7 +47,9 @@ const state = reactive({
   hoverCell: null as Cell | null,
   hoverNote: null as NoteBlock | null,
   cachedLength: 1,
-  resizingNote: null as NoteBlock | null
+  resizingNote: null as NoteBlock | null,
+  draggingNote: null as NoteBlock | null,
+  dragStart: { row: 0, col: 0}
 });
 
 const playhead = reactive({
@@ -91,7 +93,7 @@ function getCellFromPointer(event: PointerEvent) {
   const rect = workSpaceContainer.value.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
-  return { row: Math.floor(y / rowHeight.value), col: Math.floor(x / colWidth) };
+  return { row: Math.floor(y / rowHeight.value), col: props.roll.snap(x / colWidth) };
 }
 
 function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
@@ -102,7 +104,7 @@ function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
 }
 
 function handlePointerMove(event: PointerEvent) {
-  if(props.roll.isResizing()) {
+  if(props.roll.isResizing() && state.resizingNote) {
     const pointerX = event.clientX - workSpaceContainer.value!.getBoundingClientRect().left;
     state.cachedLength = props.roll.resize(pointerX / colWidth);
     return;
@@ -113,6 +115,17 @@ function handlePointerMove(event: PointerEvent) {
 
   const hovered = props.roll.getHoveredNote(cell);
   state.hoverNote = hovered?.note ?? null;
+
+  if(state.draggingNote) {
+    const newCol = cell.col - state.dragStart.col;
+    const newRow = cell.row - state.dragStart.row;
+
+    props.roll.move(state.draggingNote.id, newRow, newCol);
+
+    if(scheduler) {
+      scheduler.updateNote(state.draggingNote.id, { startTime: newCol, pitch: notes[newRow]?.midi});
+    }
+  }
 }
 
 function handlePointerLeave() {
@@ -124,8 +137,36 @@ async function handlePointerDown(event: PointerEvent) {
   if(!state.hoverCell) return;
   const hovered = props.roll.getHoveredNote(state.hoverCell);
 
+  // right click delete
+  if(hovered?.note) {
+    if(event.button === 2) {
+      const noteToDelete = hovered.note;
+      props.roll.deleteNote(hovered.index);
+
+      if(scheduler) {
+        scheduler.removeNote(noteToDelete.id);
+      }
+    }
+
+    // resize
+    if(isNearRightEdge(event, hovered.note)) {
+      state.resizingNote = hovered.note;
+      props.roll.startResize(hovered.note);
+      return;
+    }
+
+    // drag
+    state.draggingNote = hovered.note;
+    state.dragStart = {
+      row: state.hoverCell.row - hovered.note.row,
+      col: state.hoverCell.col - hovered.note.col
+    }
+
+    return;
+  }
+
   // place
-  if(!hovered?.note) {
+  if(event.button === 0 && !hovered?.note) {
     const noteId = generateNoteId();
     const midi = props.roll.addNote(state.hoverCell, state.cachedLength, noteId);
 
@@ -149,22 +190,6 @@ async function handlePointerDown(event: PointerEvent) {
     setTimeout(() => stopNote(midi), 150);
     return;
   }
-
-  // resize
-  if(isNearRightEdge(event, hovered.note)) {
-    state.resizingNote = hovered.note;
-    props.roll.startResize(hovered.note);
-    return;
-  }
-
-  // delete
-  const noteToDelete = hovered.note;
-  props.roll.deleteNote(hovered.index);
-
-  // remove note from scheduler
-  if (scheduler) {
-    scheduler.removeNote(noteToDelete.id);
-  }
 }
 
 function handlePointerUp() {
@@ -172,13 +197,18 @@ function handlePointerUp() {
     props.roll.stopResize();
 
     // update note duration in scheduler
-    if (scheduler) {
+    if(scheduler) {
       scheduler.updateNote(state.resizingNote.id, {
         duration: state.resizingNote.length
       });
     }
 
     state.resizingNote = null;
+  }
+
+  if(state.draggingNote) {
+    state.draggingNote = null;
+    state.dragStart = { row: 0, col: 0 };
   }
 }
 
@@ -187,9 +217,6 @@ function onPianoRollKeyDown(event: KeyboardEvent) {
 
   const target = event.target as HTMLElement;
   if(['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
-
-  const element = pianoRollContainer.value;
-  if(!element) return;
 
   if(event.code === 'Space') {
     event.preventDefault();
@@ -202,6 +229,9 @@ function onPianoRollKeyDown(event: KeyboardEvent) {
     stopPlayhead();
     return;
   }
+
+  const element = pianoRollContainer.value;
+  if(!element) return;
 
   const stepInterval = 0.5;
   const fastScrollMult = event.shiftKey ? 8 : 1;
@@ -267,14 +297,14 @@ onBeforeUnmount(() => {
   <div ref="pianoRollContainer" class="w-full h-full overflow-auto grid grid-cols-[64px_1fr]"
   >
     <!-- notes column -->
-    <div class="flex flex-col-reverse" ref="pianoKeysContainer">
+    <div class="flex flex-col-reverse sticky left-0" ref="pianoKeysContainer">
       <button v-for="key in notes" :key="key.midi" 
         @pointerdown="playNote(key.midi)"
         @pointerup="stopNote(key.midi)"
         @pointerleave="stopNote(key.midi)"
         :class="[
           'w-full text-sm select-none border-2 border-transparent hover:border-[#646cff]',
-          key.isBlack ? 'bg-[#1a1a1a] text-white' : 'bg-[#f5f5f5] text-black'
+          key.isBlack ? 'key-black' : 'key-white'
         ]"
         :style="{ height: rowHeight + 'px' }"> 
         {{ key.note }} 
@@ -287,12 +317,14 @@ onBeforeUnmount(() => {
       @pointerleave="handlePointerLeave"
       @pointerdown="handlePointerDown"
       @pointerup="handlePointerUp"
+      @contextmenu.prevent
       :style="{
         height: `${notes.length * rowHeight}px`,
         width: `${128 * beatsPerBar * colWidth}px`,
         '--row-h': `${rowHeight}px`,
         '--col-w': `${colWidth}px`,
-        '--bar-w': `${colWidth * beatsPerBar}px`
+        '--bar-w': `${colWidth * beatsPerBar}px`,
+        '--snap-w': `${roll.snapDivision > 0 ? colWidth / roll.snapDivision : 0}px`
       }"
     >
       <!-- row backgrounds -->
