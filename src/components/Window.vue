@@ -10,7 +10,9 @@ const props = withDefaults(defineProps<{
   y?: number;
   width?: number;
   height?: number;
-}>(), { x: 100, y: 100, width: 1200, height: 600 });
+  movable?: boolean;
+  resizable?: boolean;
+}>(), { x: 100, y: 100, width: 1200, height: 600, movable: true, resizable: true });
 
 const emit = defineEmits<{
   (event: 'close'): void
@@ -29,7 +31,7 @@ onMounted(() => {
   registerWindow({
     id: props.id,
     x: props.x,
-    y: props.x,
+    y: props.y,
     width: props.width,
     height: props.height,
     z: 0
@@ -53,7 +55,7 @@ onBeforeUnmount(() => {
   >
     <!-- title bar -->
     <div class="titlebar flex justify-between items-center px-2 " 
-      @pointerdown.stop="beginMove(props.id, $event)">
+      @pointerdown.stop="(e) => { if(props.movable) beginMove(props.id, e); }">
       <div class="flex items-center gap-2 min-w-0">
         <span class="text-sm font-medium truncate">{{ title }}</span>
         <slot name="header-left" />
@@ -62,7 +64,7 @@ onBeforeUnmount(() => {
         <slot name="header-right" />
       </div>
 
-      <button class="w-6 h-6 text-gray-400 hover:text-white hover:bg-red-600 rounded" @pointerdown.stop @click="emit('close')">✕</button>
+      <button class="justify-center w-6 h-6 text-gray-400 hover:text-white hover:bg-red-600 rounded" @pointerdown.stop @click="emit('close')">✕</button>
     </div>
 
     <!-- content -->
@@ -70,7 +72,7 @@ onBeforeUnmount(() => {
       <slot />
     </div>
 
-    <div>
+    <div v-if="props.resizable">
       <!-- resize edges -->
       <div class="absolute inset-y-0 -left-1 w-2 cursor-w-resize" @pointerdown.stop="beginResize(id, 'left', $event)" />
       <div class="absolute inset-y-0 -right-1 w-2 cursor-e-resize" @pointerdown.stop="beginResize(id, 'right', $event)" />

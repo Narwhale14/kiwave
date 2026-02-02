@@ -7,9 +7,17 @@ import { closePattern, patterns } from './services/patternsListManager';
 
 <template>
   <div class="flex w-screen h-screen">
+    <!-- patterns list -->
     <PatternsList />
 
-    <Window v-for="pattern in patterns" :key="pattern.id" :id="pattern.id" :title="pattern.name" :visible="pattern.visible" :alterable="true" @close="closePattern(pattern.id)">
+    <!-- all patterns -->
+    <Window v-for="pattern in patterns" :key="pattern.num" 
+      :id="pattern.id" 
+      :title="pattern.name" 
+      :visible="pattern.visible" 
+      :alterable="true" 
+      @close="closePattern(pattern.num)"
+    >
       <PianoRoll :roll="pattern.roll"/>
     </Window>
   </div>

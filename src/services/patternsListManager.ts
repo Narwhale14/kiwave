@@ -5,6 +5,7 @@ import { focusWindow } from './windowManager';
 
 interface Pattern {
     id: string;
+    num: number;
     name: string;
     roll: PianoRoll;
     visible: boolean;
@@ -17,27 +18,44 @@ const keyboard = new Keyboard(
 
 export const patterns = ref<Pattern[]>([]);
 
-export function addPattern(name: string) {
-    patterns.value.push({
-        id: crypto.randomUUID(),
-        name,
-        visible: false,
-        roll: new PianoRoll(keyboard.getRange(), keyboard.getKeyboardInfo())
-    });
+export function getNextNum(): number {
+    const used = new Set(patterns.value.map(p => p.num));
+    let n = 1;
+    while(used.has(n)) n++;
+    return n;
 }
 
-export function closePattern(id: string) {
-    const pattern = patterns.value.find(p => p.id === id);
+export function addPattern(name: string) {
+    const num = getNextNum();
+    const pattern = {
+        id: `pattern-${num}`,
+        num,
+        name: name || `Pattern ${num}`,
+        visible: false,
+        roll: new PianoRoll(keyboard.getRange(), keyboard.getKeyboardInfo())
+    }
+
+    patterns.value.push(pattern);
+    pattern.visible = true;
+}
+
+export function removePattern(num: number) {
+    const patternIndex = patterns.value.findIndex(p => p.num === num);
+    patterns.value.splice(patternIndex, 1);
+}
+
+export function closePattern(num: number) {
+    const pattern = patterns.value.find(p => p.num === num);
     if(pattern) pattern.visible = false;
 }
 
-export function togglePattern(id: string) {
-    const pattern = patterns.value.find(p => p.id === id);
+export function togglePattern(num: number) {
+    const pattern = patterns.value.find(p => p.num === num);
     if(!pattern) return;
 
     if(!pattern.visible) {
         patterns.value.forEach(p => {
-            if(p.id !== id) p.visible = false;
+            if(p.num !== num) p.visible = false;
         });
         focusWindow(pattern.id);
     }
