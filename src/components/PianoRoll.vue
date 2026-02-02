@@ -337,7 +337,7 @@ onBeforeUnmount(() => {
       ></div>
 
       <!-- notes -->
-      <div v-for="(block, i) in roll.getNoteData" :key="i" class="absolute bg-blue-500 opacity-80 rounded-lg"
+      <div v-for="(block, i) in roll.getNoteData" :key="i" class="absolute opacity-80 rounded-lg note-color"
         :style="{
           top: `${block.row * rowHeight}px`,
           left: `${block.col * colWidth}px`,
@@ -347,7 +347,7 @@ onBeforeUnmount(() => {
       ></div>
 
       <!-- hover cell -->
-      <div v-if="state.hoverCell && !state.hoverNote" class="absolute border-2 border-blue-400 opacity-50 pointer-events-none rounded-lg"
+      <div v-if="state.hoverCell && !state.hoverNote" class="absolute border-2 opacity-50 pointer-events-none rounded-lg note-outline-color"
         :style="{
           top: `${state.hoverCell.row * rowHeight}px`,
           left: `${state.hoverCell.col * colWidth}px`,
@@ -357,7 +357,7 @@ onBeforeUnmount(() => {
       ></div>
 
       <!-- hover note -->
-      <div v-if="state.hoverNote" class="absolute border-2 border-blue-400 opacity-50 pointer-events-none rounded-lg"
+      <div v-if="state.hoverNote" class="absolute border-2 opacity-50 pointer-events-none rounded-lg note-outline-color"
         :style="{
           top: `${state.hoverNote.row * rowHeight}px`,
           left: `${state.hoverNote.col * colWidth}px`,
@@ -368,11 +368,12 @@ onBeforeUnmount(() => {
 
       <!-- playhead -->
       <div v-if="playhead.playing || playhead.col > 0"
-        class="absolute bg-green-400 w-0.75 z-50 pointer-events-none shadow-[0_0_6px_rgba(74,222,128,0.9)]"
+        class="absolute w-0.75 z-50 pointer-events-none playhead-color"
         :style="{
           transform: `translateX(${playhead.col * colWidth}px)`,
           top: '0',
           height: `${notes.length * rowHeight}px`,
+          boxShadow: `-1px 0 6px var(--playhead)`
         }"
       ></div>
     </div>

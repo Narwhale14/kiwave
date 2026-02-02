@@ -13,6 +13,10 @@
     --button: #bfbfbf;
     --button-hover: #ffffff;
 
+    --note: #3b82f6;
+    --note-outline: #60a5fa;
+    --playhead: #4ade80;
+
     /* steps for gradient */
     --step-0: color-mix(in srgb, var(--g-start), var(--g-end) 0%);
     --step-5: color-mix(in srgb, var(--g-start), var(--g-end) 5%);
@@ -54,6 +58,18 @@
 
 .util-button:hover {
     color: var(--button-hover);
+}
+
+.note-color {
+    background-color: var(--note);
+}
+
+.note-outline-color {
+    border-color: var(--note-outline);
+}
+
+.playhead-color {
+    background-color: var(--playhead);
 }
 
 .piano-roll-grid {
