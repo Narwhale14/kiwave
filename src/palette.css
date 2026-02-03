@@ -83,6 +83,13 @@
     ),
     repeating-linear-gradient(
       to right,
+      rgba(255,255,255,0.18) 0px,
+      rgba(255,255,255,0.18) 2px,
+      transparent 2px,
+      transparent var(--bar-w)
+    ),
+    repeating-linear-gradient(
+      to right,
       rgba(255,255,255,0.08) 0px,
       rgba(255,255,255,0.08) 1px,
       transparent 1px,
@@ -90,10 +97,10 @@
     ),
     repeating-linear-gradient(
       to right,
-      rgba(255,255,255,0.18) 0px,
-      rgba(255,255,255,0.18) 2px,
-      transparent 2px,
-      transparent var(--bar-w)
+      rgba(255,255,255,0.04) 0px,
+      rgba(255,255,255,0.04) 1px,
+      transparent 1px,
+      transparent var(--snap-w)
     );
 }
 

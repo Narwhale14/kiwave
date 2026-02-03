@@ -7,7 +7,7 @@ export class PianoRoll {
     readonly _noteData: NoteBlock[] = [];
     readonly _keyboardNotes: { midi: number; note: string; isBlack: boolean }[];
     resizingNote: NoteBlock | null = null;
-    private _snapDivision = 4; // cannot surpass 1/32.
+    private static _snapDivision = 4; // cannot surpass 1/32.
 
     readonly range: { min: number, max: number };
 
@@ -21,28 +21,28 @@ export class PianoRoll {
     }
 
     get snapDivision(): number {
-        return this._snapDivision;
+        return PianoRoll._snapDivision;
     }
 
     set snapDivision(value: number) {
-        this._snapDivision = Math.max(0, value);
+        PianoRoll._snapDivision = Math.max(0, value);
     }
 
     // lowest possible 1/32
     get snapSize(): number {
-        return this._snapDivision > 0 ? 1 / this._snapDivision : 1 / 32;
+        return PianoRoll._snapDivision > 0 ? 1 / PianoRoll._snapDivision : 1 / 32;
     }
 
     // snap a value down to the current grid (for placement)
-    snap(value: number): number {
-        if(this._snapDivision === 0) return value;
-        return Math.floor(value * this._snapDivision) / this._snapDivision;
+    snap(value: number, to: number = PianoRoll._snapDivision): number {
+        if(to === 0) return value;
+        return Math.floor(value * to) / to;
     }
 
     // snap a value to the nearest grid line (for resize edges)
     snapRound(value: number): number {
-        if(this._snapDivision === 0) return value;
-        return Math.round(value * this._snapDivision) / this._snapDivision;
+        if(PianoRoll._snapDivision === 0) return value;
+        return Math.round(value * PianoRoll._snapDivision) / PianoRoll._snapDivision;
     }
 
     get getNoteData(): NoteBlock[] {
@@ -63,12 +63,12 @@ export class PianoRoll {
     }
 
     getHoveredNote(cell: Cell) {
-        const gridCol = Math.round(cell.col * this._snapDivision);
+        const gridCol = Math.round(cell.col * PianoRoll._snapDivision);
         const index = this._noteData.findIndex(n => {
             if(n.row !== cell.row) return false;
 
-            const noteStart = Math.round(n.col * this._snapDivision);
-            const noteEnd = Math.round((n.col + n.length) * this._snapDivision);
+            const noteStart = Math.round(n.col * PianoRoll._snapDivision);
+            const noteEnd = Math.round((n.col + n.length) * PianoRoll._snapDivision);
 
             return gridCol >= noteStart && gridCol < noteEnd;
         });

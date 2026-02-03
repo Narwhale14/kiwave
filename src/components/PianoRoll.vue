@@ -36,6 +36,7 @@ const props = defineProps<{
 
 const workSpaceContainer = ref<HTMLDivElement | null>(null);
 const pianoRollContainer = ref<HTMLDivElement | null>(null);
+const cursor = ref('default');
 
 const notes = props.roll.getKeyboardNotes;
 
@@ -100,13 +101,17 @@ function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
   const pianoRoll = workSpaceContainer.value!.getBoundingClientRect();
   const pointerX = event.clientX - pianoRoll.left;
   const noteRightX = (note.col + note.length) * colWidth;
-  return Math.abs(pointerX - noteRightX) <= 15 * note.length;
+
+  const region = 20;
+  const mult = region > (note.length * colWidth) / 3 ? region * note.length : region;
+  return Math.abs(pointerX - noteRightX) <= mult;
 }
 
 function handlePointerMove(event: PointerEvent) {
   if(props.roll.isResizing() && state.resizingNote) {
     const pointerX = event.clientX - workSpaceContainer.value!.getBoundingClientRect().left;
     state.cachedLength = props.roll.resize(pointerX / colWidth);
+    cursor.value = 'w-resize';
     return;
   }
 
@@ -115,6 +120,12 @@ function handlePointerMove(event: PointerEvent) {
 
   const hovered = props.roll.getHoveredNote(cell);
   state.hoverNote = hovered?.note ?? null;
+
+  if(hovered?.note && isNearRightEdge(event, hovered.note)) {
+    cursor.value = 'w-resize';
+  } else {
+    cursor.value = 'default';
+  }
 
   if(state.draggingNote) {
     const newCol = cell.col - state.dragStart.col;
@@ -126,11 +137,6 @@ function handlePointerMove(event: PointerEvent) {
       scheduler.updateNote(state.draggingNote.id, { startTime: newCol, pitch: notes[newRow]?.midi});
     }
   }
-}
-
-function handlePointerLeave() {
-  state.hoverCell = null;
-  state.hoverNote = null;
 }
 
 async function handlePointerDown(event: PointerEvent) {
@@ -174,7 +180,7 @@ async function handlePointerDown(event: PointerEvent) {
     if(scheduler) {
       const noteBlocks = props.roll.getNoteData;
       const newNote = noteBlocks[noteBlocks.length - 1];
-      if (newNote) {
+      if(newNote) {
         scheduler.addNote({
           id: newNote.id,
           pitch: newNote.midi,
@@ -182,12 +188,19 @@ async function handlePointerDown(event: PointerEvent) {
           duration: newNote.length,
           velocity: 0.8,
         });
+
+        state.draggingNote = newNote;
+        state.dragStart = {
+          row: state.hoverCell.row - newNote.row,
+          col: state.hoverCell.col - newNote.col
+        }
       }
     }
 
     // preview note
     await playNote(midi);
     setTimeout(() => stopNote(midi), 150);
+
     return;
   }
 }
@@ -209,6 +222,24 @@ function handlePointerUp() {
   if(state.draggingNote) {
     state.draggingNote = null;
     state.dragStart = { row: 0, col: 0 };
+  }
+
+  cursor.value = 'default';
+}
+
+function handlePointerLeave() {
+  state.hoverCell = null;
+  state.hoverNote = null;
+  cursor.value = 'default';
+
+  if(state.draggingNote) {
+    state.draggingNote = null;
+    state.dragStart = { row: 0, col : 0 };
+  }
+
+  if(state.resizingNote) {
+    props.roll.stopResize();
+    state.resizingNote = null;
   }
 }
 
@@ -319,12 +350,13 @@ onBeforeUnmount(() => {
       @pointerup="handlePointerUp"
       @contextmenu.prevent
       :style="{
+        cursor: cursor,
         height: `${notes.length * rowHeight}px`,
         width: `${128 * beatsPerBar * colWidth}px`,
         '--row-h': `${rowHeight}px`,
         '--col-w': `${colWidth}px`,
         '--bar-w': `${colWidth * beatsPerBar}px`,
-        '--snap-w': `${roll.snapDivision > 0 ? colWidth / roll.snapDivision : 0}px`
+        '--snap-w': `${roll.snapDivision > 1 ? colWidth / roll.snapDivision : colWidth}px`
       }"
     >
       <!-- row backgrounds -->

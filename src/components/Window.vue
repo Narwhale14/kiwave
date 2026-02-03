@@ -44,7 +44,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="rootElement" v-if="visible" tabindex="0" class="fixed text-white flex flex-col overflow-visible select-none focus:outline-none bg-mix-15 border-mix-30" 
+  <div ref="rootElement" v-if="visible" tabindex="0" class="fixed text-white flex flex-col overflow-visible select-none focus:outline-none border-2 bg-mix-15 border-mix-30" 
     :style="{
       left: windows.find(w => w.id === id)?.x + 'px',
       top: windows.find(w => w.id === id)?.y + 'px',
