@@ -42,8 +42,6 @@ export class MiniSynth {
         this.triggerRelease(noteId, time);
       }
 
-      console.log(this.scheduledVoices.size + 1);
-
       const clampedVelocity = Math.max(0, Math.min(1, velocity));
 
       const oscillator = this.audioContext.createOscillator();

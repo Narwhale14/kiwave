@@ -85,6 +85,11 @@ function stopPlayhead() {
 
 async function togglePlayhead() {
   await scheduler!.toggle();
+  updatePatternLoop();
+}
+
+function updatePatternLoop() {
+  scheduler?.setLoop(true, 0, props.roll.getEndBeat(beatsPerBar));
 }
 
 // POINTER HANDLING
@@ -151,6 +156,7 @@ async function handlePointerDown(event: PointerEvent) {
 
       if(scheduler) {
         scheduler.removeNote(noteToDelete.id);
+        updatePatternLoop();
       }
     }
 
@@ -195,6 +201,8 @@ async function handlePointerDown(event: PointerEvent) {
           col: state.hoverCell.col - newNote.col
         }
       }
+
+      updatePatternLoop();
     }
 
     // preview note

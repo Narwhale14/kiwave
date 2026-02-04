@@ -35,7 +35,7 @@ export class Scheduler {
     // notes
     private notes: SchedulerNote[] = [];
     private scheduledNoteOns: Set<string> = new Set();
-    private scheduledNotesOffs: Set<string> = new Set();
+    private scheduledNoteOffs: Set<string> = new Set();
 
     private _loopEnabled = false;
     private _loopStart = 0;
@@ -93,7 +93,7 @@ export class Scheduler {
         return this.secondsToBeats(elapsed) + this.pauseTime;
     }
 
-    // gets elapsed beat number, works with loops. used for the visual playhead
+    // gets the current beat of the playhead
     getCurrentBeat(): number {
         const rawBeat = this.getRawBeat();
 
@@ -120,6 +120,8 @@ export class Scheduler {
     removeNote(id: string) {
         const index = this.notes.findIndex(n => n.id === id);
         if(index !== -1) this.notes.splice(index, 1);
+
+        this.synth.triggerRelease(id, this.audioContext.currentTime);
     }
 
     updateNote(id: string, updates: Partial<SchedulerNote>) {
@@ -169,23 +171,20 @@ export class Scheduler {
         const noteOnKey = `${note.id}-on-${noteStartBeat.toFixed(4)}`;
         const noteOffKey = `${note.id}-off-${noteEndBeat.toFixed(4)}`;
 
-        // schedules note on (with small look-behind tolerance)
-        const lookBehindTolerance = 0.01; // ~10ms at 120bpm
+        const lookBehindTolerance = 0.05;
         if(noteStartBeat >= currentBeat - lookBehindTolerance && noteStartBeat < scheduleUntilBeat && !this.scheduledNoteOns.has(noteOnKey)) {
-            const audioTime = this.beatToAudioTime(noteStartBeat);
-            if(audioTime >= now) {
-                this.synth.triggerAttack(note.id, note.pitch, audioTime, note.velocity);
-                this.scheduledNoteOns.add(noteOnKey);
-            }
+            const scheduleTime = Math.max(now, this.beatToAudioTime(noteStartBeat));
+
+            this.synth.triggerAttack(note.id, note.pitch, scheduleTime, note.velocity);
+            this.scheduledNoteOns.add(noteOnKey);
         }
 
         // schedules note off
-        if(noteEndBeat >= currentBeat && noteEndBeat < scheduleUntilBeat && !this.scheduledNotesOffs.has(noteOffKey)) {
-            const audioTime = this.beatToAudioTime(noteEndBeat);
-            if(audioTime >= now) {
-                this.synth.triggerRelease(note.id, audioTime);
-                this.scheduledNotesOffs.add(noteOffKey);
-            }
+        if(noteEndBeat >= currentBeat && noteEndBeat < scheduleUntilBeat && !this.scheduledNoteOffs.has(noteOffKey)) {
+            const scheduleTime = Math.max(now, this.beatToAudioTime(noteEndBeat));
+
+            this.synth.triggerRelease(note.id, scheduleTime);
+            this.scheduledNoteOffs.add(noteOffKey);
         }
     }
 
@@ -199,10 +198,10 @@ export class Scheduler {
             }
         }
 
-        for(const key of this.scheduledNotesOffs) {
+        for(const key of this.scheduledNoteOffs) {
             const match = key.match(/-off-([\d.-]+)$/);
             if(match && parseFloat(match[1]!) < threshold) {
-                this.scheduledNotesOffs.delete(key);
+                this.scheduledNoteOffs.delete(key);
             }
         }
     }
@@ -231,7 +230,7 @@ export class Scheduler {
         this._isPlaying = true;
         this.startTime = this.audioContext.currentTime;
         this.scheduledNoteOns.clear();
-        this.scheduledNotesOffs.clear();
+        this.scheduledNoteOffs.clear();
 
         // schedule immediately to catch notes at playhead position
         this.schedulerTick();
@@ -293,14 +292,30 @@ export class Scheduler {
 
             // clear schedule since timing changed
             this.scheduledNoteOns.clear();
-            this.scheduledNotesOffs.clear();
+            this.scheduledNoteOffs.clear();
         }
     }
 
     setLoop(enabled: boolean, start?: number, end?: number) {
+        const currentBeat = this.getCurrentBeat();
+
         this._loopEnabled = enabled;
         if(start !== undefined) this._loopStart = Math.max(0, start);
         if(end !== undefined) this._loopEnd = Math.max(this._loopStart, end);
+
+        if(this._isPlaying && this._loopEnabled) {
+            if(currentBeat >= this._loopEnd || currentBeat < this._loopStart) {
+                this.startTime = this.audioContext.currentTime;
+                this.pauseTime = this.loopStart;
+
+                this.synth.panic();
+                this.scheduledNoteOns.clear();
+                this.scheduledNoteOffs.clear();
+
+                this.playheadCallback?.(this.loopStart);
+                this.schedulerTick();
+            }
+        }
     }
 
     seek(beat: number) {
@@ -312,7 +327,7 @@ export class Scheduler {
 
         this.pauseTime = Math.max(0, beat);
         this.scheduledNoteOns.clear();
-        this.scheduledNotesOffs.clear();
+        this.scheduledNoteOffs.clear();
 
         this.playheadCallback?.(this.pauseTime);
 

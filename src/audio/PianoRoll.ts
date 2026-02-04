@@ -76,6 +76,13 @@ export class PianoRoll {
         return index === -1 ? null : { note: this._noteData[index], index };
     }
 
+    getEndBeat(beatsPerBar: number): number {
+        if(this._noteData.length === 0) return beatsPerBar;
+
+        const lastNoteEnd = Math.max( ...this._noteData.map(n => n.col + n.length));
+        return Math.ceil(lastNoteEnd / beatsPerBar) * beatsPerBar;
+    }
+
     addNote(cell: Cell, length: number, id: string): number {
         if(cell.row < 0 || cell.row > (this.range.max - this.range.min))
             return -1;
