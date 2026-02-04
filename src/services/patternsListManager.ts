@@ -3,7 +3,7 @@ import { PianoRoll } from '../audio/PianoRoll';
 import { Keyboard } from '../audio/Keyboard';
 import { focusWindow } from './windowManager';
 
-interface Pattern {
+export interface Pattern {
     id: string;
     num: number;
     name: string;
