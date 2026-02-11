@@ -23,8 +23,9 @@ provide('windowElement', rootElement);
 provide('windowId', props.id);
 
 watch(activeWindowId, id => {
-  if(id === props.id)
+  if(id === props.id) {
     nextTick(() => rootElement.value?.focus());
+  }
 });
 
 onMounted(() => {

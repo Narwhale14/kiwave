@@ -1,4 +1,4 @@
-import { ref, computed, nextTick, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { PianoRoll } from '../audio/PianoRoll';
 import { Keyboard } from '../audio/Keyboard';
 import { focusWindow } from './windowManager';
@@ -66,6 +66,6 @@ export function togglePattern(num: number) {
 
 watch(activePattern, (pattern) => {
     if(pattern && pattern.visible) {
-        nextTick(() => focusWindow('pattern-window'));
+        focusWindow(pattern.id)
     }
 });

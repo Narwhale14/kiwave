@@ -1,28 +1,11 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref } from 'vue';
-import { MiniSynth } from '../audio/MiniSynth'
 import { PianoRoll, type NoteBlock, type Cell } from '../audio/PianoRoll'
 import { noteToMidi } from '../audio/midiUtils';
 import { isWindowActive } from '../services/windowManager';
-import { Scheduler } from '../audio/Scheduler';
+import { getAudioEngine } from '../services/audioEngineManager';
 
-let synth: MiniSynth | null = null;
-let scheduler: Scheduler | null = null;
 let noteIdCounter = 0;
-
-function initAudio() {
-  if(synth) return;
-  synth = new MiniSynth();
-  scheduler = new Scheduler(synth, { bpm: tempo });
-
-  scheduler.onPlayhead((beat) => {
-    playhead.col = beat;
-  });
-
-  scheduler.onPlayStateChange((playing) => {
-    playhead.playing = playing;
-  });
-}
 
 function generateNoteId(): string {
   return `note-${noteIdCounter++}-${Date.now()}`;
@@ -33,6 +16,9 @@ function generateNoteId(): string {
 const props = defineProps<{
   roll: PianoRoll;
 }>();
+
+// Get shared audio engine
+const engine = getAudioEngine();
 
 const workSpaceContainer = ref<HTMLDivElement | null>(null);
 const pianoRollContainer = ref<HTMLDivElement | null>(null);
@@ -58,8 +44,6 @@ const playhead = reactive({
   playing: false
 });
 
-const tempo = 120;
-
 const rowHeight = ref(20);
 const colWidth = 80;
 const beatsPerBar = 4;
@@ -67,29 +51,29 @@ const beatsPerBar = 4;
 // LIVE PREVIEW (keyboard sidebar)
 
 async function playNote(midi: number) {
-  if(scheduler?.isPlaying) return;
+  if(engine.scheduler.isPlaying) return;
 
-  await synth!.resume();
-  synth!.noteOn(midi);
+  await engine.synth.resume();
+  engine.synth.noteOn(midi);
 }
 
 function stopNote(midi: number) {
-  synth?.noteOff(midi);
+  engine.synth.noteOff(midi);
 }
 
 // CONTROLS
 
 function stopPlayhead() {
-  scheduler!.stop();
+  engine.scheduler.stop();
 }
 
 async function togglePlayhead() {
-  await scheduler!.toggle();
+  await engine.scheduler.toggle();
   updatePatternLoop();
 }
 
 function updatePatternLoop() {
-  scheduler?.setLoop(true, 0, props.roll.getEndBeat(beatsPerBar));
+  engine.scheduler.setLoop(true, 0, props.roll.getEndBeat(beatsPerBar));
 }
 
 // POINTER HANDLING
@@ -116,6 +100,11 @@ function handlePointerMove(event: PointerEvent) {
   if(props.roll.isResizing() && state.resizingNote) {
     const pointerX = event.clientX - workSpaceContainer.value!.getBoundingClientRect().left;
     state.cachedLength = props.roll.resize(pointerX / colWidth);
+
+    engine.scheduler.updateNote(state.resizingNote.id, {
+      duration: state.resizingNote.length
+    });
+
     cursor.value = 'w-resize';
     return;
   }
@@ -137,10 +126,13 @@ function handlePointerMove(event: PointerEvent) {
     const newRow = cell.row - state.dragStart.row;
 
     props.roll.move(state.draggingNote.id, newRow, newCol);
+    engine.synth.triggerRelease(state.draggingNote.id, engine.synth.getAudioContext().currentTime); // cancel current
 
-    if(scheduler) {
-      scheduler.updateNote(state.draggingNote.id, { startTime: newCol, pitch: notes[newRow]?.midi});
-    }
+    const noteIndex = notes.length - 1 - newRow;
+    engine.scheduler.updateNote(state.draggingNote.id, {
+      startTime: newCol,
+      pitch: notes[noteIndex]?.midi
+    });
   }
 }
 
@@ -154,8 +146,8 @@ async function handlePointerDown(event: PointerEvent) {
       const noteToDelete = hovered.note;
       props.roll.deleteNote(hovered.index);
 
-      if(scheduler) {
-        scheduler.removeNote(noteToDelete.id);
+      if(engine.scheduler) {
+        engine.scheduler.removeNote(noteToDelete.id);
         updatePatternLoop();
       }
     }
@@ -183,11 +175,11 @@ async function handlePointerDown(event: PointerEvent) {
     const midi = props.roll.addNote(state.hoverCell, state.cachedLength, noteId);
 
     // add note to scheduler
-    if(scheduler) {
+    if(engine.scheduler) {
       const noteBlocks = props.roll.getNoteData;
       const newNote = noteBlocks[noteBlocks.length - 1];
       if(newNote) {
-        scheduler.addNote({
+        engine.scheduler.addNote({
           id: newNote.id,
           pitch: newNote.midi,
           startTime: newNote.col,
@@ -213,42 +205,22 @@ async function handlePointerDown(event: PointerEvent) {
   }
 }
 
-function handlePointerUp() {
+function finalizeEdit() {
   if(props.roll.isResizing() && state.resizingNote) {
     props.roll.stopResize();
-
-    // update note duration in scheduler
-    if(scheduler) {
-      scheduler.updateNote(state.resizingNote.id, {
-        duration: state.resizingNote.length
-      });
-    }
-
+    updatePatternLoop();
     state.resizingNote = null;
   }
 
   if(state.draggingNote) {
+    updatePatternLoop();
     state.draggingNote = null;
     state.dragStart = { row: 0, col: 0 };
   }
 
-  cursor.value = 'default';
-}
-
-function handlePointerLeave() {
   state.hoverCell = null;
   state.hoverNote = null;
   cursor.value = 'default';
-
-  if(state.draggingNote) {
-    state.draggingNote = null;
-    state.dragStart = { row: 0, col : 0 };
-  }
-
-  if(state.resizingNote) {
-    props.roll.stopResize();
-    state.resizingNote = null;
-  }
 }
 
 function onPianoRollKeyDown(event: KeyboardEvent) {
@@ -298,21 +270,31 @@ function onPianoRollKeyDown(event: KeyboardEvent) {
 
 onMounted(async () => {
   await nextTick();
-  initAudio();
 
-  // Add existing notes from PianoRoll to scheduler
-  if(scheduler) {
-    const existingNotes = props.roll.getNoteData;
-    existingNotes.forEach(note => {
-      scheduler!.addNote({
-        id: note.id,
-        pitch: note.midi,
-        startTime: note.col,
-        duration: note.length,
-        velocity: 0.8,
-      });
+  engine.scheduler.stop();
+  engine.scheduler.setNotes([]); // clear notes
+
+  // Set up playhead callbacks for this pattern
+  engine.scheduler.onPlayhead((beat) => {
+    playhead.col = beat;
+  });
+
+  engine.scheduler.onPlayStateChange((playing) => {
+    playhead.playing = playing;
+  });
+
+  const existingNotes = props.roll.getNoteData;
+  existingNotes.forEach(note => {
+    engine.scheduler.addNote({
+      id: note.id,
+      pitch: note.midi,
+      startTime: note.col,
+      duration: note.length,
+      velocity: 0.8,
     });
-  }
+  });
+
+  updatePatternLoop();
 
   windowElement.value?.addEventListener('keydown', onPianoRollKeyDown);
 
@@ -326,8 +308,15 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   windowElement.value?.removeEventListener('keydown', onPianoRollKeyDown);
-  scheduler?.dispose();
-  synth?.dispose();
+
+  const existingNotes = props.roll.getNoteData;
+  existingNotes.forEach(note => {
+    engine.scheduler.removeNote(note.id);
+  });
+
+  if(engine.scheduler.isPlaying) {
+    engine.scheduler.stop();
+  }
 })
 </script>
 
@@ -353,9 +342,9 @@ onBeforeUnmount(() => {
     <!-- workspace -->
     <div class="relative piano-roll-grid" ref="workSpaceContainer"
       @pointermove="handlePointerMove"
-      @pointerleave="handlePointerLeave"
+      @pointerleave="finalizeEdit"
       @pointerdown="handlePointerDown"
-      @pointerup="handlePointerUp"
+      @pointerup="finalizeEdit"
       @contextmenu.prevent
       :style="{
         cursor: cursor,

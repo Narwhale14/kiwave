@@ -90,7 +90,7 @@ watch(addModalVisible, async (visible) => {
 
   <!-- add pattern modal -->
   <ConfirmationModal :visible="addModalVisible" :x="addPos.x" :y="addPos.y" @confirm="createPattern" @cancel="addModalVisible = false; name = ''">
-    <input ref="nameInput" v-model="name" @keydown="onKeyDown" :placeholder="`Pattern ${getNextNum()} name`" class="bg-mix-25 p-2 rounded-md" autofocus />
+    <input ref="nameInput" v-model="name" @keydown="onKeyDown" :placeholder="`Pattern ${getNextNum()} name`" class="bg-mix-25 p-2 rounded-md" />
   </ConfirmationModal>
 
   <!-- remove pattern modal -->
