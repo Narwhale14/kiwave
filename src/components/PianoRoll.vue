@@ -277,6 +277,22 @@ onMounted(async () => {
   // Set up playhead callbacks for this pattern
   engine.scheduler.onPlayhead((beat) => {
     playhead.col = beat;
+    if(!pianoRollContainer.value) return;
+
+    const playheadPos = beat * colWidth;
+    const viewWidth = pianoRollContainer.value.clientWidth;
+    const threshold = colWidth * 2;
+
+    if(beat < 1 && pianoRollContainer.value.scrollLeft > 0) {
+      pianoRollContainer.value.scrollLeft = 0;
+      return;
+    }
+
+    const viewEndpoint = pianoRollContainer.value.scrollLeft + viewWidth;
+
+    if(playheadPos > viewEndpoint - threshold) {
+      pianoRollContainer.value.scrollLeft = playheadPos - pianoRollContainer.value.clientWidth + threshold;
+    }
   });
 
   engine.scheduler.onPlayStateChange((playing) => {

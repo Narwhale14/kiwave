@@ -30,6 +30,7 @@ export class Scheduler {
     private _isPlaying = false;
     private startTime = 0;
     private pauseTime = 0;
+    private playheadPos = 0;
     private schedulerTimerId: number | null = null;
 
     // notes
@@ -103,6 +104,10 @@ export class Scheduler {
         }
 
         return rawBeat
+    }
+
+    getRelativeBeat(): number {
+        return this.getCurrentBeat() - this.playheadPos;
     }
 
     // converting beat to time so Web Audio know exactly when to play note
@@ -228,6 +233,7 @@ export class Scheduler {
         }
 
         this._isPlaying = true;
+        this.playheadPos = this.pauseTime; // starting pos
         this.startTime = this.audioContext.currentTime;
         this.scheduledNoteOns.clear();
         this.scheduledNoteOffs.clear();
