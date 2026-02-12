@@ -96,22 +96,27 @@ window.addEventListener('pointermove', event => {
         const dy = event.clientY - dragState.value.startY;
         const minW = 200;
         const minH = 100;
+        const win = activeWindow.value!;
 
         if(dragState.value.edge.includes('right')) {
-            activeWindow.value!.width = Math.max(minW, dragState.value.startW + dx);
+            const maxW = window.innerWidth - win.x;
+            win.width = Math.max(minW, Math.min(maxW, dragState.value.startW + dx));
         }
         if(dragState.value.edge.includes('left')) {
-            const newW = Math.max(minW, dragState.value.startW - dx);
-            activeWindow.value!.x = dragState.value.startWinX + (dragState.value.startW - newW);
-            activeWindow.value!.width = newW;
+            const maxW = dragState.value.startW + dragState.value.startWinX;
+            const newW = Math.max(minW, Math.min(maxW, dragState.value.startW - dx));
+            win.x = dragState.value.startWinX + (dragState.value.startW - newW);
+            win.width = newW;
         }
         if(dragState.value.edge.includes('bottom')) {
-            activeWindow.value!.height = Math.max(minH, dragState.value.startH + dy);
+            const maxH = window.innerHeight - win.y;
+            win.height = Math.max(minH, Math.min(maxH, dragState.value.startH + dy));
         }
         if(dragState.value.edge.includes('top')) {
-            const newH = Math.max(minH, dragState.value.startH - dy);
-            activeWindow.value!.y = dragState.value.startWinY + (dragState.value.startH - newH);
-            activeWindow.value!.height = newH;
+            const maxH = dragState.value.startH + dragState.value.startWinY;
+            const newH = Math.max(minH, Math.min(maxH, dragState.value.startH - dy));
+            win.y = dragState.value.startWinY + (dragState.value.startH - newH);
+            win.height = newH;
         }
     }
 });

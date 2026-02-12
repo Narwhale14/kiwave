@@ -90,23 +90,17 @@ watch(() => arrangement.clips, () => {
   }
 }, { deep: true });
 
-// watch for pattern edits - recompile when notes change
-watch(() => patterns.value.map(p => ({ id: p.id, notes: p.roll._noteData })), (newPatterns, oldPatterns) => {
-  if (playbackMode.value !== 'arrangement') return;
-
-  // find which patterns changed by comparing note data references
-  if (oldPatterns) {
-    for (let i = 0; i < newPatterns.length; i++) {
-      const newPattern = newPatterns[i];
-      const oldPattern = oldPatterns[i];
-      if(newPattern && oldPattern && newPattern.notes !== oldPattern.notes) {
-        engine.compiler.invalidatePattern(newPattern.id);
-      }
-    }
-  }
-
-  recompileArrangement();
+// watch for pattern edits - _noteData is mutated in place so reference never changes,
+// always invalidate all patterns and recompile if in arrangement mode
+watch(() => patterns.value.map(p => p.roll._noteData), () => {
+  patterns.value.forEach(p => engine.compiler.invalidatePattern(p.id));
+  if (playbackMode.value === 'arrangement') recompileArrangement();
 }, { deep: true });
+
+// recompile when switching to arrangement mode (picks up edits made in pattern mode)
+watch(playbackMode, (newMode) => {
+  if (newMode === 'arrangement') recompileArrangement();
+});
 
 // Lifecycle
 onMounted(() => {
@@ -141,7 +135,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="w-full h-full overflow-auto bg-mix-20 -m-3">
+  <div class="w-full h-full overflow-auto bg-mix-20">
     <!-- Arrangement workspace -->
     <div
       class="relative arrangement-grid"

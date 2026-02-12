@@ -79,7 +79,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- content -->
-    <div class="flex-1 overflow-y-auto overflow-x-hidden p-3">
+    <div class="flex-1 overflow-y-auto overflow-x-hidden p-1">
       <slot />
     </div>
 
