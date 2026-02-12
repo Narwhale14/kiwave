@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref, computed } from 'vue';
+import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref, computed, watch } from 'vue';
 import { PianoRoll, type NoteBlock, type Cell } from '../audio/PianoRoll'
 import { noteToMidi } from '../util/midiUtils';
 import { isWindowActive } from '../services/windowManager';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { snap, snapDivision } from '../util/snap';
+import { playbackMode, registerPatternCallbacks, unregisterPatternCallbacks } from '../services/playbackModeManager';
 import BaseDropdown from './modals/BaseDropdown.vue';
 
 let noteIdCounter = 0;
@@ -232,6 +233,9 @@ function finalizeEdit() {
 function onPianoRollKeyDown(event: KeyboardEvent) {
   if(!isWindowActive(windowId!)) return;
 
+  // Only respond to keyboard if in pattern mode
+  if (playbackMode.value !== 'pattern') return;
+
   const target = event.target as HTMLElement;
   if(['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
 
@@ -272,16 +276,34 @@ function onPianoRollKeyDown(event: KeyboardEvent) {
   }
 }
 
+// Load pattern notes into scheduler (only when in pattern mode)
+function loadPatternNotes() {
+  if (playbackMode.value !== 'pattern') return;
+
+  engine.scheduler.setNotes([]);
+
+  const existingNotes = props.roll.getNoteData;
+  existingNotes.forEach(note => {
+    engine.scheduler.addNote({
+      id: note.id,
+      pitch: note.midi,
+      startTime: note.col,
+      duration: note.length,
+      velocity: 0.8,
+      channel: note.channelId
+    });
+  });
+
+  updatePatternLoop();
+}
+
 // LIFECYCLE
 
 onMounted(async () => {
   await nextTick();
 
-  engine.scheduler.stop();
-  engine.scheduler.setNotes([]); // clear notes
-
-  // Set up playhead callbacks for this pattern
-  engine.scheduler.onPlayhead((beat) => {
+  // Define callbacks for pattern mode
+  const playheadCallback = (beat: number) => {
     playhead.col = beat;
     if(!pianoRollContainer.value) return;
 
@@ -299,25 +321,24 @@ onMounted(async () => {
     if(playheadPos > viewEndpoint - threshold) {
       pianoRollContainer.value.scrollLeft = playheadPos - pianoRollContainer.value.clientWidth + threshold;
     }
-  });
+  };
 
-  engine.scheduler.onPlayStateChange((playing) => {
+  const playStateCallback = (playing: boolean) => {
     playhead.playing = playing;
-  });
+  };
 
-  const existingNotes = props.roll.getNoteData;
-  existingNotes.forEach(note => {
-    engine.scheduler.addNote({
-      id: note.id,
-      pitch: note.midi,
-      startTime: note.col,
-      duration: note.length,
-      velocity: 0.8,
-      channel: note.channelId
-    });
-  });
+  // Register callbacks with the mode manager
+  registerPatternCallbacks(playheadCallback, playStateCallback);
 
-  updatePatternLoop();
+  // Load notes if we're in pattern mode
+  loadPatternNotes();
+
+  // Watch for mode changes and reload pattern notes when switching to pattern mode
+  watch(playbackMode, (newMode) => {
+    if (newMode === 'pattern') {
+      loadPatternNotes();
+    }
+  });
 
   windowElement.value?.addEventListener('keydown', onPianoRollKeyDown);
 
@@ -332,13 +353,15 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   windowElement.value?.removeEventListener('keydown', onPianoRollKeyDown);
 
-  const existingNotes = props.roll.getNoteData;
-  existingNotes.forEach(note => {
-    engine.scheduler.removeNote(note.id);
-  });
+  // Unregister callbacks
+  unregisterPatternCallbacks();
 
-  if(engine.scheduler.isPlaying) {
-    engine.scheduler.stop();
+  // Clear notes if we're in pattern mode
+  if (playbackMode.value === 'pattern') {
+    engine.scheduler.setNotes([]);
+    if(engine.scheduler.isPlaying) {
+      engine.scheduler.stop();
+    }
   }
 })
 </script>
@@ -431,9 +454,9 @@ onBeforeUnmount(() => {
           }"
         ></div>
 
-        <!-- playhead -->
-        <div v-if="playhead.playing || playhead.col > 0"
-          class="absolute w-0.75 z-40 pointer-events-none playhead-color"
+        <!-- playhead (only visible in pattern mode) -->
+        <div v-if="playbackMode === 'pattern' && (playhead.playing || playhead.col > 0)"
+          class="absolute w-0.75 pointer-events-none playhead-color"
           :style="{
             transform: `translateX(${playhead.col * colWidth}px)`,
             top: '0',

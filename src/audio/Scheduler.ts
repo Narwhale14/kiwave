@@ -254,8 +254,9 @@ export class Scheduler {
     private animateTick = () => {
         if(!this._isPlaying) return;
 
+        const currentBeat = this.getCurrentBeat();
         if(this.playheadCallback) {
-            this.playheadCallback(this.getCurrentBeat());
+            this.playheadCallback(currentBeat);
         }
 
         this.animationFrameId = requestAnimationFrame(this.animateTick);
@@ -280,7 +281,9 @@ export class Scheduler {
         this.schedulerTick();
         this.schedulerTimerId = window.setInterval(this.schedulerTick, this.scheduleInterval);
         this.animationFrameId = requestAnimationFrame(this.animateTick);
-        this.playStateCallback?.(true);
+        if(this.playStateCallback) {
+            this.playStateCallback(true);
+        }
     }
 
     pause() {
@@ -300,14 +303,18 @@ export class Scheduler {
         }
 
         this.synth.panic();
-        this.playStateCallback?.(false);
+        if(this.playStateCallback) {
+            this.playStateCallback(false);
+        }
     }
 
     stop() {
         this.pause();
         this.pauseTime = this._loopEnabled ? this._loopStart : 0;
 
-        this.playheadCallback?.(this.pauseTime);
+        if(this.playheadCallback) {
+            this.playheadCallback(this.pauseTime);
+        }
     }
 
     async toggle() {
@@ -356,7 +363,9 @@ export class Scheduler {
                 this.scheduledNoteOns.clear();
                 this.scheduledNoteOffs.clear();
 
-                this.playheadCallback?.(this.loopStart);
+                if(this.playheadCallback) {
+                    this.playheadCallback(this.loopStart);
+                }
                 this.schedulerTick();
             }
         }
@@ -373,7 +382,9 @@ export class Scheduler {
         this.scheduledNoteOns.clear();
         this.scheduledNoteOffs.clear();
 
-        this.playheadCallback?.(this.pauseTime);
+        if(this.playheadCallback) {
+            this.playheadCallback(this.pauseTime);
+        }
 
         if(wasPlaying) {
             this.play();
@@ -382,11 +393,11 @@ export class Scheduler {
 
     // CALLBACKS
 
-    onPlayhead(callback: PlayheadCallback) {
+    setPlayheadCallback(callback: PlayheadCallback | null) {
         this.playheadCallback = callback;
     }
 
-    onPlayStateChange(callback: PlayStateCallback) {
+    setPlayStateCallback(callback: PlayStateCallback | null) {
         this.playStateCallback = callback;
     }
 

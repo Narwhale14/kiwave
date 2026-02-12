@@ -4,72 +4,72 @@
 */
 
 :root {
-    --g-start: #0A0A0C;
-    --g-end: #CECEFF;
+  --g-start: #0A0A0C;
+  --g-end: #CECEFF;
 
-    --key-white: #f5f5f5;
-    --key-black: #1a1a1a;
+  --key-white: #f5f5f5;
+  --key-black: #1a1a1a;
 
-    --button: #bfbfbf;
-    --button-hover: #ffffff;
+  --button: #bfbfbf;
+  --button-hover: #ffffff;
 
-    --note: #3b82f6;
-    --note-outline: #60a5fa;
-    --playhead: #4ade80;
+  --note: #3b82f6;
+  --note-outline: #60a5fa;
+  --playhead: #4ade80;
 
-    /* steps for gradient */
-    --step-0: color-mix(in srgb, var(--g-start), var(--g-end) 0%);
-    --step-5: color-mix(in srgb, var(--g-start), var(--g-end) 5%);
-    --step-10: color-mix(in srgb, var(--g-start), var(--g-end) 10%);
-    --step-15: color-mix(in srgb, var(--g-start), var(--g-end) 15%);
-    --step-20: color-mix(in srgb, var(--g-start), var(--g-end) 20%);
-    --step-25: color-mix(in srgb, var(--g-start), var(--g-end) 25%);
-    --step-30: color-mix(in srgb, var(--g-start), var(--g-end) 30%);
-    --step-35: color-mix(in srgb, var(--g-start), var(--g-end) 35%);
-    --step-40: color-mix(in srgb, var(--g-start), var(--g-end) 40%);
-    --step-45: color-mix(in srgb, var(--g-start), var(--g-end) 45%);
-    --step-50: color-mix(in srgb, var(--g-start), var(--g-end) 50%);
-    --step-55: color-mix(in srgb, var(--g-start), var(--g-end) 55%);
-    --step-60: color-mix(in srgb, var(--g-start), var(--g-end) 60%);
-    --step-65: color-mix(in srgb, var(--g-start), var(--g-end) 65%);
-    --step-70: color-mix(in srgb, var(--g-start), var(--g-end) 70%);
-    --step-75: color-mix(in srgb, var(--g-start), var(--g-end) 75%);
-    --step-80: color-mix(in srgb, var(--g-start), var(--g-end) 80%);
-    --step-85: color-mix(in srgb, var(--g-start), var(--g-end) 85%);
-    --step-90: color-mix(in srgb, var(--g-start), var(--g-end) 90%);
-    --step-95: color-mix(in srgb, var(--g-start), var(--g-end) 95%);
-    --step-100: color-mix(in srgb, var(--g-start), var(--g-end) 100%);
+  /* steps for gradient */
+  --step-0: color-mix(in srgb, var(--g-start), var(--g-end) 0%);
+  --step-5: color-mix(in srgb, var(--g-start), var(--g-end) 5%);
+  --step-10: color-mix(in srgb, var(--g-start), var(--g-end) 10%);
+  --step-15: color-mix(in srgb, var(--g-start), var(--g-end) 15%);
+  --step-20: color-mix(in srgb, var(--g-start), var(--g-end) 20%);
+  --step-25: color-mix(in srgb, var(--g-start), var(--g-end) 25%);
+  --step-30: color-mix(in srgb, var(--g-start), var(--g-end) 30%);
+  --step-35: color-mix(in srgb, var(--g-start), var(--g-end) 35%);
+  --step-40: color-mix(in srgb, var(--g-start), var(--g-end) 40%);
+  --step-45: color-mix(in srgb, var(--g-start), var(--g-end) 45%);
+  --step-50: color-mix(in srgb, var(--g-start), var(--g-end) 50%);
+  --step-55: color-mix(in srgb, var(--g-start), var(--g-end) 55%);
+  --step-60: color-mix(in srgb, var(--g-start), var(--g-end) 60%);
+  --step-65: color-mix(in srgb, var(--g-start), var(--g-end) 65%);
+  --step-70: color-mix(in srgb, var(--g-start), var(--g-end) 70%);
+  --step-75: color-mix(in srgb, var(--g-start), var(--g-end) 75%);
+  --step-80: color-mix(in srgb, var(--g-start), var(--g-end) 80%);
+  --step-85: color-mix(in srgb, var(--g-start), var(--g-end) 85%);
+  --step-90: color-mix(in srgb, var(--g-start), var(--g-end) 90%);
+  --step-95: color-mix(in srgb, var(--g-start), var(--g-end) 95%);
+  --step-100: color-mix(in srgb, var(--g-start), var(--g-end) 100%);
 }
 
 .key-white {
-    background-color: var(--key-white);
-    color: var(--key-black);
+  background-color: var(--key-white);
+  color: var(--key-black);
 }
 
 .key-black {
-    background-color: var(--key-black);
-    color: var(--key-white);
+  background-color: var(--key-black);
+  color: var(--key-white);
 }
 
 .util-button {
-    color: var(--button);
-    transition: color 250ms ease;
+  color: var(--button);
+  transition: color 250ms ease;
 }
 
 .util-button:hover {
-    color: var(--button-hover);
+  color: var(--button-hover);
 }
 
 .note-color {
-    background-color: var(--note);
+  background-color: var(--note);
 }
 
 .note-outline-color {
-    border-color: var(--note-outline);
+  border-color: var(--note-outline);
 }
 
 .playhead-color {
-    background-color: var(--playhead);
+  background-color: var(--playhead);
 }
 
 .piano-roll-grid {
