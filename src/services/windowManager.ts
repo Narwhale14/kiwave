@@ -1,5 +1,8 @@
 import { reactive, ref, computed } from 'vue'
 
+/**
+ * interface of a general window object to hold contents. used for manipulatable windows like piano roll
+ */
 export interface Window {
     id: string,
     x: number,

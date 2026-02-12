@@ -1,11 +1,17 @@
-import { midiToFrequency } from "./midiUtils";
+import { midiToFrequency } from "../util/midiUtils";
 
+/**
+ * interface for a voice
+ */
 interface ActiveVoice { 
     oscillator: OscillatorNode;
     gainNode: GainNode;
     pitch: number;
 }
 
+/**
+ * basic sine synth - no env manipulating yet
+ */
 export class MiniSynth {
     private audioContext: AudioContext;
     private masterGain: GainNode;

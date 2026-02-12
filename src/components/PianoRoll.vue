@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref } from 'vue';
 import { PianoRoll, type NoteBlock, type Cell } from '../audio/PianoRoll'
-import { noteToMidi } from '../audio/midiUtils';
+import { noteToMidi } from '../util/midiUtils';
 import { isWindowActive } from '../services/windowManager';
 import { getAudioEngine } from '../services/audioEngineManager';
 
@@ -172,10 +172,11 @@ async function handlePointerDown(event: PointerEvent) {
   // place
   if(event.button === 0 && !hovered?.note) {
     const noteId = generateNoteId();
-    const midi = props.roll.addNote(state.hoverCell, state.cachedLength, noteId);
+    const midi = props.roll.addNote(state.hoverCell, noteId, state.cachedLength, 0.8);
 
     // add note to scheduler
     if(engine.scheduler) {
+      // converting note to scheduler note
       const noteBlocks = props.roll.getNoteData;
       const newNote = noteBlocks[noteBlocks.length - 1];
       if(newNote) {

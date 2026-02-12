@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { patterns, togglePattern, addPattern, getNextNum, removePattern, activePattern } from '../services/patternsListManager'
-import ConfirmationModal from './ConfirmationModal.vue'
+import { patterns, togglePattern, addPattern, getNextPatternNum, removePattern, activePattern } from '../services/patternsListManager'
+import ConfirmationModal from './modals/ConfirmationModal.vue'
 import { ref, watch, nextTick } from 'vue';
 
 const name = ref('');
@@ -90,7 +90,7 @@ watch(addModalVisible, async (visible) => {
 
   <!-- add pattern modal -->
   <ConfirmationModal :visible="addModalVisible" :x="addPos.x" :y="addPos.y" @confirm="createPattern" @cancel="addModalVisible = false; name = ''">
-    <input ref="nameInput" v-model="name" @keydown="onKeyDown" :placeholder="`Pattern ${getNextNum()} name`" class="bg-mix-25 p-2 rounded-md" />
+    <input ref="nameInput" v-model="name" @keydown="onKeyDown" :placeholder="`Pattern ${getNextPatternNum()} name`" class="bg-mix-25 p-2 rounded-md" />
   </ConfirmationModal>
 
   <!-- remove pattern modal -->

@@ -3,6 +3,9 @@ import { PianoRoll } from '../audio/PianoRoll';
 import { Keyboard } from '../audio/Keyboard';
 import { focusWindow } from './windowManager';
 
+/**
+ * interface to manage each individual piano roll (PianoRoll has note data)
+ */
 export interface Pattern {
     id: string;
     num: number;
@@ -21,7 +24,7 @@ export const activePattern = computed(() => {
     return patterns.value.find(p => p.visible) ?? null;
 });
 
-export function getNextNum(): number {
+export function getNextPatternNum(): number {
     const used = new Set(patterns.value.map(p => p.num));
     let n = 1;
     while(used.has(n)) n++;
@@ -29,7 +32,7 @@ export function getNextNum(): number {
 }
 
 export function addPattern(name?: string) {
-    const num = getNextNum();
+    const num = getNextPatternNum();
     const pattern = {
         id: `pattern-${num}`,
         num,

@@ -1,5 +1,8 @@
 import { MiniSynth } from './MiniSynth';
 
+/**
+ * interface used to convert note data to a type the scheduler can read
+ */
 export interface SchedulerNote {
     id: string;
     pitch: number;
@@ -8,6 +11,9 @@ export interface SchedulerNote {
     velocity: number;
 }
 
+/**
+ * interface used to init the scheduler
+ */
 export interface SchedulerOptions {
     bpm?: number;
     lookAhead?: number;
@@ -17,6 +23,9 @@ export interface SchedulerOptions {
 type PlayheadCallback = (time: number) => void;
 type PlayStateCallback = (playing: boolean) => void;
 
+/**
+ * scheduler object - schedules notes with a playhead
+ */
 export class Scheduler {
     private synth: MiniSynth;
     private audioContext: AudioContext;

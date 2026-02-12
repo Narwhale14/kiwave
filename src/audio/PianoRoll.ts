@@ -1,7 +1,15 @@
 import { reactive } from 'vue';
 
 export type Cell = { row: number; col: number };
-export type NoteBlock = { id: string; row: number; col: number, length: number, midi: number };
+export type NoteBlock = { 
+    id: string,
+    row: number,
+    col: number, 
+    length: number, 
+    velocity: number,
+    channelId: string,
+    midi: number
+};
 
 export class PianoRoll {
     readonly _noteData: NoteBlock[] = [];
@@ -83,12 +91,12 @@ export class PianoRoll {
         return Math.ceil(lastNoteEnd / beatsPerBar) * beatsPerBar;
     }
 
-    addNote(cell: Cell, length: number, id: string): number {
+    addNote(cell: Cell, id: string, length: number, velocity: number): number {
         if(cell.row < 0 || cell.row > (this.range.max - this.range.min))
             return -1;
 
         const midi = this.rowToMidi(cell.row);
-        this._noteData.push({ id, ...cell, length, midi });
+        this._noteData.push({ id, ...cell, length, velocity, channelId: 'synth', midi });
         return midi;
     }
 

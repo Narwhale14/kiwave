@@ -1,6 +1,11 @@
 import { MiniSynth } from "./MiniSynth";
 import { Scheduler, type SchedulerNote } from "./Scheduler";
+import { channelManager } from "./channelManager";
+import { mixerManager } from "./mixerManager";
 
+/**
+ * audio engine object to manage synths and schedule and compile
+ */
 export class AudioEngine {
     private _synth = new MiniSynth();
     private _scheduler = new Scheduler(this._synth, { bpm: 120 });
@@ -11,6 +16,14 @@ export class AudioEngine {
 
     get scheduler(): Scheduler {
         return this._scheduler;
+    }
+
+    get channelManager() {
+        return channelManager;
+    }
+
+    get mixerManager() {
+        return mixerManager;
     }
 
     play() { return this.scheduler.play(); }
