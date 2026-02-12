@@ -90,16 +90,23 @@ watch(() => arrangement.clips, () => {
   }
 }, { deep: true });
 
-// watch for pattern edits - _noteData is mutated in place so reference never changes,
-// always invalidate all patterns and recompile if in arrangement mode
-watch(() => patterns.value.map(p => p.roll._noteData), () => {
-  patterns.value.forEach(p => engine.compiler.invalidatePattern(p.id));
+// watch for pattern edits - compare version counters to only invalidate changed patterns
+watch(() => patterns.value.map(p => ({ id: p.id, version: p.roll._state.version })), (newPatterns, oldPatterns) => {
+  if (oldPatterns) {
+    for (let i = 0; i < newPatterns.length; i++) {
+      const np = newPatterns[i];
+      const op = oldPatterns[i];
+      if (np && op && np.version !== op.version) {
+        engine.compiler.invalidatePattern(np.id);
+      }
+    }
+  }
   if (playbackMode.value === 'arrangement') recompileArrangement();
-}, { deep: true });
+});
 
 // recompile when switching to arrangement mode (picks up edits made in pattern mode)
 watch(playbackMode, (newMode) => {
-  if (newMode === 'arrangement') recompileArrangement();
+  if(newMode === 'arrangement') recompileArrangement();
 });
 
 // Lifecycle

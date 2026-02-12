@@ -15,6 +15,7 @@ export type NoteBlock = {
 export class PianoRoll {
     readonly _noteData: NoteBlock[] = [];
     readonly _keyboardNotes: { midi: number; note: string; isBlack: boolean }[];
+    readonly _state = reactive({ version: 0 });
     resizingNote: NoteBlock | null = null;
 
     readonly range: { min: number, max: number };
@@ -73,11 +74,13 @@ export class PianoRoll {
 
         const midi = this.rowToMidi(cell.row);
         this._noteData.push({ id, ...cell, length, velocity, channelId, midi });
+        this._state.version++;
         return midi;
     }
 
     deleteNote(index: number) {
         this._noteData.splice(index, 1);
+        this._state.version++;
     }
 
     startResize(note: NoteBlock) {
@@ -92,7 +95,7 @@ export class PianoRoll {
         if(!this.resizingNote) return getSnapSize();
         const snappedTarget = snapNearest(targetCol);
         this.resizingNote.length = Math.max(getSnapSize(), snappedTarget - this.resizingNote.col);
-
+        this._state.version++;
         return this.resizingNote.length;
     }
 
@@ -107,5 +110,6 @@ export class PianoRoll {
         note.row = Math.max(0, Math.min(newRow, this._keyboardNotes.length - 1));
         note.col = Math.max(0, newCol);
         note.midi = this.rowToMidi(note.row);
+        this._state.version++;
     }
 }
