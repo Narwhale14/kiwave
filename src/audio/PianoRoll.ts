@@ -67,12 +67,12 @@ export class PianoRoll {
         return Math.ceil(lastNoteEnd / beatsPerBar) * beatsPerBar;
     }
 
-    addNote(cell: Cell, id: string, length: number, velocity: number): number {
+    addNote(cell: Cell, id: string, length: number, velocity: number, channelId: string): number {
         if(cell.row < 0 || cell.row > (this.range.max - this.range.min))
             return -1;
 
         const midi = this.rowToMidi(cell.row);
-        this._noteData.push({ id, ...cell, length, velocity, channelId: 'synth', midi });
+        this._noteData.push({ id, ...cell, length, velocity, channelId, midi });
         return midi;
     }
 

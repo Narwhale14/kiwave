@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref } from 'vue';
+import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref, computed } from 'vue';
 import { PianoRoll, type NoteBlock, type Cell } from '../audio/PianoRoll'
 import { noteToMidi } from '../util/midiUtils';
 import { isWindowActive } from '../services/windowManager';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { snap, snapDivision } from '../util/snap';
+import BaseDropdown from './modals/BaseDropdown.vue';
 
 let noteIdCounter = 0;
 
@@ -20,6 +21,10 @@ const props = defineProps<{
 
 // Get shared audio engine
 const engine = getAudioEngine();
+
+// Channel selection - start with the most recent channel
+const selectedChannelId = ref(engine.channelManager.getLatestChannelId() || '');
+const channels = computed(() => engine.channelManager.getAllChannels());
 
 const workSpaceContainer = ref<HTMLDivElement | null>(null);
 const pianoRollContainer = ref<HTMLDivElement | null>(null);
@@ -173,7 +178,7 @@ async function handlePointerDown(event: PointerEvent) {
   // place
   if(event.button === 0 && !hovered?.note) {
     const noteId = generateNoteId();
-    const midi = props.roll.addNote(state.hoverCell, noteId, state.cachedLength, 0.8);
+    const midi = props.roll.addNote(state.hoverCell, noteId, state.cachedLength, 0.8, selectedChannelId.value);
 
     // add note to scheduler
     if(engine.scheduler) {
@@ -341,90 +346,103 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <!-- piano roll -->
-  <div ref="pianoRollContainer" class="w-full h-full overflow-auto grid grid-cols-[64px_1fr]"
-  >
-    <!-- notes column -->
-    <div class="flex flex-col-reverse sticky left-0 z-50" ref="pianoKeysContainer">
-      <button v-for="key in notes" :key="key.midi" 
-        @pointerdown="playNote(key.midi)"
-        @pointerup="stopNote(key.midi)"
-        @pointerleave="stopNote(key.midi)"
-        :class="[
-          'w-full text-sm select-none border-2 border-transparent hover:border-[#646cff]',
-          key.isBlack ? 'key-black' : 'key-white'
-        ]"
-        :style="{ height: rowHeight + 'px' }"> 
-        {{ key.note }} 
-      </button>
+  <div class="flex flex-col w-full h-full">
+    <!-- toolbar -->
+    <div class="flex items-center px-2 py-1.5 bg-mix-25 z-60 border-b-4 border-mix-15">
+      <label class="flex items-center gap-2 text-xs">
+        <BaseDropdown 
+          v-model="selectedChannelId"
+          :items="channels"
+          item-label="name"
+          item-value="id"
+        />
+      </label>
     </div>
 
-    <!-- workspace -->
-    <div class="relative piano-roll-grid" ref="workSpaceContainer"
-      @pointermove="handlePointerMove"
-      @pointerleave="finalizeEdit"
-      @pointerdown="handlePointerDown"
-      @pointerup="finalizeEdit"
-      @contextmenu.prevent
-      :style="{
-        cursor: cursor,
-        height: `${notes.length * rowHeight}px`,
-        width: `${128 * beatsPerBar * colWidth}px`,
-        '--row-h': `${rowHeight}px`,
-        '--col-w': `${colWidth}px`,
-        '--bar-w': `${colWidth * beatsPerBar}px`,
-        '--snap-w': `${snapDivision > 1 ? colWidth / snapDivision : colWidth}px`
-      }"
-    >
-      <!-- row backgrounds -->
-      <div v-for="(key, i) in notes" :key="key.midi" class="absolute w-full pointer-events-none"
-        :style="{
-          top: `${(notes.length - 1 - i) * rowHeight}px`,
-          height: `${rowHeight}px`,
-          backgroundColor: key.isBlack ? 'transparent' : 'rgba(255,255,255,0.04)'
-        }"
-      ></div>
+    <!-- piano roll -->
+    <div ref="pianoRollContainer" class="flex-1 overflow-auto grid grid-cols-[64px_1fr]">
+      <!-- notes column -->
+      <div class="flex flex-col-reverse sticky left-0 z-50" ref="pianoKeysContainer">
+        <button v-for="key in notes" :key="key.midi" 
+          @pointerdown="playNote(key.midi)"
+          @pointerup="stopNote(key.midi)"
+          @pointerleave="stopNote(key.midi)"
+          :class="[
+            'w-full text-sm select-none border-2 border-transparent hover:border-[#646cff]',
+            key.isBlack ? 'key-black' : 'key-white'
+          ]"
+          :style="{ height: rowHeight + 'px' }"> 
+          {{ key.note }} 
+        </button>
+      </div>
 
-      <!-- notes -->
-      <div v-for="(block, i) in roll.getNoteData" :key="i" class="absolute opacity-80 rounded-lg note-color"
+      <!-- workspace -->
+      <div class="relative piano-roll-grid" ref="workSpaceContainer"
+        @pointermove="handlePointerMove"
+        @pointerleave="finalizeEdit"
+        @pointerdown="handlePointerDown"
+        @pointerup="finalizeEdit"
+        @contextmenu.prevent
         :style="{
-          top: `${block.row * rowHeight}px`,
-          left: `${block.col * colWidth}px`,
-          width: `${block.length * colWidth}px`,
-          height: `${rowHeight}px`
-        }"
-      ></div>
-
-      <!-- hover cell -->
-      <div v-if="state.hoverCell && !state.hoverNote" class="absolute border-2 opacity-50 pointer-events-none rounded-lg note-outline-color"
-        :style="{
-          top: `${state.hoverCell.row * rowHeight}px`,
-          left: `${state.hoverCell.col * colWidth}px`,
-          width: `${colWidth * state.cachedLength}px`,
-          height: `${rowHeight}px`
-        }"
-      ></div>
-
-      <!-- hover note -->
-      <div v-if="state.hoverNote" class="absolute border-2 opacity-50 pointer-events-none rounded-lg note-outline-color"
-        :style="{
-          top: `${state.hoverNote.row * rowHeight}px`,
-          left: `${state.hoverNote.col * colWidth}px`,
-          width: `${state.hoverNote.length * colWidth}px`,
-          height: `${rowHeight}px`
-        }"
-      ></div>
-
-      <!-- playhead -->
-      <div v-if="playhead.playing || playhead.col > 0"
-        class="absolute w-0.75 z-40 pointer-events-none playhead-color"
-        :style="{
-          transform: `translateX(${playhead.col * colWidth}px)`,
-          top: '0',
+          cursor: cursor,
           height: `${notes.length * rowHeight}px`,
-          boxShadow: `-1px 0 6px var(--playhead)`
+          width: `${128 * beatsPerBar * colWidth}px`,
+          '--row-h': `${rowHeight}px`,
+          '--col-w': `${colWidth}px`,
+          '--bar-w': `${colWidth * beatsPerBar}px`,
+          '--snap-w': `${snapDivision > 1 ? colWidth / snapDivision : colWidth}px`
         }"
-      ></div>
+      >
+        <!-- row backgrounds -->
+        <div v-for="(key, i) in notes" :key="key.midi" class="absolute w-full pointer-events-none"
+          :style="{
+            top: `${(notes.length - 1 - i) * rowHeight}px`,
+            height: `${rowHeight}px`,
+            backgroundColor: key.isBlack ? 'transparent' : 'rgba(255,255,255,0.04)'
+          }"
+        ></div>
+
+        <!-- notes -->
+        <div v-for="(block, i) in roll.getNoteData" :key="i" class="absolute opacity-80 rounded-lg note-color"
+          :style="{
+            top: `${block.row * rowHeight}px`,
+            left: `${block.col * colWidth}px`,
+            width: `${block.length * colWidth}px`,
+            height: `${rowHeight}px`
+          }"
+        ></div>
+
+        <!-- hover cell -->
+        <div v-if="state.hoverCell && !state.hoverNote" class="absolute border-2 opacity-50 pointer-events-none rounded-lg note-outline-color"
+          :style="{
+            top: `${state.hoverCell.row * rowHeight}px`,
+            left: `${state.hoverCell.col * colWidth}px`,
+            width: `${colWidth * state.cachedLength}px`,
+            height: `${rowHeight}px`
+          }"
+        ></div>
+
+        <!-- hover note -->
+        <div v-if="state.hoverNote" class="absolute border-2 opacity-50 pointer-events-none rounded-lg note-outline-color"
+          :style="{
+            top: `${state.hoverNote.row * rowHeight}px`,
+            left: `${state.hoverNote.col * colWidth}px`,
+            width: `${state.hoverNote.length * colWidth}px`,
+            height: `${rowHeight}px`
+          }"
+        ></div>
+
+        <!-- playhead -->
+        <div v-if="playhead.playing || playhead.col > 0"
+          class="absolute w-0.75 z-40 pointer-events-none playhead-color"
+          :style="{
+            transform: `translateX(${playhead.col * colWidth}px)`,
+            top: '0',
+            height: `${notes.length * rowHeight}px`,
+            boxShadow: `-1px 0 6px var(--playhead)`
+          }"
+        ></div>
+      </div>
     </div>
   </div>
 </template>

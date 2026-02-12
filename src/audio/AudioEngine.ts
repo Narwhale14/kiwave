@@ -8,14 +8,20 @@ import { mixerManager } from "./mixerManager";
  */
 export class AudioEngine {
     private _synth = new MiniSynth();
-    private _scheduler = new Scheduler(this._synth, { bpm: 120 });
+    private _scheduler = new Scheduler(this._synth, channelManager, { bpm: 120 });
 
     constructor() {
-        mixerManager.addMixer('Insert 1');
-        mixerManager.addMixer('Inset 2');
-        mixerManager.addMixer('Insert 3');
+        // for preventing HMR duplication
+        if(channelManager.getAllChannels().length === 0) {
+            channelManager.addChannel(this._synth, 'Synth 1');
+            channelManager.addChannel(this._synth, 'Synth 2');
+        }
 
-        channelManager.addChannel(this._synth, 'Synth 1');
+        if(mixerManager.getMixers().length === 1) { // only master exists
+            mixerManager.addMixer('Insert 1');
+            mixerManager.addMixer('Insert 2');
+            mixerManager.addMixer('Insert 3');
+        }
     }
 
     get synth(): MiniSynth {

@@ -104,6 +104,42 @@
     );
 }
 
+.arrangement-grid {
+  background-image:
+    /* track lines */
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.12) 0px,
+      rgba(255,255,255,0.12) 1px,
+      transparent 1px,
+      transparent var(--track-h)
+    ),
+    /* measure lines */
+    repeating-linear-gradient(
+      to right,
+      rgba(255,255,255,0.18) 0px,
+      rgba(255,255,255,0.18) 2px,
+      transparent 2px,
+      transparent var(--bar-w)
+    ),
+    /* beat lines */
+    repeating-linear-gradient(
+      to right,
+      rgba(255,255,255,0.08) 0px,
+      rgba(255,255,255,0.08) 1px,
+      transparent 1px,
+      transparent var(--beat-w)
+    ),
+    /* division lines */
+    repeating-linear-gradient(
+      to right,
+      rgba(255,255,255,0.04) 0px,
+      rgba(255,255,255,0.04) 1px,
+      transparent 1px,
+      transparent var(--snap-w)
+    );
+}
+
 button:hover {
   border-color: #646cff;
   transition: background-color 250ms ease;

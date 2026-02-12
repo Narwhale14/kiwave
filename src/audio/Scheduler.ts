@@ -1,3 +1,4 @@
+import type { ChannelManager } from './channelManager';
 import { MiniSynth } from './MiniSynth';
 
 /**
@@ -30,6 +31,7 @@ type PlayStateCallback = (playing: boolean) => void;
 export class Scheduler {
     private synth: MiniSynth;
     private audioContext: AudioContext;
+    private channelManager: ChannelManager;
 
     // timing
     private _bpm: number;
@@ -56,9 +58,14 @@ export class Scheduler {
     private playStateCallback: PlayStateCallback | null = null;
     private animationFrameId: number | null = null;
 
-    constructor(synth: MiniSynth, options: SchedulerOptions = {}) {
+    constructor(
+        synth: MiniSynth, 
+        channelManager: ChannelManager, 
+        options: SchedulerOptions = {}
+    ) {
         this.synth = synth;
         this.audioContext = synth.getAudioContext();
+        this.channelManager = channelManager;
 
         this._bpm = options.bpm ?? 120;
         this.lookAhead = options.lookAhead ?? 0.1; // 100ms
@@ -187,20 +194,41 @@ export class Scheduler {
         const noteOffKey = `${note.id}-off-${noteEndBeat.toFixed(4)}`;
 
         const lookBehindTolerance = 0.05;
+
+        // schedule note on
         if(noteStartBeat >= currentBeat - lookBehindTolerance && noteStartBeat < scheduleUntilBeat && !this.scheduledNoteOns.has(noteOnKey)) {
             const scheduleTime = Math.max(now, this.beatToAudioTime(noteStartBeat));
 
-            this.synth.triggerAttack(note.id, note.pitch, scheduleTime, note.velocity);
-            this.scheduledNoteOns.add(noteOnKey);
+            const synth = this.getSynthForNote(note);
+            if(synth) {
+                this.synth.triggerAttack(note.id, note.pitch, scheduleTime, note.velocity);
+                this.scheduledNoteOns.add(noteOnKey);
+            }
         }
 
         // schedules note off
         if(noteEndBeat >= currentBeat && noteEndBeat < scheduleUntilBeat && !this.scheduledNoteOffs.has(noteOffKey)) {
             const scheduleTime = Math.max(now, this.beatToAudioTime(noteEndBeat));
 
-            this.synth.triggerRelease(note.id, scheduleTime);
-            this.scheduledNoteOffs.add(noteOffKey);
+            const synth = this.getSynthForNote(note);
+            if(synth) {
+                this.synth.triggerRelease(note.id, scheduleTime);
+                this.scheduledNoteOffs.add(noteOffKey);
+            }
         }
+    }
+
+    private getSynthForNote(note: SchedulerNote): MiniSynth | null {
+        if(note.channel) {
+            const channel = this.channelManager.getChannel(note.channel);
+
+            if(channel && !channel.muted) {
+                return channel.instrument;
+            }
+        }
+
+        // temp fallback
+        return this.synth;
     }
 
     private cleanupScheduledSets(currentBeat: number) {

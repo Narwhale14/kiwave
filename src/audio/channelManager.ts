@@ -44,6 +44,15 @@ export class ChannelManager {
         return channel;
     }
 
+    getAllChannels(): Channel[] {
+        return Array.from(this.channels.values());
+    }
+
+    getLatestChannelId(): string | null {
+        if(this.channels.size === 0) return null;
+        return `channel-${this.nextId - 1}`;
+    }
+
     setMixerRoute(id: string, mixerTrack: number) {
         const channel = this.channels.get(id);
         if(!channel) return;

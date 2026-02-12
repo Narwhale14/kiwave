@@ -52,6 +52,10 @@ export class MixerManager {
         return track;
     }
 
+    getMixers(): MixerTrack[] {
+        return Array.from(this.tracks.values());
+    }
+
     setRoute(id: string, route: number) {
         const track = this.tracks.get(id);
         if(!track) return;
