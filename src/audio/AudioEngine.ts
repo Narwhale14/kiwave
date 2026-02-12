@@ -10,6 +10,14 @@ export class AudioEngine {
     private _synth = new MiniSynth();
     private _scheduler = new Scheduler(this._synth, { bpm: 120 });
 
+    constructor() {
+        mixerManager.addMixer('Insert 1');
+        mixerManager.addMixer('Inset 2');
+        mixerManager.addMixer('Insert 3');
+
+        channelManager.addChannel(this._synth, 'Synth 1');
+    }
+
     get synth(): MiniSynth {
         return this._synth;
     }

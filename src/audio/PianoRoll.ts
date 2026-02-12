@@ -1,11 +1,12 @@
 import { reactive } from 'vue';
+import { snapDivision, snapNearest, getSnapSize } from '../util/snap'
 
 export type Cell = { row: number; col: number };
-export type NoteBlock = { 
+export type NoteBlock = {
     id: string,
     row: number,
-    col: number, 
-    length: number, 
+    col: number,
+    length: number,
     velocity: number,
     channelId: string,
     midi: number
@@ -15,7 +16,6 @@ export class PianoRoll {
     readonly _noteData: NoteBlock[] = [];
     readonly _keyboardNotes: { midi: number; note: string; isBlack: boolean }[];
     resizingNote: NoteBlock | null = null;
-    private static _snapDivision = 4; // cannot surpass 1/32.
 
     readonly range: { min: number, max: number };
 
@@ -28,30 +28,6 @@ export class PianoRoll {
         this._keyboardNotes = keyboardNotes;
     }
 
-    get snapDivision(): number {
-        return PianoRoll._snapDivision;
-    }
-
-    set snapDivision(value: number) {
-        PianoRoll._snapDivision = Math.max(0, value);
-    }
-
-    // lowest possible 1/32
-    get snapSize(): number {
-        return PianoRoll._snapDivision > 0 ? 1 / PianoRoll._snapDivision : 1 / 32;
-    }
-
-    // snap a value down to the current grid (for placement)
-    snap(value: number, to: number = PianoRoll._snapDivision): number {
-        if(to === 0) return value;
-        return Math.floor(value * to) / to;
-    }
-
-    // snap a value to the nearest grid line (for resize edges)
-    snapRound(value: number): number {
-        if(PianoRoll._snapDivision === 0) return value;
-        return Math.round(value * PianoRoll._snapDivision) / PianoRoll._snapDivision;
-    }
 
     get getNoteData(): NoteBlock[] {
         return [...this._noteData];
@@ -71,12 +47,12 @@ export class PianoRoll {
     }
 
     getHoveredNote(cell: Cell) {
-        const gridCol = Math.round(cell.col * PianoRoll._snapDivision);
+        const gridCol = Math.round(cell.col * snapDivision.value);
         const index = this._noteData.findIndex(n => {
             if(n.row !== cell.row) return false;
 
-            const noteStart = Math.round(n.col * PianoRoll._snapDivision);
-            const noteEnd = Math.round((n.col + n.length) * PianoRoll._snapDivision);
+            const noteStart = Math.round(n.col * snapDivision.value);
+            const noteEnd = Math.round((n.col + n.length) * snapDivision.value);
 
             return gridCol >= noteStart && gridCol < noteEnd;
         });
@@ -113,9 +89,9 @@ export class PianoRoll {
     }
 
     resize(targetCol: number): number {
-        if(!this.resizingNote) return this.snapSize;
-        const snappedTarget = this.snapRound(targetCol);
-        this.resizingNote.length = Math.max(this.snapSize, snappedTarget - this.resizingNote.col);
+        if(!this.resizingNote) return getSnapSize();
+        const snappedTarget = snapNearest(targetCol);
+        this.resizingNote.length = Math.max(getSnapSize(), snappedTarget - this.resizingNote.col);
 
         return this.resizingNote.length;
     }

@@ -4,6 +4,7 @@ import { PianoRoll, type NoteBlock, type Cell } from '../audio/PianoRoll'
 import { noteToMidi } from '../util/midiUtils';
 import { isWindowActive } from '../services/windowManager';
 import { getAudioEngine } from '../services/audioEngineManager';
+import { snap, snapDivision } from '../util/snap';
 
 let noteIdCounter = 0;
 
@@ -83,7 +84,7 @@ function getCellFromPointer(event: PointerEvent) {
   const rect = workSpaceContainer.value.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
-  return { row: Math.floor(y / rowHeight.value), col: props.roll.snap(x / colWidth) };
+  return { row: Math.floor(y / rowHeight.value), col: snap(x / colWidth) };
 }
 
 function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
@@ -282,7 +283,7 @@ onMounted(async () => {
 
     const playheadPos = beat * colWidth;
     const viewWidth = pianoRollContainer.value.clientWidth;
-    const threshold = colWidth * 2;
+    const threshold = colWidth * 4;
 
     if(beat < 1 && pianoRollContainer.value.scrollLeft > 0) {
       pianoRollContainer.value.scrollLeft = 0;
@@ -370,7 +371,7 @@ onBeforeUnmount(() => {
         '--row-h': `${rowHeight}px`,
         '--col-w': `${colWidth}px`,
         '--bar-w': `${colWidth * beatsPerBar}px`,
-        '--snap-w': `${roll.snapDivision > 1 ? colWidth / roll.snapDivision : colWidth}px`
+        '--snap-w': `${snapDivision > 1 ? colWidth / snapDivision : colWidth}px`
       }"
     >
       <!-- row backgrounds -->

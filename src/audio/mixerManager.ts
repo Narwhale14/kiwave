@@ -38,6 +38,8 @@ export class MixerManager {
             muted: false,
             solo: false
         });
+
+        this.nextId++;
     }
 
     removeMixer(id: string) {
