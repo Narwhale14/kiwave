@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch, nextTick, provide } from 'vue';
-import { registerWindow, beginResize, beginMove, windows, unregisterWindow, activeWindowId } from '../services/windowManager';
+import { registerWindow, beginResize, beginMove, windows, unregisterWindow, activeWindowId, focusWindow, positionWindow } from '../services/windowManager';
 
 const props = withDefaults(defineProps<{
   id: string;
@@ -21,6 +21,10 @@ const emit = defineEmits<{
 const rootElement = ref<HTMLElement | null>(null);
 provide('windowElement', rootElement);
 provide('windowId', props.id);
+
+function handleReset() {
+  positionWindow(props.id, props.x, props.y, props.width, props.height);
+}
 
 watch(activeWindowId, id => {
   if(id === props.id) {
@@ -45,7 +49,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="rootElement" v-if="visible" tabindex="0" class="fixed text-white flex flex-col overflow-visible select-none focus:outline-none border-2 bg-mix-15 border-mix-30" 
+  <div ref="rootElement" v-if="visible" tabindex="0"
+    class="fixed text-white flex flex-col overflow-visible select-none focus:outline-none border-2 bg-mix-15 border-mix-30"
+    @pointerdown="focusWindow(id)"
     :style="{
       left: windows.find(w => w.id === id)?.x + 'px',
       top: windows.find(w => w.id === id)?.y + 'px',
@@ -63,11 +69,13 @@ onBeforeUnmount(() => {
       </div>
       <div class="flex items-center gap-1">
         <slot name="header-right" />
+        <button class="justify-center w-6 h-6 rounded util-button" @pointerdown.stop @click="handleReset" title="Reset position and size">
+          <span class="pi pi-refresh text-xs" />
+        </button>
+        <button class="justify-center w-6 h-6 rounded util-button" @pointerdown.stop @click="emit('close')">
+          <span class="pi pi-times" />
+        </button>
       </div>
-
-      <button class="justify-center w-6 h-6 rounded util-button" @pointerdown.stop @click="emit('close')">
-        <span class="pi pi-times" />
-      </button>
     </div>
 
     <!-- content -->

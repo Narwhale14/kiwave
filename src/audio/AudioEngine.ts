@@ -2,6 +2,8 @@ import { MiniSynth } from "./MiniSynth";
 import { Scheduler, type SchedulerNote } from "./Scheduler";
 import { channelManager } from "./channelManager";
 import { mixerManager } from "./mixerManager";
+import { ArrangementCompiler } from "./ArrangementCompiler";
+import { arrangement } from "../services/arrangementManager";
 
 /**
  * audio engine object to manage synths and schedule and compile
@@ -9,6 +11,7 @@ import { mixerManager } from "./mixerManager";
 export class AudioEngine {
     private _synth = new MiniSynth();
     private _scheduler = new Scheduler(this._synth, channelManager, { bpm: 120 });
+    private _compiler = new ArrangementCompiler(arrangement);
 
     constructor() {
         // for preventing HMR duplication
@@ -30,6 +33,10 @@ export class AudioEngine {
 
     get scheduler(): Scheduler {
         return this._scheduler;
+    }
+
+    get compiler(): ArrangementCompiler {
+        return this._compiler;
     }
 
     get channelManager() {

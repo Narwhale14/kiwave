@@ -72,3 +72,12 @@ watch(activePattern, (pattern) => {
         focusWindow(pattern.id)
     }
 });
+
+// create and open initial pattern
+if(patterns.value.length === 0) {
+    addPattern('Pattern 1');
+    const firstPattern = patterns.value[0];
+    if (firstPattern) {
+        firstPattern.visible = true;
+    }
+}

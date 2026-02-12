@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { patterns, togglePattern, addPattern, getNextPatternNum, removePattern, activePattern } from '../services/patternsListManager'
+import { patterns, togglePattern, addPattern, getNextPatternNum, removePattern, activePattern, type Pattern } from '../services/patternsListManager'
 import ConfirmationModal from './modals/ConfirmationModal.vue'
 import { ref, watch, nextTick } from 'vue';
+import { PATTERNS_LIST_WIDTH } from '../constants/layout';
 
 const name = ref('');
 const nameInput = ref<HTMLInputElement | null>(null);
@@ -48,6 +49,19 @@ function onKeyDown(event: KeyboardEvent) {
   }
 }
 
+function onPatternToggle(patternNum: number, event: MouseEvent) {
+  togglePattern(patternNum);
+  (event.target as HTMLButtonElement).blur();
+}
+
+function handleDragStart(pattern: Pattern, event: DragEvent) {
+  if(!event.dataTransfer) return;
+
+  event.dataTransfer.effectAllowed = 'copy';
+  event.dataTransfer.setData('pattern-id', pattern.id);
+  event.dataTransfer.setData('pattern-name', pattern.name);
+}
+
 watch(addModalVisible, async (visible) => {
   if(visible) {
     await nextTick()
@@ -58,7 +72,7 @@ watch(addModalVisible, async (visible) => {
 </script>
 
 <template>
-  <div class="flex flex-col w-50 border-2 bg-mix-15 border-mix-30">
+  <div class="flex flex-col border-2 bg-mix-15 border-mix-30" :style="{ width: `${PATTERNS_LIST_WIDTH}px` }">
     <!-- header -->
     <div class="flex flex-row justify-between items-center p-2.5 border-b-2 border-mix-30">
       <h2 class="font-bold">Patterns</h2>
@@ -70,7 +84,10 @@ watch(addModalVisible, async (visible) => {
     <!-- list of patterns in list -->
     <ul class="overflow-x-auto p-1 space-y-1">
       <li v-for="pattern in patterns" :key="pattern.num" class="relative" @contextmenu.prevent="confirmDelete($event, pattern.num)">
-        <button @click="togglePattern(pattern.num)"
+        <button 
+          @click="onPatternToggle(pattern.num, $event)"
+          draggable="true"
+          @dragstart="handleDragStart(pattern, $event)"
           :class="[
             'w-full text-left px-2 border-2 rounded-sm h-8',
             pattern.num === activePattern?.num

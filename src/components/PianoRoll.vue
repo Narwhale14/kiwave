@@ -375,7 +375,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- piano roll -->
-    <div ref="pianoRollContainer" class="flex-1 overflow-auto grid grid-cols-[64px_1fr]">
+    <div ref="pianoRollContainer" class="flex-1 overflow-auto grid grid-cols-[50px_1fr]">
       <!-- notes column -->
       <div class="flex flex-col-reverse sticky left-0 z-50" ref="pianoKeysContainer">
         <button v-for="key in notes" :key="key.midi" 

@@ -40,6 +40,16 @@ export function focusWindow(id: string) {
     win.z = zCounter++;
 }
 
+export function positionWindow(id: string, x: number, y: number, width: number, height: number) {
+    const win = windows.find(w => w.id === id);
+    if(!win) return;
+
+    win.x = x;
+    win.y = y;
+    win.width = width;
+    win.height = height;
+}
+
 export function beginMove(id: string, event: PointerEvent) {
     focusWindow(id);
 

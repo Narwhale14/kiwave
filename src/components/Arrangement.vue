@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { reactive, computed, onMounted, onBeforeUnmount } from 'vue';
-import { snapDivision } from '../util/snap';
+import { reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { snapDivision, snap } from '../util/snap';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { playbackMode, registerArrangementCallbacks, unregisterArrangementCallbacks } from '../services/playbackModeManager';
+import { patterns } from '../services/patternsListManager';
+import { arrangement } from '../services/arrangementManager';
 
 const engine = getAudioEngine();
 
@@ -12,7 +14,7 @@ const playhead = reactive({
   playing: false
 });
 
-const trackHeight = 100;  // Height of each track in pixels
+const trackHeight = 50;  // Height of each track in pixels
 const beatWidth = 80;     // Width of one beat in pixels (same as piano roll)
 const beatsPerBar = 4;    // 4 beats per bar
 const numTracks = 10;      // Number of tracks
@@ -29,8 +31,10 @@ function handleKeyDown(event: KeyboardEvent) {
 
   if(event.code === 'Space') {
     event.preventDefault();
-    // TODO: Compile arrangement and set notes
-    // For now, just toggle the scheduler (it will play whatever notes are loaded)
+    // Compile arrangement before playing
+    if (!engine.scheduler.isPlaying) {
+      recompileArrangement();
+    }
     engine.scheduler.toggle();
     return;
   }
@@ -41,6 +45,68 @@ function handleKeyDown(event: KeyboardEvent) {
     return;
   }
 }
+
+function handleDragOver(event: DragEvent) {
+  event.preventDefault();
+  if(event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'copy';
+  }
+}
+
+function handleDrop(event: DragEvent) {
+  event.preventDefault();
+
+  const patternId = event.dataTransfer?.getData('pattern-id');
+  if(!patternId) return;
+
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
+  const startBeat = snap(x / beatWidth);
+  const track = Math.floor(y / trackHeight);
+
+  const pattern = patterns.value.find(p => p.id === patternId);
+  if(!pattern) return;
+
+  const duration = pattern.roll.getEndBeat(beatsPerBar);
+
+  // create clip with pattern
+  arrangement.addClip(patternId, track, startBeat, duration, 0);
+  recompileArrangement();
+}
+
+function recompileArrangement() {
+  const engine = getAudioEngine();
+  const patternMap = new Map(patterns.value.map(p => [p.id, p]));
+  const compiledNotes = engine.compiler.compile(patternMap, 0, Infinity);
+  engine.scheduler.setNotes(compiledNotes);
+}
+
+// watch for arrangement changes
+watch(() => arrangement.clips, () => {
+  if(playbackMode.value === 'arrangement') {
+    recompileArrangement();
+  }
+}, { deep: true });
+
+// watch for pattern edits - recompile when notes change
+watch(() => patterns.value.map(p => ({ id: p.id, notes: p.roll._noteData })), (newPatterns, oldPatterns) => {
+  if (playbackMode.value !== 'arrangement') return;
+
+  // find which patterns changed by comparing note data references
+  if (oldPatterns) {
+    for (let i = 0; i < newPatterns.length; i++) {
+      const newPattern = newPatterns[i];
+      const oldPattern = oldPatterns[i];
+      if(newPattern && oldPattern && newPattern.notes !== oldPattern.notes) {
+        engine.compiler.invalidatePattern(newPattern.id);
+      }
+    }
+  }
+
+  recompileArrangement();
+}, { deep: true });
 
 // Lifecycle
 onMounted(() => {
@@ -54,6 +120,11 @@ onMounted(() => {
 
   registerArrangementCallbacks(playheadCallback, playStateCallback);
   window.addEventListener('keydown', handleKeyDown);
+
+  // Initial compilation when entering arrangement mode
+  if (playbackMode.value === 'arrangement') {
+    recompileArrangement();
+  }
 });
 
 onBeforeUnmount(() => {
@@ -70,10 +141,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex-1 overflow-auto bg-mix-20">
+  <div class="w-full h-full overflow-auto bg-mix-20 -m-3">
     <!-- Arrangement workspace -->
     <div
       class="relative arrangement-grid"
+      @dragover="handleDragOver"
+      @drop="handleDrop"
       :style="{
         '--track-h': `${trackHeight}px`,
         '--beat-w': `${beatWidth}px`,
@@ -83,6 +156,23 @@ onBeforeUnmount(() => {
         height: `${numTracks * trackHeight}px`
       }"
     >
+      <!-- Render clips -->
+      <div
+        v-for="clip in arrangement.clips"
+        :key="clip.id"
+        class="absolute border-2 border-white/30 bg-blue-500/50 rounded cursor-pointer overflow-hidden"
+        :style="{
+          left: `${clip.startBeat * beatWidth}px`,
+          top: `${clip.track * trackHeight}px`,
+          width: `${clip.duration * beatWidth}px`,
+          height: `${trackHeight}px`
+        }"
+      >
+        <div class="p-1 text-xs truncate">
+          {{ patterns.find(p => p.id === clip.patternId)?.name || 'Pattern' }}
+        </div>
+      </div>
+
       <!-- Playhead (only visible in arrangement mode) -->
       <div v-if="playbackMode === 'arrangement' && (playhead.playing || playhead.col > 0)"
         class="absolute w-0.75 pointer-events-none playhead-color"
