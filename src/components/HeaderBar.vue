@@ -5,7 +5,6 @@ import BaseDropdown from './modals/BaseDropdown.vue';
 
 function handleModeToggle(event: MouseEvent) {
   togglePlaybackMode();
-  // Blur the button so space key doesn't trigger it again
   (event.target as HTMLButtonElement).blur();
 }
 </script>

@@ -327,13 +327,9 @@ onMounted(async () => {
     playhead.playing = playing;
   };
 
-  // Register callbacks with the mode manager
   registerPatternCallbacks(playheadCallback, playStateCallback);
-
-  // Load notes if we're in pattern mode
   loadPatternNotes();
 
-  // Watch for mode changes and reload pattern notes when switching to pattern mode
   watch(playbackMode, (newMode) => {
     if (newMode === 'pattern') {
       loadPatternNotes();
@@ -352,11 +348,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   windowElement.value?.removeEventListener('keydown', onPianoRollKeyDown);
-
-  // Unregister callbacks
   unregisterPatternCallbacks();
 
-  // Clear notes if we're in pattern mode
   if (playbackMode.value === 'pattern') {
     engine.scheduler.setNotes([]);
     if(engine.scheduler.isPlaying) {

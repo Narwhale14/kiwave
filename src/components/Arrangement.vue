@@ -12,20 +12,16 @@ const playhead = reactive({
   playing: false
 });
 
-// Grid settings
 const trackHeight = 100;  // Height of each track in pixels
 const beatWidth = 80;     // Width of one beat in pixels (same as piano roll)
 const beatsPerBar = 4;    // 4 beats per bar
 const numTracks = 10;      // Number of tracks
 const numBars = 32;       // Number of bars to show
 
-// Calculated widths (reactive)
 const barWidth = beatWidth * beatsPerBar;
 const snapWidth = computed(() => beatWidth / snapDivision.value);
 
-// Keyboard handler
 function handleKeyDown(event: KeyboardEvent) {
-  // Only respond to keyboard if in arrangement mode
   if (playbackMode.value !== 'arrangement') return;
 
   const target = event.target as HTMLElement;
@@ -48,7 +44,6 @@ function handleKeyDown(event: KeyboardEvent) {
 
 // Lifecycle
 onMounted(() => {
-  // Define callbacks for arrangement mode
   const playheadCallback = (beat: number) => {
     playhead.col = beat;
   };
@@ -57,26 +52,19 @@ onMounted(() => {
     playhead.playing = playing;
   };
 
-  // Register callbacks with the mode manager
   registerArrangementCallbacks(playheadCallback, playStateCallback);
-
-  // Add keyboard listener
   window.addEventListener('keydown', handleKeyDown);
 });
 
 onBeforeUnmount(() => {
-  // Unregister callbacks
   unregisterArrangementCallbacks();
-
-  // Clear notes if we're in arrangement mode
-  if (playbackMode.value === 'arrangement') {
+  if(playbackMode.value === 'arrangement') {
     engine.scheduler.setNotes([]);
     if(engine.scheduler.isPlaying) {
       engine.scheduler.stop();
     }
   }
 
-  // Remove keyboard listener
   window.removeEventListener('keydown', handleKeyDown);
 });
 </script>
