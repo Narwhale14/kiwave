@@ -187,6 +187,7 @@ async function handlePointerDown(event: PointerEvent) {
           startTime: newNote.col,
           duration: newNote.length,
           velocity: 0.8,
+          channel: newNote.channelId
         });
 
         state.draggingNote = newNote;
@@ -309,6 +310,7 @@ onMounted(async () => {
       startTime: note.col,
       duration: note.length,
       velocity: 0.8,
+      channel: note.channelId
     });
   });
 
@@ -343,7 +345,7 @@ onBeforeUnmount(() => {
   <div ref="pianoRollContainer" class="w-full h-full overflow-auto grid grid-cols-[64px_1fr]"
   >
     <!-- notes column -->
-    <div class="flex flex-col-reverse sticky left-0" ref="pianoKeysContainer">
+    <div class="flex flex-col-reverse sticky left-0 z-50" ref="pianoKeysContainer">
       <button v-for="key in notes" :key="key.midi" 
         @pointerdown="playNote(key.midi)"
         @pointerup="stopNote(key.midi)"
@@ -415,7 +417,7 @@ onBeforeUnmount(() => {
 
       <!-- playhead -->
       <div v-if="playhead.playing || playhead.col > 0"
-        class="absolute w-0.75 z-50 pointer-events-none playhead-color"
+        class="absolute w-0.75 z-40 pointer-events-none playhead-color"
         :style="{
           transform: `translateX(${playhead.col * colWidth}px)`,
           top: '0',
