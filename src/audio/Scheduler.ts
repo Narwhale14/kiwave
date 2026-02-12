@@ -9,6 +9,7 @@ export interface SchedulerNote {
     startTime: number;
     duration: number;
     velocity: number;
+    channel: string;
 }
 
 /**
