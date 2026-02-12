@@ -3,13 +3,18 @@ import { ref, computed, watch, nextTick } from 'vue';
 
 type Item = Record<string, any>;
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: any,
   items: Item[],
   itemLabel?: string,
   itemValue?: string,
-  placeholder?: string
-}>();
+  placeholder?: string,
+  buttonBg?: string,
+  width?: string
+}>(), {
+  buttonBg: 'bg-mix-15',
+  width: '20'
+});
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: any): void
@@ -106,7 +111,7 @@ watch(isOpen, (open) => {
     <button
       type="button"
       @click="toggle"
-      class="dropdown-button flex items-center justify-between gap-2 min-w-30 px-3 py-1 text-sm bg-mix-15 rounded transition-colors"
+      :class="[`dropdown-button flex items-center justify-between gap-2 min-w-${width} px-3 py-1 text-sm rounded transition-colors`, buttonBg]"
     >
       <span>{{ selectedItem?.[labelKey] ?? placeholder ?? 'Select' }}</span>
       <span class="pi pi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': isOpen }" />

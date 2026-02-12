@@ -19,10 +19,8 @@ const props = defineProps<{
   roll: PianoRoll;
 }>();
 
-// Get shared audio engine
 const engine = getAudioEngine();
 
-// Channel selection - start with the most recent channel
 const selectedChannelId = ref(engine.channelManager.getLatestChannelId() || '');
 const channels = computed(() => engine.channelManager.getAllChannels());
 
@@ -348,13 +346,14 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex flex-col w-full h-full">
     <!-- toolbar -->
-    <div class="flex items-center px-2 py-1.5 bg-mix-25 z-60 border-b-4 border-mix-15">
+    <div class="flex items-center gap-3 px-2 py-1.5 bg-mix-25 z-60 border-b-4 border-mix-15">
       <label class="flex items-center gap-2 text-xs">
-        <BaseDropdown 
+        <BaseDropdown
           v-model="selectedChannelId"
           :items="channels"
           item-label="name"
           item-value="id"
+          width="30"
         />
       </label>
     </div>
