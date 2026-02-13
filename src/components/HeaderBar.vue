@@ -2,6 +2,7 @@
 import { snapDivision, snapOptions } from '../util/snap';
 import { playbackMode, togglePlaybackMode } from '../services/playbackModeManager';
 import { arrangementVisible } from '../services/arrangementManager';
+import { channelRackVisible } from '../services/channelRackManager';
 import { activePattern, patterns, closePattern } from '../services/patternsListManager';
 import { activeWindowId, focusWindow } from '../services/windowManager';
 import BaseDropdown from './modals/BaseDropdown.vue';
@@ -37,10 +38,12 @@ function handleModeToggle(event: MouseEvent) {
 }
 
 function toggleArrangement() {
-  if (activeWindowId.value === 'arrangement-window') {
+  if(activeWindowId.value === 'arrangement-window') {
     arrangementVisible.value = false;
+
+    // focus active pattern instead
     const p = activePattern.value ?? patterns.value[0];
-    if (p) { p.visible = true; focusWindow(p.id); }
+    if(p) { p.visible = true; focusWindow(p.id); }
   } else {
     arrangementVisible.value = true;
     focusWindow('arrangement-window');
@@ -49,14 +52,29 @@ function toggleArrangement() {
 
 function togglePianoRoll() {
   const p = activePattern.value ?? patterns.value[0];
-  if (!p) return;
-  if (activeWindowId.value === p.id) {
+  if(!p) return;
+  if(activeWindowId.value === p.id) {
     closePattern(p.num);
+
+    // focus arrangement window
     arrangementVisible.value = true;
     focusWindow('arrangement-window');
   } else {
     p.visible = true;
     focusWindow(p.id);
+  }
+}
+
+function toggleChannelRack() {
+  if(activeWindowId.value === 'channel-rack-window') {
+    channelRackVisible.value = false;
+
+    // focus active pattern instead
+    const p = activePattern.value ?? patterns.value[0];
+    if(p) { p.visible = true; focusWindow(p.id); }
+  } else {
+    channelRackVisible.value = true;
+    focusWindow('channel-rack-window')
   }
 }
 </script>
@@ -117,16 +135,23 @@ function togglePianoRoll() {
 
     <!-- arrangement toggle -->
     <button class="flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-mix-35" :class="arrangementVisible ? 'bg-mix-30' : 'bg-mix-20'"
-      @click="toggleArrangement"
+      @click="toggleArrangement" :title="'Toggle Arrangement'"
     >
       <span class="pi pi-table text-sm"></span>
     </button>
 
     <!-- piano roll toggle -->
     <button class="flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-mix-35" :class="activePattern ? 'bg-mix-30' : 'bg-mix-20'"
-      @click="togglePianoRoll"
+      @click="togglePianoRoll" :title="'Toggle Piano Roll'"
     >
       <img src="/icons/piano-icon-white.png" class="w-5 h-5 object-contain" />
+    </button>
+
+    <!-- channel rack toggle -->
+    <button class="flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-mix-35" :class="channelRackVisible ? 'bg-mix-30' : 'bg-mix-20'"
+      @click="toggleChannelRack" :title="'Toggle Channel Rack'"
+    >
+      <span class="pi pi-book text-sm"></span>
     </button>
   </div>
 </template>

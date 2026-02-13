@@ -8,6 +8,7 @@ import HeaderBar from './components/HeaderBar.vue';
 import Arrangement from './components/Arrangement.vue';
 import ChannelRack from './components/ChannelRack.vue';
 import { PATTERNS_LIST_WIDTH, HEADER_HEIGHT, PIANO_ROLL_FILL_DEFAULT, ARRANGEMENT_FILL_DEFAULT } from './constants/layout';
+import { channelRackVisible } from './services/channelRackManager';
 
 // Layout calculations for default window positions
 const availableWidth = window.innerWidth - PATTERNS_LIST_WIDTH;
@@ -53,9 +54,10 @@ const arrangementWindow = {
       </Window>
 
       <Window
-        :visible="true"
+        :visible="channelRackVisible"
+        @close="channelRackVisible = false"
         :title="'Channel Rack'"
-        :id="'channel-rack'"
+        :id="'channel-rack-window'"
       >
         <ChannelRack></ChannelRack>
       </Window>
