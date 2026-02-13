@@ -129,22 +129,26 @@ function finalizeEdit() {
   cursor.value = 'default';
 }
 
+// global playback toggling
 function handleKeyDown(event: KeyboardEvent) {
   const target = event.target as HTMLElement;
   if(['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
 
   if(event.code === 'Space') {
     event.preventDefault();
+
+    // recompile if on arrangement mode + not playing
     if (playbackMode.value === 'arrangement' && !engine.scheduler.isPlaying) {
       recompileArrangement();
     }
-    engine.scheduler.toggle();
+    
+    engine.toggle();
     return;
   }
 
   if(event.code === 'Enter') {
     event.preventDefault();
-    engine.scheduler.stop();
+    engine.stop();
     return;
   }
 }

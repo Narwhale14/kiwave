@@ -6,6 +6,30 @@ import { activePattern, patterns, closePattern } from '../services/patternsListM
 import { activeWindowId, focusWindow } from '../services/windowManager';
 import BaseDropdown from './modals/BaseDropdown.vue';
 import { HEADER_HEIGHT } from '../constants/layout';
+import { ref } from 'vue';
+import { getAudioEngine } from '../services/audioEngineManager';
+
+const engine = getAudioEngine();
+const playButtonOn = ref(false);
+const bpmInput = ref(engine.scheduler.bpm.toString());
+
+function commitBpm() {
+  const val = parseFloat(bpmInput.value);
+  if (!isNaN(val) && val > 0 && val <= 999) {
+    engine.setBpm(val);
+    bpmInput.value = val.toString();
+  } else {
+    bpmInput.value = engine.scheduler.bpm.toString();
+  }
+}
+
+function onBpmKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+  if (e.key === 'Escape') {
+    bpmInput.value = engine.scheduler.bpm.toString();
+    (e.target as HTMLInputElement).blur();
+  }
+}
 
 function handleModeToggle(event: MouseEvent) {
   togglePlaybackMode();
@@ -38,42 +62,71 @@ function togglePianoRoll() {
 </script>
 
 <template>
-  <div class="flex w-full border-2 bg-mix-15 border-mix-30 px-3 gap-4 items-center" :style="{ height: `${HEADER_HEIGHT}px` }">
-    <!-- Playback Mode Toggle -->
-    <button @click="handleModeToggle" class="flex justify-center items-center px-2 py-1 w-20 text-xs font-semibold rounded transition-colors playhead-color text-black">
-      {{ playbackMode === 'pattern' ? 'Pattern' : 'Song' }}
-    </button>
+  <div class="flex w-full border-2 bg-mix-15 border-mix-30 px-3 gap-2 items-center" :style="{ height: `${HEADER_HEIGHT}px` }">
+    <!-- playback controls -->
+    <div class="flex flex-row items-stretch">
+      <div class="flex flex-col border-2 border-mix-25 overflow-hidden text-[9px] font-semibold rounded-l">
+        <button
+          @click="handleModeToggle($event)"
+          class="flex flex-1 justify-center items-center transition-all"
+          :class="playbackMode === 'arrangement' ? 'playhead-color text-black' : 'bg-mix-10 opacity-40 hover:opacity-70'"
+        >SONG</button>
+        <div class="h-px bg-mix-25"></div>
+        <button
+          @click="handleModeToggle($event)"
+          class="flex-1 px-2 transition-all"
+          :class="playbackMode === 'pattern' ? 'playhead-color text-black' : 'bg-mix-10 opacity-40 hover:opacity-70'"
+        >PAT</button>
+      </div>
+
+      <button @click="() => { engine.toggle(); playButtonOn = !playButtonOn; }" class="flex items-center justify-center w-8 h-8 transition-colors bg-mix-10 hover:bg-mix-15 border-2 border-l-0 border-mix-25">
+        <span class="pi text-sm" :class="[playButtonOn ? 'pi-pause' : 'pi-play']"></span>
+      </button>
+
+      <button @click="() => { engine.stop(); playButtonOn = false; }" class="flex items-center justify-center w-8 h-8 rounded-r transition-colors bg-mix-10 hover:bg-mix-15 border-2 border-l-0 border-mix-25">
+        <span class="pi text-sm pi-stop"></span>
+      </button>
+    </div>
+
+    <!-- tempo -->
+    <div class="flex flex-col items-center border-2 border-mix-25 rounded bg-mix-10 px-2 py-0.5">
+      <span class="text-[8px] font-bold tracking-widest opacity-50 leading-none">BPM</span>
+      <input
+        v-model="bpmInput"
+        type="text"
+        inputmode="decimal"
+        class="bg-transparent text-center text-sm font-mono font-bold w-12 outline-none leading-tight"
+        @focus="($event.target as HTMLInputElement).select()"
+        @blur="commitBpm"
+        @keydown="onBpmKeydown"
+      />
+    </div>
+
+    <!-- snap division -->
+    <div class="flex flex-col items-center border-2 border-mix-25 rounded bg-mix-10" style="font-size: 10px;">
+      <BaseDropdown
+        v-model="snapDivision"
+        :items="snapOptions"
+        item-label="label"
+        item-value="value"
+        button-bg="bg-transparent"
+        button-class="px-2 py-0.5 font-mono font-bold min-w-0"
+        width="0"
+      />
+    </div>
 
     <!-- arrangement toggle -->
-    <button
+    <button class="flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-mix-35" :class="arrangementVisible ? 'bg-mix-30' : 'bg-mix-20'"
       @click="toggleArrangement"
-      class="flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-mix-40"
-      :class="arrangementVisible ? 'bg-mix-35' : 'bg-mix-30'"
-      title="Toggle Arrangement"
     >
       <span class="pi pi-table text-sm"></span>
     </button>
 
     <!-- piano roll toggle -->
-    <button
+    <button class="flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-mix-35" :class="activePattern ? 'bg-mix-30' : 'bg-mix-20'"
       @click="togglePianoRoll"
-      class="flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-mix-40"
-      :class="activePattern ? 'bg-mix-35' : 'bg-mix-30'"
-      title="Toggle Piano Roll"
     >
       <img src="/icons/piano-icon-white.png" class="w-5 h-5 object-contain" />
     </button>
-
-    <!-- Snap Division -->
-    <label class="flex items-center gap-2 text-xs">
-        <BaseDropdown
-          v-model="snapDivision"
-          :items="snapOptions"
-          item-label="label"
-          item-value="value"
-          button-bg="bg-mix-25"
-          width="20"
-        />
-      </label>
   </div>
 </template>

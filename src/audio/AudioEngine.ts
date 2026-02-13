@@ -50,6 +50,7 @@ export class AudioEngine {
     play() { return this.scheduler.play(); }
     pause() { return this.scheduler.pause(); }
     stop() { return this.scheduler.stop(); }
+    toggle() { return this.scheduler.toggle(); }
     seek(beat: number) { this.scheduler.seek(beat); }
 
     setBpm(bpm: number) { this.scheduler.setBpm(bpm); }

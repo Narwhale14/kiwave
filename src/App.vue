@@ -6,28 +6,28 @@ import { closePattern, patterns } from './services/patternsListManager';
 import { arrangementVisible } from './services/arrangementManager';
 import HeaderBar from './components/HeaderBar.vue';
 import Arrangement from './components/Arrangement.vue';
-import { computed } from 'vue';
+import ChannelRack from './components/ChannelRack.vue';
 import { PATTERNS_LIST_WIDTH, HEADER_HEIGHT, PIANO_ROLL_FILL_DEFAULT, ARRANGEMENT_FILL_DEFAULT } from './constants/layout';
 
 // Layout calculations for default window positions
-const availableWidth = computed(() => window.innerWidth - PATTERNS_LIST_WIDTH);
-const availableHeight = computed(() => window.innerHeight - HEADER_HEIGHT);
-
-// arrangement default position and size
-const arrangementWindow = computed(() => ({
-  x: PATTERNS_LIST_WIDTH,
-  y: HEADER_HEIGHT + pianoRollWindow.value.height,
-  width: availableWidth.value,
-  height: Math.floor(availableHeight.value * ARRANGEMENT_FILL_DEFAULT)
-}));
+const availableWidth = window.innerWidth - PATTERNS_LIST_WIDTH;
+const availableHeight = window.innerHeight - HEADER_HEIGHT;
 
 // piano roll default position and size
-const pianoRollWindow = computed(() => ({
+const pianoRollWindow = {
   x: PATTERNS_LIST_WIDTH,
   y: HEADER_HEIGHT,
-  width: availableWidth.value,
-  height: Math.floor(availableHeight.value * PIANO_ROLL_FILL_DEFAULT)
-}));
+  width: availableWidth,
+  height: Math.floor(availableHeight * PIANO_ROLL_FILL_DEFAULT)
+};
+
+// arrangement default position and size
+const arrangementWindow = {
+  x: PATTERNS_LIST_WIDTH,
+  y: HEADER_HEIGHT + pianoRollWindow.height,
+  width: availableWidth,
+  height: Math.floor(availableHeight * ARRANGEMENT_FILL_DEFAULT)
+};
 </script>
 
 <template>
@@ -50,6 +50,14 @@ const pianoRollWindow = computed(() => ({
         :height="arrangementWindow.height"
       >
         <Arrangement />
+      </Window>
+
+      <Window
+        :visible="true"
+        :title="'Channel Rack'"
+        :id="'channel-rack'"
+      >
+        <ChannelRack></ChannelRack>
       </Window>
 
       <!-- pattern windows -->

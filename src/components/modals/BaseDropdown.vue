@@ -10,9 +10,11 @@ const props = withDefaults(defineProps<{
   itemValue?: string,
   placeholder?: string,
   buttonBg?: string,
+  buttonClass?: string,
   width?: string
 }>(), {
   buttonBg: 'bg-mix-15',
+  buttonClass: 'px-3 py-1 text-sm',
   width: '20'
 });
 
@@ -111,19 +113,19 @@ watch(isOpen, (open) => {
     <button
       type="button"
       @click="toggle"
-      :class="[`dropdown-button flex items-center justify-between gap-2 min-w-${width} px-3 py-1 text-sm rounded transition-colors`, buttonBg]"
+      :class="[`dropdown-button flex items-center justify-between gap-1 min-w-${width} rounded transition-colors whitespace-nowrap`, buttonBg, buttonClass]"
     >
       <span>{{ selectedItem?.[labelKey] ?? placeholder ?? 'Select' }}</span>
       <span class="pi pi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': isOpen }" />
     </button>
 
-    <div v-if="isOpen" class="absolute left-0 mt-1 w-full bg-mix-20 border border-mix-40 rounded shadow-lg z-100 max-h-60 overflow-auto">
+    <div v-if="isOpen" class="absolute left-0 mt-1 w-max min-w-full bg-mix-20 border border-mix-40 rounded shadow-lg z-100 max-h-60 overflow-auto">
       <div
         v-for="(item, index) in items"
         :key="item[valueKey]"
         @click.stop="select(item)"
         @mouseenter="handleItemHover(index)"
-        class="px-3 py-2 text-sm cursor-pointer transition-colors"
+        class="px-2 py-1 text-xs cursor-pointer transition-colors whitespace-nowrap"
         :class="index === highlightedIndex ? 'bg-mix-35' : 'bg-mix-20 hover:bg-mix-30'"
       >
         <slot name="item" :item="item">
@@ -136,7 +138,7 @@ watch(isOpen, (open) => {
 
 <style scoped>
 .dropdown-button:hover {
-  background-color: var(--step-35) !important;
-  border-color: var(--step-35);
+  background-color: var(--step-30) !important;
+  border-color: var(--step-30);
 }
 </style>

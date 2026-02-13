@@ -89,7 +89,7 @@ watch(addModalVisible, async (visible) => {
           draggable="true"
           @dragstart="handleDragStart(pattern, $event)"
           :class="[
-            'w-full text-left px-2 border-2 rounded-sm h-8',
+            'w-full text-left px-2 border-2 rounded-sm h-8 hover:border-[#646cff]! transition-colors',
             pattern.num === activePattern?.num
               ? 'bg-mix-40 border-mix-80'
               : 'bg-mix-25 border-mix-50 text-white'
