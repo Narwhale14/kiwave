@@ -68,14 +68,6 @@ function stopNote(midi: number) {
 
 // CONTROLS
 
-function stopPlayhead() {
-  engine.scheduler.stop();
-}
-
-async function togglePlayhead() {
-  await engine.scheduler.toggle();
-  updatePatternLoop();
-}
 
 function updatePatternLoop() {
   engine.scheduler.setLoop(true, 0, props.roll.getEndBeat(beatsPerBar));
@@ -233,23 +225,8 @@ function finalizeEdit() {
 function onPianoRollKeyDown(event: KeyboardEvent) {
   if(!isWindowActive(windowId!)) return;
 
-  // Only respond to keyboard if in pattern mode
-  if (playbackMode.value !== 'pattern') return;
-
   const target = event.target as HTMLElement;
   if(['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
-
-  if(event.code === 'Space') {
-    event.preventDefault();
-    togglePlayhead();
-    return;
-  }
-
-  if(event.code === 'Enter') {
-    event.preventDefault();
-    stopPlayhead();
-    return;
-  }
 
   const element = pianoRollContainer.value;
   if(!element) return;

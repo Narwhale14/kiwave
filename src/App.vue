@@ -3,6 +3,7 @@ import PatternsList from './components/PatternsList.vue'
 import Window from './components/Window.vue';
 import PianoRoll from './components/PianoRoll.vue';
 import { closePattern, patterns } from './services/patternsListManager';
+import { arrangementVisible } from './services/arrangementManager';
 import HeaderBar from './components/HeaderBar.vue';
 import Arrangement from './components/Arrangement.vue';
 import { computed } from 'vue';
@@ -39,9 +40,10 @@ const pianoRollWindow = computed(() => ({
 
       <!-- arrangement window -->
       <Window
-        :visible="true"
+        :visible="arrangementVisible"
         :title="'Arrangement'"
         :id="'arrangement-window'"
+        @close="arrangementVisible = false"
         :x="arrangementWindow.x"
         :y="arrangementWindow.y"
         :width="arrangementWindow.width"

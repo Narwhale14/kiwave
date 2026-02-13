@@ -331,6 +331,15 @@ export class Scheduler {
         this.notes = notes;
     }
 
+    resetSchedule() {
+        this.scheduledNoteOns.clear();
+        this.scheduledNoteOffs.clear();
+        if (this._isPlaying) {
+            this.synth.panic();
+            this.schedulerTick();
+        }
+    }
+
     setBpm(bpm: number) {
         if(bpm <= 0) return;
 

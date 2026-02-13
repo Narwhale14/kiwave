@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue';
-import { snapDivision, snap } from '../util/snap';
+import { reactive, computed, watch, onMounted, onBeforeUnmount, ref } from 'vue';
+import { snapDivision, snap, snapNearest } from '../util/snap';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { playbackMode, registerArrangementCallbacks, unregisterArrangementCallbacks } from '../services/playbackModeManager';
 import { patterns } from '../services/patternsListManager';
+import { focusWindow } from '../services/windowManager';
 import { arrangement } from '../services/arrangementManager';
+import type { ArrangementClip } from '../audio/Arrangement';
 
 const engine = getAudioEngine();
 
@@ -14,25 +16,89 @@ const playhead = reactive({
   playing: false
 });
 
-const trackHeight = 50;  // Height of each track in pixels
-const beatWidth = 80;     // Width of one beat in pixels (same as piano roll)
-const beatsPerBar = 4;    // 4 beats per bar
-const numTracks = 10;      // Number of tracks
-const numBars = 32;       // Number of bars to show
+const workspaceRef = ref<HTMLDivElement | null>(null);
+const cursor = ref('default');
+const interacting = ref(false);
+const state = reactive({
+  draggingClip: null as ArrangementClip | null,
+  resizingClip: null as ArrangementClip | null,
+  dragStart: { beat: 0, track: 0 },
+  initialBeat: 0,
+  initialTrack: 0,
+  initialDuration: 0,
+})
+
+const trackHeight = 50; // Height of each track in pixels
+const beatWidth = 80; // Width of one beat in pixels (same as piano roll)
+const beatsPerBar = 4; // 4 beats per bar
+const numTracks = 20; // Number of tracks
+const numBars = 32; // Number of bars to show
 
 const barWidth = beatWidth * beatsPerBar;
 const snapWidth = computed(() => beatWidth / snapDivision.value);
 
-function handleKeyDown(event: KeyboardEvent) {
-  if (playbackMode.value !== 'arrangement') return;
+function getWorkspacePos(event: PointerEvent) {
+  const rect = workspaceRef.value!.getBoundingClientRect();
+  return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+}
 
+function isNearRightEdge(x: number, clip: ArrangementClip): boolean {
+  return Math.abs(x - (clip.startBeat + clip.duration) * beatWidth) <= 12;
+}
+
+function handlePointerMove(event: PointerEvent) {
+  if (!workspaceRef.value) return;
+  const { x, y } = getWorkspacePos(event);
+  const rawBeat = x / beatWidth;
+  const track = Math.floor(y / trackHeight);
+
+  if (state.resizingClip) {
+    const newDuration = Math.max(1 / snapDivision.value, snapNearest(rawBeat) - state.resizingClip.startBeat);
+    arrangement.resizeClip(state.resizingClip.id, newDuration);
+    cursor.value = 'w-resize';
+    return;
+  }
+
+  if (state.draggingClip) {
+    const newBeat = Math.max(0, snap(rawBeat - state.dragStart.beat));
+    const newTrack = Math.max(0, Math.min(numTracks - 1, track - state.dragStart.track));
+    arrangement.moveClip(state.draggingClip.id, newTrack, newBeat);
+    cursor.value = 'grabbing';
+    return;
+  }
+
+  const hovered = arrangement.getClipAt(track, rawBeat);
+  cursor.value = hovered ? (isNearRightEdge(x, hovered) ? 'w-resize' : 'grab') : 'default';
+}
+
+function finalizeEdit() {
+  if (state.draggingClip || state.resizingClip) {
+    const clip = state.draggingClip || state.resizingClip;
+    const changed = state.draggingClip
+      ? state.draggingClip.startBeat !== state.initialBeat || state.draggingClip.track !== state.initialTrack
+      : state.resizingClip
+        ? state.resizingClip.duration !== state.initialDuration
+        : false;
+    state.draggingClip = null;
+    state.resizingClip = null;
+    state.dragStart = { beat: 0, track: 0 };
+    interacting.value = false;
+    if (changed && clip && playbackMode.value === 'arrangement') {
+      engine.compiler.invalidateClip(clip.id);
+      recompileArrangement();
+      engine.scheduler.resetSchedule();
+    }
+  }
+  cursor.value = 'default';
+}
+
+function handleKeyDown(event: KeyboardEvent) {
   const target = event.target as HTMLElement;
   if(['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
 
   if(event.code === 'Space') {
     event.preventDefault();
-    // Compile arrangement before playing
-    if (!engine.scheduler.isPlaying) {
+    if (playbackMode.value === 'arrangement' && !engine.scheduler.isPlaying) {
       recompileArrangement();
     }
     engine.scheduler.toggle();
@@ -81,13 +147,59 @@ function recompileArrangement() {
   const patternMap = new Map(patterns.value.map(p => [p.id, p]));
   const compiledNotes = engine.compiler.compile(patternMap, 0, Infinity);
   engine.scheduler.setNotes(compiledNotes);
+  const endBeat = arrangement.getEndBeat();
+  engine.scheduler.setLoop(true, 0, Math.ceil(endBeat / beatsPerBar) * beatsPerBar || beatsPerBar);
 }
 
-// watch for arrangement changes
-watch(() => arrangement.clips, () => {
-  if(playbackMode.value === 'arrangement') {
+function handleDoubleClick(event: MouseEvent) {
+  if (!workspaceRef.value) return;
+  const rect = workspaceRef.value.getBoundingClientRect();
+  const rawBeat = (event.clientX - rect.left) / beatWidth;
+  const track = Math.floor((event.clientY - rect.top) / trackHeight);
+
+  const clip = arrangement.getClipAt(track, rawBeat);
+  if (!clip) return;
+
+  const pattern = patterns.value.find(p => p.id === clip.patternId);
+  if (!pattern) return;
+  pattern.visible = true;
+  focusWindow(pattern.id);
+}
+
+function handlePointerDown(event: PointerEvent) {
+  if (event.detail === 2) return;
+  if (!workspaceRef.value) return;
+  const { x, y } = getWorkspacePos(event);
+  const rawBeat = x / beatWidth;
+  const track = Math.floor(y / trackHeight);
+
+  const clip = arrangement.getClipAt(track, rawBeat);
+  if (!clip) return;
+
+  if (event.button === 2) {
+    arrangement.removeClip(clip.id);
     recompileArrangement();
+    return;
   }
+
+  interacting.value = true;
+  if (isNearRightEdge(x, clip)) {
+    state.resizingClip = clip;
+    state.initialDuration = clip.duration;
+    cursor.value = 'w-resize';
+  } else {
+    state.draggingClip = clip;
+    state.dragStart = { beat: rawBeat - clip.startBeat, track: track - clip.track };
+    state.initialBeat = clip.startBeat;
+    state.initialTrack = clip.track;
+    cursor.value = 'grabbing';
+  }
+}
+
+// watch for arrangement changes (skip during drag/resize — finalizeEdit recompiles)
+watch(() => arrangement.clips, () => {
+  if (interacting.value) return;
+  if (playbackMode.value === 'arrangement') recompileArrangement();
 }, { deep: true });
 
 // watch for pattern edits - compare version counters to only invalidate changed patterns
@@ -122,7 +234,6 @@ onMounted(() => {
   registerArrangementCallbacks(playheadCallback, playStateCallback);
   window.addEventListener('keydown', handleKeyDown);
 
-  // Initial compilation when entering arrangement mode
   if (playbackMode.value === 'arrangement') {
     recompileArrangement();
   }
@@ -143,25 +254,33 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="w-full h-full overflow-auto bg-mix-20">
-    <!-- Arrangement workspace -->
+    <!-- workspace -->
     <div
+      ref="workspaceRef"
       class="relative arrangement-grid"
+      @pointerdown="handlePointerDown"
+      @dblclick="handleDoubleClick"
+      @pointermove="handlePointerMove"
+      @pointerup="finalizeEdit"
+      @pointerleave="finalizeEdit"
       @dragover="handleDragOver"
       @drop="handleDrop"
+      @contextmenu.prevent
       :style="{
         '--track-h': `${trackHeight}px`,
         '--beat-w': `${beatWidth}px`,
         '--bar-w': `${barWidth}px`,
         '--snap-w': `${snapWidth}px`,
         width: `${numBars * barWidth}px`,
-        height: `${numTracks * trackHeight}px`
+        height: `${numTracks * trackHeight}px`,
+        cursor: cursor
       }"
     >
-      <!-- Render clips -->
+      <!-- clips -->
       <div
         v-for="clip in arrangement.clips"
         :key="clip.id"
-        class="absolute border-2 border-white/30 bg-blue-500/50 rounded cursor-pointer overflow-hidden"
+        class="absolute border-2 border-white/30 bg-blue-500/50 rounded overflow-hidden pointer-events-none"
         :style="{
           left: `${clip.startBeat * beatWidth}px`,
           top: `${clip.track * trackHeight}px`,
@@ -174,7 +293,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- Playhead (only visible in arrangement mode) -->
+      <!-- playhead (only visible in arrangement mode) -->
       <div v-if="playbackMode === 'arrangement' && (playhead.playing || playhead.col > 0)"
         class="absolute w-0.75 pointer-events-none playhead-color"
         :style="{

@@ -82,7 +82,9 @@ export class MiniSynth {
       oscillator.stop(time + this.releaseTime + 0.01)
 
       oscillator.onended = () => {
-        this.scheduledVoices.delete(noteId);
+        if(this.scheduledVoices.get(noteId) === voice) {
+          this.scheduledVoices.delete(noteId);
+        }
         gainNode.disconnect();
         oscillator.disconnect();
       }
@@ -125,7 +127,9 @@ export class MiniSynth {
       oscillator.stop(now + this.releaseTime + 0.01)
 
       oscillator.onended = () => {
-        this.liveVoices.delete(pitch);
+        if(this.liveVoices.get(pitch) === voice) {
+          this.liveVoices.delete(pitch);
+        }
         gainNode.disconnect();
         oscillator.disconnect();
       }

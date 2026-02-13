@@ -1,4 +1,5 @@
 import { reactive, ref, computed } from 'vue'
+import { PATTERNS_LIST_WIDTH, HEADER_HEIGHT } from '../constants/layout'
 
 /**
  * interface of a general window object to hold contents. used for manipulatable windows like piano roll
@@ -87,8 +88,8 @@ window.addEventListener('pointermove', event => {
 
     if(dragState.value.type === 'move') {
         const win = activeWindow.value!;
-        win.x = Math.max(0, Math.min(window.innerWidth - win.width, event.clientX - dragState.value.offsetX));
-        win.y = Math.max(0, Math.min(window.innerHeight - win.height, event.clientY - dragState.value.offsetY));
+        win.x = Math.max(PATTERNS_LIST_WIDTH, Math.min(window.innerWidth - win.width, event.clientX - dragState.value.offsetX));
+        win.y = Math.max(HEADER_HEIGHT, Math.min(window.innerHeight - win.height, event.clientY - dragState.value.offsetY));
     }
 
     if(dragState.value.type === 'resize') {
@@ -103,7 +104,7 @@ window.addEventListener('pointermove', event => {
             win.width = Math.max(minW, Math.min(maxW, dragState.value.startW + dx));
         }
         if(dragState.value.edge.includes('left')) {
-            const maxW = dragState.value.startW + dragState.value.startWinX;
+            const maxW = dragState.value.startW + (dragState.value.startWinX - PATTERNS_LIST_WIDTH);
             const newW = Math.max(minW, Math.min(maxW, dragState.value.startW - dx));
             win.x = dragState.value.startWinX + (dragState.value.startW - newW);
             win.width = newW;
@@ -113,7 +114,7 @@ window.addEventListener('pointermove', event => {
             win.height = Math.max(minH, Math.min(maxH, dragState.value.startH + dy));
         }
         if(dragState.value.edge.includes('top')) {
-            const maxH = dragState.value.startH + dragState.value.startWinY;
+            const maxH = dragState.value.startH + (dragState.value.startWinY - HEADER_HEIGHT);
             const newH = Math.max(minH, Math.min(maxH, dragState.value.startH - dy));
             win.y = dragState.value.startWinY + (dragState.value.startH - newH);
             win.height = newH;

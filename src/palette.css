@@ -151,6 +151,10 @@ input:focus {
   transition: background-color 250ms ease;
 }
 
+.hover\:bg-mix-35:hover { background-color: var(--step-35); }
+.hover\:bg-mix-40:hover { background-color: var(--step-40); }
+.hover\:bg-mix-45:hover { background-color: var(--step-45); }
+
 .bg-mix-0 { background-color: var(--step-0); }
 .bg-mix-5 { background-color: var(--step-5); }
 .bg-mix-10 { background-color: var(--step-10); }
