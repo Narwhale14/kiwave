@@ -8,6 +8,9 @@ import { focusWindow } from '../services/windowManager';
 import { arrangement } from '../services/arrangementManager';
 import type { ArrangementClip } from '../audio/Arrangement';
 
+interface NoteRect { x: number; y: number; width: number; height: number }
+interface ClipPreview { viewBox: string; notes: NoteRect[] }
+
 const engine = getAudioEngine();
 
 // Playhead state
@@ -27,6 +30,38 @@ const state = reactive({
   initialTrack: 0,
   initialDuration: 0,
 })
+
+// Precompute note preview rects for each clip, keyed by clip id.
+// Reads _noteData directly (reactive array) so Vue tracks note edits automatically.
+// MIDI range is derived from all notes in the pattern (not just the active range)
+// so the same pattern always renders with identical vertical scale across clips.
+const clipPreviews = computed(() => {
+  const map = new Map<string, ClipPreview>();
+  for (const clip of arrangement.clips) {
+    const pattern = patterns.value.find(p => p.id === clip.patternId);
+    if (!pattern) continue;
+    const allNotes = pattern.roll._noteData;
+    if (allNotes.length === 0) continue;
+
+    const midiMin = Math.min(...allNotes.map(n => n.midi));
+    const midiMax = Math.max(...allNotes.map(n => n.midi));
+    const pad = 1; // 1 semitone breathing room above and below
+    const viewBoxH = midiMax - midiMin + 2 * pad;
+
+    const clipEnd = clip.offset + clip.duration;
+    const notes: NoteRect[] = allNotes
+      .filter(n => n.col + n.length > clip.offset && n.col < clipEnd)
+      .map(n => ({
+        x: Math.max(0, n.col - clip.offset),
+        y: midiMax + pad - n.midi,
+        width: Math.min(clipEnd, n.col + n.length) - Math.max(clip.offset, n.col),
+        height: 1,
+      }));
+
+    map.set(clip.id, { viewBox: `0 0 ${clip.duration} ${viewBoxH}`, notes });
+  }
+  return map;
+});
 
 const trackHeight = 50; // Height of each track in pixels
 const beatWidth = 80; // Width of one beat in pixels (same as piano roll)
@@ -86,7 +121,18 @@ function finalizeEdit() {
     if (changed && clip && playbackMode.value === 'arrangement') {
       engine.compiler.invalidateClip(clip.id);
       recompileArrangement();
-      engine.scheduler.resetSchedule();
+
+      // Only panic+reschedule if the clip's old or new position was near the
+      // playhead. Clips far from the playhead were never in the lookahead
+      // window, so their Web Audio events were never queued — no need to
+      // interrupt currently playing notes.
+      if (engine.scheduler.isPlaying) {
+        const beat = engine.scheduler.getCurrentBeat();
+        const margin = 4; // beats — covers lookahead + snap granularity
+        const oldNear = state.initialBeat < beat + margin && state.initialBeat + clip.duration > beat - margin;
+        const newNear = clip.startBeat < beat + margin && clip.startBeat + clip.duration > beat - margin;
+        if (oldNear || newNear) engine.scheduler.resetSchedule();
+      }
     }
   }
   cursor.value = 'default';
@@ -143,6 +189,8 @@ function handleDrop(event: DragEvent) {
 }
 
 function recompileArrangement() {
+  if (playbackMode.value !== 'arrangement') return;
+
   const engine = getAudioEngine();
   const patternMap = new Map(patterns.value.map(p => [p.id, p]));
   const compiledNotes = engine.compiler.compile(patternMap, 0, Infinity);
@@ -288,7 +336,23 @@ onBeforeUnmount(() => {
           height: `${trackHeight}px`
         }"
       >
-        <div class="p-1 text-xs truncate">
+        <!-- note preview -->
+        <svg
+          v-if="clipPreviews.get(clip.id)"
+          class="absolute inset-0 w-full h-full"
+          preserveAspectRatio="none"
+          :viewBox="clipPreviews.get(clip.id)!.viewBox"
+        >
+          <rect
+            v-for="(note, i) in clipPreviews.get(clip.id)!.notes"
+            :key="i"
+            :x="note.x" :y="note.y"
+            :width="note.width" :height="note.height"
+            fill="white" opacity="0.6"
+          />
+        </svg>
+        <!-- pattern name -->
+        <div class="relative z-10 px-1 pt-0.5 text-xs truncate drop-shadow">
           {{ patterns.find(p => p.id === clip.patternId)?.name || 'Pattern' }}
         </div>
       </div>

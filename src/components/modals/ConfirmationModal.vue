@@ -51,7 +51,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown));
 
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="fixed inset-0 z-70">
+    <div v-if="visible" class="fixed inset-0 z-9999">
       <!-- focuses only on modal -->
       <div class="absolute inset-0" @click.stop />
 
