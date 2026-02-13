@@ -1,6 +1,52 @@
 <script setup lang="ts">
 import { channelManager, type Channel } from '../audio/channelManager';
-import { computed, inject } from 'vue';
+import { getAudioEngine } from '../services/audioEngineManager';
+import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
+
+const engine = getAudioEngine();
+const showSynthPicker = ref(false);
+const addButtonRef = ref<HTMLButtonElement | null>(null);
+const pickerRef = ref<HTMLDivElement | null>(null);
+const pickerStyle = ref({ top: '0px', left: '0px' });
+
+function openPicker() {
+  if (!addButtonRef.value) return;
+  const rect = addButtonRef.value.getBoundingClientRect();
+  pickerStyle.value = {
+    top: `${rect.bottom + 4}px`,
+    left: `${rect.left + rect.width / 2}px`,
+  };
+  showSynthPicker.value = !showSynthPicker.value;
+}
+
+function selectSynth(id: string) {
+  engine.addChannel(id);
+  showSynthPicker.value = false;
+}
+
+function onPointerDown(e: PointerEvent) {
+  if (!pickerRef.value?.contains(e.target as Node) && !addButtonRef.value?.contains(e.target as Node))
+    showSynthPicker.value = false;
+}
+
+function onKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Escape') showSynthPicker.value = false;
+}
+
+watch(showSynthPicker, open => {
+  if (open) {
+    document.addEventListener('pointerdown', onPointerDown, { capture: true });
+    document.addEventListener('keydown', onKeyDown);
+  } else {
+    document.removeEventListener('pointerdown', onPointerDown, { capture: true });
+    document.removeEventListener('keydown', onKeyDown);
+  }
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onPointerDown, { capture: true });
+  document.removeEventListener('keydown', onKeyDown);
+});
 
 const closeWindow = inject<() => void>('closeWindow');
 const resetWindow = inject<() => void>('resetWindow');
@@ -72,11 +118,33 @@ function commitMixerTrack(id: string, e: Event) {
         <button class="flex-1 text-left px-2 py-0.5 rounded text-sm font-mono bg-mix-10 border border-mix-25 hover:bg-mix-20 transition-colors truncate min-w-0">
           {{ channel.name }}
         </button>
+
+        <button @click="engine.removeChannel(channel.id)">
+          <span class="pi pi-times text-sm text-red-400"></span>
+        </button>
       </div>
 
       <div v-if="channels.length === 0" class="flex items-center justify-center flex-1 opacity-30 text-xs">
         No channels
       </div>
     </div>
+
+    <div class="flex justify-center items-center p-1">
+      <button ref="addButtonRef" class="flex justify-center items-center w-10 h-7 bg-mix-10 rounded-lg" @click="openPicker">
+        <span class="pi pi-plus text-sm"></span>
+      </button>
+    </div>
+
+    <Teleport to="body">
+      <div v-if="showSynthPicker" ref="pickerRef" class="fixed z-9999 -translate-x-1/2 bg-mix-20 border border-mix-40 rounded shadow-lg py-0.5 min-w-max"
+        :style="pickerStyle">
+        <button
+          v-for="synth in engine.availableSynths"
+          :key="synth.id"
+          class="px-2 py-0.5 text-xs cursor-pointer w-full text-left hover:bg-mix-30 transition-colors whitespace-nowrap"
+          @click="selectSynth(synth.id)"
+        >{{ synth.displayName }}</button>
+      </div>
+    </Teleport>
   </div>
 </template>

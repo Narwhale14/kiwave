@@ -48,6 +48,8 @@ watch(() => props.height, h => {
   if (win && h !== undefined) win.height = h;
 });
 
+let resizeObserver: ResizeObserver | null = null;
+
 onMounted(() => {
   registerWindow({
     id: props.id,
@@ -57,9 +59,19 @@ onMounted(() => {
     height: props.height!,
     z: 0
   });
+
+  if(props.autoHeight && rootElement.value) {
+    resizeObserver = new ResizeObserver(entries => {
+      const win = windows.find(w => w.id === props.id);
+      if(win && entries[0]) win.height = entries[0].contentRect.height;
+    });
+    
+    resizeObserver.observe(rootElement.value);
+  }
 });
 
 onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
   unregisterWindow(props.id);
 });
 </script>
