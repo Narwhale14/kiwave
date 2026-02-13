@@ -13,7 +13,6 @@ interface ClipPreview { viewBox: string; notes: NoteRect[] }
 
 const engine = getAudioEngine();
 
-// Playhead state
 const playhead = reactive({
   col: 0,
   playing: false
@@ -31,10 +30,6 @@ const state = reactive({
   initialDuration: 0,
 })
 
-// Precompute note preview rects for each clip, keyed by clip id.
-// Reads _noteData directly (reactive array) so Vue tracks note edits automatically.
-// MIDI range is derived from all notes in the pattern (not just the active range)
-// so the same pattern always renders with identical vertical scale across clips.
 const clipPreviews = computed(() => {
   const map = new Map<string, ClipPreview>();
   for (const clip of arrangement.clips) {
@@ -122,10 +117,6 @@ function finalizeEdit() {
       engine.compiler.invalidateClip(clip.id);
       recompileArrangement();
 
-      // Only panic+reschedule if the clip's old or new position was near the
-      // playhead. Clips far from the playhead were never in the lookahead
-      // window, so their Web Audio events were never queued — no need to
-      // interrupt currently playing notes.
       if (engine.scheduler.isPlaying) {
         const beat = engine.scheduler.getCurrentBeat();
         const margin = 4; // beats — covers lookahead + snap granularity
