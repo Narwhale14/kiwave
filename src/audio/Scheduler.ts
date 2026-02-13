@@ -195,6 +195,8 @@ export class Scheduler {
 
         const lookBehindTolerance = 0.05;
 
+        if(this.channelManager.getChannel(note.channel)?.muted) return;
+
         // schedule note on
         if(noteStartBeat >= currentBeat - lookBehindTolerance && noteStartBeat < scheduleUntilBeat && !this.scheduledNoteOns.has(noteOnKey)) {
             const scheduleTime = Math.max(now, this.beatToAudioTime(noteStartBeat));

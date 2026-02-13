@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { channelManager } from '../audio/channelManager';
+import { channelManager, type Channel } from '../audio/channelManager';
 import { computed } from 'vue';
 
 const channels = computed(() => channelManager.getAllChannels());
-const anySoloed = computed(() => channels.value.some(c => c.solo));
 
-function muteCircleColor(channel: { muted: boolean; solo: boolean }) {
-  if(anySoloed.value) return channel.solo ? 'var(--playhead)' : 'var(--step-35)';
-  return channel.muted ? 'var(--step-35)' : 'var(--playhead)';
+function muteCircleColor(channel: Channel) {
+  if(channel.solo) return 'var(--playhead)';
+  if(channel.muted) return 'var(--step-35)';
+  return 'var(--playhead)';
 }
 
 function onMixerTrackKeydown(e: KeyboardEvent) {
@@ -29,11 +29,7 @@ function commitMixerTrack(id: string, e: Event) {
 
 <template>
   <div class="flex flex-col w-full h-full bg-mix-10 overflow-y-auto">
-    <div
-      v-for="channel in channels"
-      :key="channel.id"
-      class="flex flex-row items-center gap-2 px-2 py-1 border-b border-mix-20 hover:bg-mix-15 transition-colors"
-    >
+    <div v-for="channel in channels" :key="channel.id" class="flex flex-row items-center gap-2 px-2 py-1 border-b border-mix-20 hover:bg-mix-15 transition-colors">
       <!-- mute toggle (left click) / solo toggle (right click) -->
       <button
         @click="channelManager.toggleMute(channel.id)"
@@ -41,10 +37,7 @@ function commitMixerTrack(id: string, e: Event) {
         class="flex items-center justify-center w-6 h-6 rounded shrink-0 focus:outline-none"
         :title="channel.solo ? 'Solo (right-click to toggle)' : channel.muted ? 'Unmute' : 'Mute (right-click to solo)'"
       >
-        <span
-          class="w-3 h-3 rounded-full transition-colors"
-          :style="{ backgroundColor: muteCircleColor(channel) }"
-        ></span>
+        <span class="w-3 h-3 rounded-full transition-colors" :style="{ backgroundColor: muteCircleColor(channel) }" />
       </button>
 
       <!-- mixer track number input -->

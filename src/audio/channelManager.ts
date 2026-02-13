@@ -15,6 +15,7 @@ export interface Channel {
 
 export class ChannelManager {
     private channels: Map<string, Channel> = reactive(new Map());
+    private soloChannelId: string | null = null;
     private nextId = 1;
 
     addChannel(instrument: MiniSynth, name?: string) {
@@ -74,13 +75,49 @@ export class ChannelManager {
     toggleMute(id: string) {
         const channel = this.channels.get(id);
         if(!channel) return;
+
+        if(this.soloChannelId) {
+            const soloedChannel = this.channels.get(this.soloChannelId);
+            if(soloedChannel) {
+                soloedChannel.solo = false;
+                this.soloChannelId = null;
+            }
+        }
+
         channel.muted = !channel.muted;
     }
 
     toggleSolo(id: string) {
         const channel = this.channels.get(id);
         if(!channel) return;
-        channel.solo = !channel.solo;
+
+        if(this.soloChannelId === id) {
+            channel.solo = false;
+            this.soloChannelId = null;
+
+            // unmute all others
+            this.channels.forEach(ch => ch.muted = false);
+            return;
+        }
+
+        if(this.soloChannelId) {
+            const previous = this.channels.get(this.soloChannelId);
+            if(previous) previous.solo = false;
+        }
+
+        channel.solo = true;
+        this.soloChannelId = id;
+
+        // mute all others
+        this.channels.forEach(ch => { ch.muted = ch.id !== id });
+    }
+
+    isChannelAudible(id: string): boolean {
+        const channel = this.channels.get(id);
+        if(!channel) return false;
+
+        if(this.soloChannelId) return id === this.soloChannelId;
+        return !channel.muted;
     }
 }
 
