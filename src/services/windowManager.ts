@@ -83,6 +83,10 @@ export function isWindowActive(id: string) {
     return activeWindowId.value === id;
 }
 
+export function clearActiveWindow() {
+    activeWindowId.value = null;
+}
+
 window.addEventListener('pointermove', event => {
     if(!dragState.value) return;
 

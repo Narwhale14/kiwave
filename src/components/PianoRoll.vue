@@ -18,6 +18,7 @@ function generateNoteId(): string {
 
 const props = defineProps<{
   roll: PianoRoll;
+  name: string;
 }>();
 
 const engine = getAudioEngine();
@@ -33,6 +34,9 @@ const notes = props.roll.getKeyboardNotes;
 
 const windowElement = inject<Ref<HTMLElement | null>>('windowElement');
 const windowId = inject<string>('windowId');
+const closeWindow = inject<() => void>('closeWindow');
+const resetWindow = inject<() => void>('resetWindow');
+const dragWindow = inject<(e: PointerEvent) => void>('dragWindow');
 if(!windowElement) throw new Error('PianoRoll must be in a window');
 
 const state = reactive({
@@ -338,17 +342,25 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex flex-col w-full h-full">
-    <!-- toolbar -->
-    <div class="flex items-center gap-3 px-2 py-1.5 bg-mix-25 z-60 border-b-4 border-mix-15">
-      <label class="flex items-center gap-2 text-xs">
-        <BaseDropdown
-          v-model="selectedChannelId"
-          :items="channels"
-          item-label="name"
-          item-value="id"
-          width="30"
-        />
-      </label>
+    <!-- toolbar / drag handle -->
+    <div class="window-header border-b-2 border-mix-30 bg-mix-15 px-3 shrink-0"
+      @pointerdown.stop="dragWindow?.($event)">
+      {{ props.name }} -
+      <BaseDropdown
+        v-model="selectedChannelId"
+        :items="channels"
+        item-label="name"
+        item-value="id"
+        button-class="px-2 py-0.5 font-mono font-bold min-w-0"
+        width="30"
+      />
+      <div class="flex-1" />
+      <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="resetWindow?.()" title="Reset position and size">
+        <span class="pi pi-refresh text-xs" />
+      </button>
+      <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="closeWindow?.()" title="Close window">
+        <span class="pi pi-times text-xs" />
+      </button>
     </div>
 
     <!-- piano roll -->

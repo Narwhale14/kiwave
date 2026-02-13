@@ -49,6 +49,10 @@ export class ChannelManager {
         return Array.from(this.channels.values());
     }
 
+    getNumChannels(): number {
+        return this.channels.size;
+    }
+
     getLatestChannelId(): string | null {
         if(this.channels.size === 0) return null;
         return `channel-${this.nextId - 1}`;

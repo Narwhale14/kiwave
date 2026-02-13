@@ -35,3 +35,11 @@ button {
   align-items: center;
   display: flex;
 }
+
+.window-header {
+  display: flex;
+  flex-direction: row;
+  flex-shrink: 0;
+  align-items: center;
+  font-size: 10px;
+}

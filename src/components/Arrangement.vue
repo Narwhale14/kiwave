@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, computed, watch, onMounted, onBeforeUnmount, ref } from 'vue';
+import { reactive, computed, watch, onMounted, onBeforeUnmount, ref, inject } from 'vue';
 import { snapDivision, snap, snapNearest } from '../util/snap';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { playbackMode, registerArrangementCallbacks, unregisterArrangementCallbacks } from '../services/playbackModeManager';
@@ -7,6 +7,10 @@ import { patterns } from '../services/patternsListManager';
 import { focusWindow } from '../services/windowManager';
 import { arrangement } from '../services/arrangementManager';
 import type { ArrangementClip } from '../audio/Arrangement';
+
+const closeWindow = inject<() => void>('closeWindow');
+const resetWindow = inject<() => void>('resetWindow');
+const dragWindow = inject<(e: PointerEvent) => void>('dragWindow');
 
 interface NoteRect { x: number; y: number; width: number; height: number }
 interface ClipPreview { viewBox: string; notes: NoteRect[] }
@@ -296,72 +300,77 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="w-full h-full overflow-auto bg-mix-20">
+  <div class="w-full h-full flex flex-col bg-mix-20">
+    <!-- toolbar / drag handle -->
+    <div class="window-header border-b-2 border-mix-30 bg-mix-15 px-3 shrink-0"
+      @pointerdown.stop="dragWindow?.($event)">
+      <span class="text-xs font-medium flex-1">Arrangement</span>
+      <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="resetWindow?.()" title="Reset position and size">
+        <span class="pi pi-refresh text-xs" />
+      </button>
+      <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="closeWindow?.()">
+        <span class="pi pi-times text-xs" />
+      </button>
+    </div>
+
     <!-- workspace -->
-    <div
-      ref="workspaceRef"
-      class="relative arrangement-grid"
-      @pointerdown="handlePointerDown"
-      @dblclick="handleDoubleClick"
-      @pointermove="handlePointerMove"
-      @pointerup="finalizeEdit"
-      @pointerleave="finalizeEdit"
-      @dragover="handleDragOver"
-      @drop="handleDrop"
-      @contextmenu.prevent
-      :style="{
-        '--track-h': `${trackHeight}px`,
-        '--beat-w': `${beatWidth}px`,
-        '--bar-w': `${barWidth}px`,
-        '--snap-w': `${snapWidth}px`,
-        width: `${numBars * barWidth}px`,
-        height: `${numTracks * trackHeight}px`,
-        cursor: cursor
-      }"
-    >
-      <!-- clips -->
-      <div
-        v-for="clip in arrangement.clips"
-        :key="clip.id"
-        class="absolute border-2 border-white/30 bg-blue-500/50 rounded overflow-hidden pointer-events-none"
+    <div class="flex-1 overflow-auto">
+      <div ref="workspaceRef" class="relative arrangement-grid"
+        @pointerdown="handlePointerDown"
+        @dblclick="handleDoubleClick"
+        @pointermove="handlePointerMove"
+        @pointerup="finalizeEdit"
+        @pointerleave="finalizeEdit"
+        @dragover="handleDragOver"
+        @drop="handleDrop"
+        @contextmenu.prevent
         :style="{
-          left: `${clip.startBeat * beatWidth}px`,
-          top: `${clip.track * trackHeight}px`,
-          width: `${clip.duration * beatWidth}px`,
-          height: `${trackHeight}px`
+          '--track-h': `${trackHeight}px`,
+          '--beat-w': `${beatWidth}px`,
+          '--bar-w': `${barWidth}px`,
+          '--snap-w': `${snapWidth}px`,
+          width: `${numBars * barWidth}px`,
+          height: `${numTracks * trackHeight}px`,
+          cursor: cursor
         }"
       >
-        <!-- note preview -->
-        <svg
-          v-if="clipPreviews.get(clip.id)"
-          class="absolute inset-0 w-full h-full"
-          preserveAspectRatio="none"
-          :viewBox="clipPreviews.get(clip.id)!.viewBox"
+        <!-- clips -->
+        <div v-for="clip in arrangement.clips" :key="clip.id" 
+          class="absolute border-2 border-white/30 bg-blue-500/50 rounded overflow-hidden pointer-events-none"
+          :style="{
+            left: `${clip.startBeat * beatWidth}px`,
+            top: `${clip.track * trackHeight}px`,
+            width: `${clip.duration * beatWidth}px`,
+            height: `${trackHeight}px`
+          }"
         >
-          <rect
-            v-for="(note, i) in clipPreviews.get(clip.id)!.notes"
-            :key="i"
-            :x="note.x" :y="note.y"
-            :width="note.width" :height="note.height"
-            fill="white" opacity="0.6"
-          />
-        </svg>
-        <!-- pattern name -->
-        <div class="relative z-10 px-1 pt-0.5 text-xs truncate drop-shadow">
-          {{ patterns.find(p => p.id === clip.patternId)?.name || 'Pattern' }}
+          <!-- note preview -->
+          <svg v-if="clipPreviews.get(clip.id)" class="absolute inset-0 w-full h-full" preserveAspectRatio="none" :viewBox="clipPreviews.get(clip.id)!.viewBox">
+            <rect
+              v-for="(note, i) in clipPreviews.get(clip.id)!.notes"
+              :key="i"
+              :x="note.x" :y="note.y"
+              :width="note.width" :height="note.height"
+              fill="white" opacity="0.6"
+            />
+          </svg>
+          <!-- pattern name -->
+          <div class="relative z-10 px-1 pt-0.5 text-xs truncate drop-shadow">
+            {{ patterns.find(p => p.id === clip.patternId)?.name || 'Pattern' }}
+          </div>
         </div>
-      </div>
 
-      <!-- playhead (only visible in arrangement mode) -->
-      <div v-if="playbackMode === 'arrangement' && (playhead.playing || playhead.col > 0)"
-        class="absolute w-0.75 pointer-events-none playhead-color"
-        :style="{
-          transform: `translateX(${playhead.col * beatWidth}px)`,
-          top: '0',
-          height: `${numTracks * trackHeight}px`,
-          boxShadow: `-1px 0 6px var(--playhead)`
-        }"
-      ></div>
+        <!-- playhead (only visible in arrangement mode) -->
+        <div v-if="playbackMode === 'arrangement' && (playhead.playing || playhead.col > 0)"
+          class="absolute w-0.75 pointer-events-none playhead-color"
+          :style="{
+            transform: `translateX(${playhead.col * beatWidth}px)`,
+            top: '0',
+            height: `${numTracks * trackHeight}px`,
+            boxShadow: `-1px 0 6px var(--playhead)`
+          }"
+        ></div>
+      </div>
     </div>
   </div>
 </template>

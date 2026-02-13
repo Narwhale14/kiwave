@@ -7,7 +7,7 @@ import { arrangementVisible } from './services/arrangementManager';
 import HeaderBar from './components/HeaderBar.vue';
 import Arrangement from './components/Arrangement.vue';
 import ChannelRack from './components/ChannelRack.vue';
-import { PATTERNS_LIST_WIDTH, HEADER_HEIGHT, PIANO_ROLL_FILL_DEFAULT, ARRANGEMENT_FILL_DEFAULT } from './constants/layout';
+import { PATTERNS_LIST_WIDTH, HEADER_HEIGHT, PIANO_ROLL_FILL_DEFAULT, ARRANGEMENT_FILL_DEFAULT, CHANNEL_RACK_WIDTH_DEFAULT } from './constants/layout';
 import { channelRackVisible } from './services/channelRackManager';
 
 // Layout calculations for default window positions
@@ -29,6 +29,13 @@ const arrangementWindow = {
   width: availableWidth,
   height: Math.floor(availableHeight * ARRANGEMENT_FILL_DEFAULT)
 };
+
+// channel rack default position and size
+const channelRackWindow = {
+  x: window.innerWidth - CHANNEL_RACK_WIDTH_DEFAULT,
+  y: HEADER_HEIGHT,
+  width: CHANNEL_RACK_WIDTH_DEFAULT
+}
 </script>
 
 <template>
@@ -42,13 +49,13 @@ const arrangementWindow = {
       <!-- arrangement window -->
       <Window
         :visible="arrangementVisible"
-        :title="'Arrangement'"
         :id="'arrangement-window'"
         @close="arrangementVisible = false"
         :x="arrangementWindow.x"
         :y="arrangementWindow.y"
         :width="arrangementWindow.width"
         :height="arrangementWindow.height"
+        :resizing="{ left: true, right: true, top: true, bottom: true }"
       >
         <Arrangement />
       </Window>
@@ -56,10 +63,14 @@ const arrangementWindow = {
       <Window
         :visible="channelRackVisible"
         @close="channelRackVisible = false"
-        :title="'Channel Rack'"
         :id="'channel-rack-window'"
+        :x="channelRackWindow.x"
+        :y="channelRackWindow.y"
+        :width="channelRackWindow.width"
+        :auto-height="true"
+        :resizing="{ left: true, right: true }"
       >
-        <ChannelRack></ChannelRack>
+        <ChannelRack />
       </Window>
 
       <!-- pattern windows -->
@@ -67,15 +78,15 @@ const arrangementWindow = {
         v-for="pattern in patterns"
         :key="pattern.id"
         :id="pattern.id"
-        :title="pattern.name"
         :visible="pattern.visible"
         :x="pianoRollWindow.x"
         :y="pianoRollWindow.y"
         :width="pianoRollWindow.width"
         :height="pianoRollWindow.height"
         @close="closePattern(pattern.num)"
+        :resizing="{ left: true, right: true, top: true, bottom: true }"
       >
-        <PianoRoll :roll="pattern.roll"/>
+        <PianoRoll :roll="pattern.roll" :name="pattern.name" />
       </Window>
     </div>
   </div>

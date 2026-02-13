@@ -4,10 +4,10 @@ import { playbackMode, togglePlaybackMode } from '../services/playbackModeManage
 import { arrangementVisible } from '../services/arrangementManager';
 import { channelRackVisible } from '../services/channelRackManager';
 import { activePattern, patterns, closePattern } from '../services/patternsListManager';
-import { activeWindowId, focusWindow } from '../services/windowManager';
+import { activeWindowId, focusWindow, clearActiveWindow } from '../services/windowManager';
 import BaseDropdown from './modals/BaseDropdown.vue';
 import { HEADER_HEIGHT } from '../constants/layout';
-import { ref } from 'vue';
+import { ref, toRef } from 'vue';
 import { getAudioEngine } from '../services/audioEngineManager';
 
 const engine = getAudioEngine();
@@ -37,45 +37,35 @@ function handleModeToggle(event: MouseEvent) {
   (event.target as HTMLButtonElement).blur();
 }
 
-function toggleArrangement() {
-  if(activeWindowId.value === 'arrangement-window') {
-    arrangementVisible.value = false;
-
-    // focus active pattern instead
-    const p = activePattern.value ?? patterns.value[0];
-    if(p) { p.visible = true; focusWindow(p.id); }
+function toggleWindow(visible: { value: boolean }, windowId: string, onClose?: () => void) {
+  if(visible.value && activeWindowId.value === windowId) {
+    // capture fallback before closing (activePattern may change after close)
+    const p = activePattern.value;
+    const fallbackId = (p && p.id !== windowId) ? p.id
+      : (arrangementVisible.value && windowId !== 'arrangement-window') ? 'arrangement-window'
+      : null;
+    if(onClose) onClose(); else visible.value = false;
+    if(fallbackId) focusWindow(fallbackId); else clearActiveWindow();
+  } else if(visible.value) {
+    focusWindow(windowId);
   } else {
-    arrangementVisible.value = true;
-    focusWindow('arrangement-window');
+    visible.value = true;
+    focusWindow(windowId);
   }
+}
+
+function toggleArrangement() {
+  toggleWindow(arrangementVisible, 'arrangement-window');
 }
 
 function togglePianoRoll() {
   const p = activePattern.value ?? patterns.value[0];
-  if(!p) return;
-  if(activeWindowId.value === p.id) {
-    closePattern(p.num);
-
-    // focus arrangement window
-    arrangementVisible.value = true;
-    focusWindow('arrangement-window');
-  } else {
-    p.visible = true;
-    focusWindow(p.id);
-  }
+  if (!p) return;
+  toggleWindow(toRef(p, 'visible'), p.id, () => closePattern(p.num));
 }
 
 function toggleChannelRack() {
-  if(activeWindowId.value === 'channel-rack-window') {
-    channelRackVisible.value = false;
-
-    // focus active pattern instead
-    const p = activePattern.value ?? patterns.value[0];
-    if(p) { p.visible = true; focusWindow(p.id); }
-  } else {
-    channelRackVisible.value = true;
-    focusWindow('channel-rack-window')
-  }
+  toggleWindow(channelRackVisible, 'channel-rack-window');
 }
 </script>
 
