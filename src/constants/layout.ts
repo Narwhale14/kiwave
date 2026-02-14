@@ -6,7 +6,7 @@
  */
 
 // px
-export const PATTERNS_LIST_WIDTH = 180;
+export const PATTERNS_LIST_WIDTH = 130;
 export const PATTERNS_LIST_WIDTH_MIN = 120;
 export const PATTERNS_LIST_WIDTH_MAX = 500;
 export const HEADER_HEIGHT = 48;
