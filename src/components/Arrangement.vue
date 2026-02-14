@@ -5,7 +5,7 @@ import { getAudioEngine } from '../services/audioEngineManager';
 import { playbackMode, registerArrangementCallbacks, unregisterArrangementCallbacks } from '../services/playbackModeManager';
 import { patterns } from '../services/patternsListManager';
 import { focusWindow } from '../services/windowManager';
-import { arrangement } from '../services/arrangementManager';
+import { arrangement } from '../audio/Arrangement';
 import type { ArrangementClip } from '../audio/Arrangement';
 
 const closeWindow = inject<() => void>('closeWindow');

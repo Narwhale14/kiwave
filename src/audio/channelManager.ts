@@ -5,7 +5,7 @@ export interface Channel {
     id: string;
     name: string;
     instrument: MiniSynth;
-    mixerTrack: number; // for routing. default SHOULD be 0 (master)
+    mixerTrack: number; // for routing. 0 = master
     volume: number;
     pan: number;
     muted: boolean;
@@ -17,9 +17,9 @@ export class ChannelManager {
     private channels: Map<string, Channel> = reactive(new Map());
     private soloChannelId: string | null = null;
     private nextId = 1;
+    onMuteStateChanged: (() => void) | null = null;
 
-    addChannel(instrument: MiniSynth, name?: string) {
-        // new channel
+    addChannel(instrument: MiniSynth, name?: string): string {
         const id = `channel-${this.nextId}`
         this.channels.set(id, {
             id,
@@ -31,8 +31,8 @@ export class ChannelManager {
             muted: false,
             solo: false
         });
-
         this.nextId++;
+        return id;
     }
 
     removeChannel(id: string) {
@@ -40,9 +40,7 @@ export class ChannelManager {
     }
 
     getChannel(id: string): Channel | null {
-        const channel = this.channels.get(id);
-        if(!channel) return null;
-        return channel;
+        return this.channels.get(id) ?? null;
     }
 
     getAllChannels(): Channel[] {
@@ -81,14 +79,13 @@ export class ChannelManager {
         if(!channel) return;
 
         if(this.soloChannelId) {
-            const soloedChannel = this.channels.get(this.soloChannelId);
-            if(soloedChannel) {
-                soloedChannel.solo = false;
-                this.soloChannelId = null;
-            }
+            const soloed = this.channels.get(this.soloChannelId);
+            if(soloed) { soloed.solo = false; }
+            this.soloChannelId = null;
         }
 
         channel.muted = !channel.muted;
+        this.onMuteStateChanged?.();
     }
 
     toggleSolo(id: string) {
@@ -98,9 +95,8 @@ export class ChannelManager {
         if(this.soloChannelId === id) {
             channel.solo = false;
             this.soloChannelId = null;
-
-            // unmute all others
             this.channels.forEach(ch => ch.muted = false);
+            this.onMuteStateChanged?.();
             return;
         }
 
@@ -111,17 +107,8 @@ export class ChannelManager {
 
         channel.solo = true;
         this.soloChannelId = id;
-
-        // mute all others
-        this.channels.forEach(ch => { ch.muted = ch.id !== id });
-    }
-
-    isChannelAudible(id: string): boolean {
-        const channel = this.channels.get(id);
-        if(!channel) return false;
-
-        if(this.soloChannelId) return id === this.soloChannelId;
-        return !channel.muted;
+        this.channels.forEach(ch => { ch.muted = ch.id !== id; });
+        this.onMuteStateChanged?.();
     }
 }
 

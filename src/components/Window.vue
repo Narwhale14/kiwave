@@ -38,15 +38,10 @@ watch(activeWindowId, id => {
   }
 });
 
-watch(() => props.width, w => {
-  const win = windows.find(w => w.id === props.id);
-  if (win && w !== undefined) win.width = w;
-});
-
-watch(() => props.height, h => {
-  const win = windows.find(w => w.id === props.id);
-  if (win && h !== undefined) win.height = h;
-});
+watch(() => props.x, v => { const win = windows.find(w => w.id === props.id); if (win && !win.userModified && v !== undefined) win.x = v; });
+watch(() => props.y, v => { const win = windows.find(w => w.id === props.id); if (win && !win.userModified && v !== undefined) win.y = v; });
+watch(() => props.width, v => { const win = windows.find(w => w.id === props.id); if (win && !win.userModified && v !== undefined) win.width = v; });
+watch(() => props.height, v => { const win = windows.find(w => w.id === props.id); if (win && !win.userModified && v !== undefined) win.height = v; });
 
 let resizeObserver: ResizeObserver | null = null;
 

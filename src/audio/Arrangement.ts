@@ -115,3 +115,6 @@ export class Arrangement {
         return this._clips.find(c => c.track === track && beat >= c.startBeat && beat < (c.startBeat + c.duration)) || null;
     }
 }
+
+// temp singleton arrangement component
+export const arrangement = new Arrangement();

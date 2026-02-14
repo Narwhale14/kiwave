@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { snapDivision, snapOptions } from '../util/snap';
 import { playbackMode, togglePlaybackMode } from '../services/playbackModeManager';
-import { arrangementVisible } from '../services/arrangementManager';
-import { channelRackVisible } from '../services/channelRackManager';
+import { arrangementVisible, mixerVisible } from '../services/windowManager';
+import { channelRackVisible } from '../services/windowManager';
 import { activePattern, patterns, closePattern } from '../services/patternsListManager';
 import { activeWindowId, focusWindow, clearActiveWindow } from '../services/windowManager';
 import BaseDropdown from './modals/BaseDropdown.vue';
-import { HEADER_HEIGHT } from '../constants/layout';
+import { headerHeight } from '../services/layoutManager';
+import { HEADER_HEIGHT_MIN, HEADER_HEIGHT_MAX } from '../constants/layout';
 import { ref, toRef } from 'vue';
 import { getAudioEngine } from '../services/audioEngineManager';
 
@@ -67,10 +68,35 @@ function togglePianoRoll() {
 function toggleChannelRack() {
   toggleWindow(channelRackVisible, 'channel-rack-window');
 }
+
+function toggleMixer() {
+  toggleWindow(mixerVisible, 'mixer-window');
+}
+
+function startResize(e: PointerEvent) {
+  const handle = e.currentTarget as HTMLElement;
+  handle.setPointerCapture(e.pointerId);
+
+  function onMove(ev: PointerEvent) {
+    headerHeight.value = Math.max(
+      HEADER_HEIGHT_MIN,
+      Math.min(HEADER_HEIGHT_MAX, ev.clientY)
+    );
+  }
+
+  function onUp() {
+    handle.releasePointerCapture(e.pointerId);
+    handle.removeEventListener('pointermove', onMove);
+  }
+
+  handle.addEventListener('pointermove', onMove);
+  handle.addEventListener('pointerup', onUp, { once: true });
+  handle.addEventListener('pointercancel', onUp, { once: true });
+}
 </script>
 
 <template>
-  <div class="flex w-full border-2 bg-mix-15 border-mix-30 px-3 gap-2 items-center" :style="{ height: `${HEADER_HEIGHT}px` }">
+  <div class="relative flex w-full border-2 bg-mix-15 border-mix-30 px-3 gap-2 items-center" :style="{ height: `${headerHeight}px` }">
     <!-- playback controls -->
     <div class="flex flex-row items-stretch">
       <div class="flex flex-col border-2 border-mix-25 overflow-hidden text-[9px] font-semibold rounded-l">
@@ -143,5 +169,15 @@ function toggleChannelRack() {
     >
       <span class="pi pi-book text-sm"></span>
     </button>
+
+    <!-- mixer toggle -->
+    <button class="flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-mix-35" :class="mixerVisible ? 'bg-mix-30' : 'bg-mix-20'"
+      @click="toggleMixer" :title="'Toggle Mixer'"
+    >
+      <span class="pi pi-sliders-v text-sm"></span>
+    </button>
+
+    <!-- bottom resize handle -->
+    <div class="absolute inset-x-0 -bottom-1 h-2 cursor-s-resize z-10" @pointerdown="startResize" />
   </div>
 </template>

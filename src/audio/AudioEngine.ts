@@ -1,71 +1,101 @@
 import { MiniSynth } from "./MiniSynth";
+import { AudioGraph } from "./AudioGraph";
 import { Scheduler, type SchedulerNote } from "./Scheduler";
 import { channelManager } from "./channelManager";
 import { mixerManager } from "./mixerManager";
 import { ArrangementCompiler } from "./ArrangementCompiler";
-import { arrangement } from "../services/arrangementManager";
+import { arrangement } from "../audio/Arrangement";
 
 export interface SynthEntry {
     id: string;
     displayName: string;
-    instance: MiniSynth;
+    factory: (ctx: AudioContext) => MiniSynth;
 }
 
 /**
- * audio engine object to manage synths and schedule and compile
+ * Audio engine — owns the AudioContext and AudioGraph, coordinates
+ * all channel/mixer creation, routing, and mute/solo state.
  */
 export class AudioEngine {
-    private _synth = new MiniSynth();
+    private _audioContext = new AudioContext(); // context
+    private _audioGraph = new AudioGraph(this._audioContext); // total graph of nodes via routing
+
+    // registered synths + bookkeeping
     private _synths: SynthEntry[] = [];
-    private _synthChannels: Map<string, Map<string, number>> = new Map(); // synthId -> (channelId -> num)
-    private _scheduler = new Scheduler(this._synth, channelManager, { bpm: 120 });
+    private _channelSynths: Map<string, { synthId: string; num: number }> = new Map(); // channelId -> { synthId, num }
+
+    private _scheduler = new Scheduler(this._audioContext, channelManager, { bpm: 120 });
     private _compiler = new ArrangementCompiler(arrangement);
 
     constructor() {
         this._synths = [
-            { id: 'minisynth', displayName: 'MiniSynth', instance: this._synth },
+            { id: 'minisynth', displayName: 'MiniSynth', factory: (ctx) => new MiniSynth(ctx) },
         ];
 
-        // for preventing HMR duplication
+        // adds a gain node for each mixer track
+        for(const track of mixerManager.getAllMixers()) {
+            if(track.id !== 'master') {
+                this._audioGraph.addNode(track.id, track.route);
+            }
+        }
+
+        // add default mixers
+        if(mixerManager.getAllMixers().length === 1) {
+            this._addMixer('Insert 1');
+            this._addMixer('Insert 2');
+            this._addMixer('Insert 3');
+        }
+
+        // wire up existing channels (HMR)
+        for(const ch of channelManager.getAllChannels()) {
+            this._audioGraph.connectChannel(ch.instrument.getOutputNode(), ch.mixerTrack);
+        }
+
+        // add default channel if none exist
         if(channelManager.getAllChannels().length === 0) {
             this.addChannel('minisynth');
         }
 
-        if(mixerManager.getMixers().length === 1) { // only master exists
-            mixerManager.addMixer('Insert 1');
-            mixerManager.addMixer('Insert 2');
-            mixerManager.addMixer('Insert 3');
+        // sync gain nodes with current mute state (HMR)
+        this._syncChannelGains();
+        this._syncMixerGains();
+
+        // register callbacks — managers update state, engine syncs gains
+        channelManager.onMuteStateChanged = () => this._syncChannelGains();
+        mixerManager.onMuteStateChanged = () => this._syncMixerGains();
+    }
+
+    // GAIN SYNC
+
+    private _syncChannelGains() {
+        const now = this._audioContext.currentTime;
+        for (const ch of channelManager.getAllChannels()) {
+            const node = ch.instrument.getOutputNode();
+            if (ch.muted) {
+                node.gain.cancelScheduledValues(now);
+                node.gain.setValueAtTime(node.gain.value, now);
+                node.gain.linearRampToValueAtTime(0, now + 0.01);
+            } else {
+                node.gain.setTargetAtTime(ch.volume, now, 0.005);
+            }
         }
     }
+
+    private _syncMixerGains() {
+        const now = this._audioContext.currentTime;
+        for (const track of mixerManager.getAllMixers()) {
+            if (track.muted) {
+                this._audioGraph.setGainImmediate(track.id, now);
+            } else {
+                this._audioGraph.setGain(track.id, track.volume);
+            }
+        }
+    }
+
+    // GETTERS
 
     get availableSynths(): { id: string; displayName: string }[] {
         return this._synths.map(({ id, displayName }) => ({ id, displayName }));
-    }
-
-    addChannel(synthId: string) {
-        const entry = this._synths.find(s => s.id === synthId);
-        if (!entry) return;
-        if (!this._synthChannels.has(synthId)) this._synthChannels.set(synthId, new Map());
-        const channelNums = this._synthChannels.get(synthId)!;
-        const used = new Set(channelNums.values());
-        let num = 1;
-        while (used.has(num)) num++;
-        channelManager.addChannel(entry.instance, `${entry.displayName} ${num}`);
-        channelNums.set(channelManager.getLatestChannelId()!, num);
-    }
-
-    removeChannel(channelId: string) {
-        for (const channelNums of this._synthChannels.values()) {
-            if (channelNums.has(channelId)) {
-                channelNums.delete(channelId);
-                break;
-            }
-        }
-        channelManager.removeChannel(channelId);
-    }
-
-    get synth(): MiniSynth {
-        return this._synth;
     }
 
     get scheduler(): Scheduler {
@@ -84,6 +114,78 @@ export class AudioEngine {
         return mixerManager;
     }
 
+    // CHANNEL MANAGEMENT
+
+    addChannel(synthId: string) {
+        const entry = this._synths.find(s => s.id === synthId);
+        if(!entry) return;
+
+        const used = new Set(
+            [...this._channelSynths.values()]
+                .filter(v => v.synthId === synthId)
+                .map(v => v.num)
+        );
+
+        let num = 1;
+        while(used.has(num)) num++;
+
+        const instrument = entry.factory(this._audioContext);
+        const channelId = channelManager.addChannel(instrument, `${entry.displayName} ${num}`);
+        this._channelSynths.set(channelId, { synthId, num }); // store in bookkeeping
+
+        // default connect to master
+        this._audioGraph.connectChannel(instrument.getOutputNode(), 0);
+    }
+
+    removeChannel(channelId: string) {
+        const channel = channelManager.getChannel(channelId);
+        if(channel) {
+            this._audioGraph.disconnectChannel(channel.instrument.getOutputNode());
+            channel.instrument.dispose();
+        }
+        this._channelSynths.delete(channelId);
+        channelManager.removeChannel(channelId);
+    }
+
+    // sets a channel's mixer routing in both audio graph and data model
+    setChannelRoute(channelId: string, mixerTrack: number) {
+        const channel = channelManager.getChannel(channelId);
+        if(!channel) return;
+
+        this._audioGraph.rerouteChannel(channel.instrument.getOutputNode(), mixerTrack);
+        channelManager.setMixerRoute(channelId, mixerTrack);
+    }
+
+    toggleChannelMute(id: string) { channelManager.toggleMute(id); }
+    toggleChannelSolo(id: string) { channelManager.toggleSolo(id); }
+
+    // MIXER MANAGEMENT
+
+    private _addMixer(name: string) {
+        mixerManager.addMixer(name);
+        const tracks = mixerManager.getAllMixers();
+        const track = tracks[tracks.length - 1]!;
+        this._audioGraph.addNode(track.id, track.route);
+    }
+
+    removeMixer(mixerId: string) {
+        if(mixerId === 'master') return;
+        const num = parseInt(mixerId.replace('mixer-', ''), 10);
+
+        // reroute all channels that were using this mixer back to master
+        for(const ch of channelManager.getAllChannels()) {
+            if (ch.mixerTrack === num) this.setChannelRoute(ch.id, 0);
+        }
+        
+        this._audioGraph.removeNode(mixerId);
+        mixerManager.removeMixer(mixerId);
+    }
+
+    toggleMixerMute(id: string) { mixerManager.toggleMute(id); }
+    toggleMixerSolo(id: string) { mixerManager.toggleSolo(id); }
+
+    // PLAYBACK
+
     play() { return this.scheduler.play(); }
     pause() { return this.scheduler.pause(); }
     stop() { return this.scheduler.stop(); }
@@ -95,6 +197,7 @@ export class AudioEngine {
 
     dispose() {
         this.scheduler.dispose();
-        this.synth.dispose();
+        this._audioGraph.dispose();
+        this._audioContext.close();
     }
 }

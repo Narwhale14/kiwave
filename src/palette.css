@@ -142,6 +142,7 @@
 
 button:hover {
   transition: background-color 250ms ease;
+  transition: border-color 250ms ease;
 }
 
 input:focus {
@@ -179,6 +180,14 @@ input:focus {
 .bg-mix-90 { background-color: var(--step-90); }
 .bg-mix-95 { background-color: var(--step-95); }
 .bg-mix-100 { background-color: var(--step-100); }
+
+.hover\:border-mix-15:hover { border-color: var(--step-15); }
+.hover\:border-mix-20:hover { border-color: var(--step-20); }
+.hover\:border-mix-25:hover { border-color: var(--step-25); }
+.hover\:border-mix-30:hover { border-color: var(--step-30); }
+.hover\:border-mix-35:hover { border-color: var(--step-35); }
+.hover\:border-mix-40:hover { border-color: var(--step-40); }
+.hover\:border-mix-45:hover { border-color: var(--step-45); }
 
 .border-mix-0 { border-color: var(--step-0); }
 .border-mix-5 { border-color: var(--step-5); }

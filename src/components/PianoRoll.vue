@@ -25,6 +25,7 @@ const engine = getAudioEngine();
 
 const selectedChannelId = ref(engine.channelManager.getLatestChannelId() || '');
 const channels = computed(() => engine.channelManager.getAllChannels());
+const selectedInstrument = computed(() => engine.channelManager.getChannel(selectedChannelId.value)?.instrument ?? null);
 
 const workSpaceContainer = ref<HTMLDivElement | null>(null);
 const pianoRollContainer = ref<HTMLDivElement | null>(null);
@@ -61,13 +62,14 @@ const beatsPerBar = 4;
 
 async function playNote(midi: number) {
   if(engine.scheduler.isPlaying) return;
+  if(!selectedInstrument.value) return;
 
-  await engine.synth.resume();
-  engine.synth.noteOn(midi);
+  await selectedInstrument.value.resume();
+  selectedInstrument.value.noteOn(midi);
 }
 
 function stopNote(midi: number) {
-  engine.synth.noteOff(midi);
+  selectedInstrument.value?.noteOff(midi);
 }
 
 // CONTROLS
@@ -127,7 +129,7 @@ function handlePointerMove(event: PointerEvent) {
     const newRow = cell.row - state.dragStart.row;
 
     props.roll.move(state.draggingNote.id, newRow, newCol);
-    engine.synth.triggerRelease(state.draggingNote.id, engine.synth.getAudioContext().currentTime); // cancel current
+    selectedInstrument.value?.triggerRelease(state.draggingNote.id, selectedInstrument.value.getAudioContext().currentTime); // cancel current
 
     const noteIndex = notes.length - 1 - newRow;
     engine.scheduler.updateNote(state.draggingNote.id, {

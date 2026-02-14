@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { channelManager, type Channel } from '../audio/channelManager';
+import { mixerManager } from '../audio/mixerManager';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
 
@@ -8,6 +9,12 @@ const showSynthPicker = ref(false);
 const addButtonRef = ref<HTMLButtonElement | null>(null);
 const pickerRef = ref<HTMLDivElement | null>(null);
 const pickerStyle = ref({ top: '0px', left: '0px' });
+
+const closeWindow = inject<() => void>('closeWindow');
+const resetWindow = inject<() => void>('resetWindow');
+const dragWindow = inject<(e: PointerEvent) => void>('dragWindow');
+
+const channels = computed(() => channelManager.getAllChannels());
 
 function openPicker() {
   if (!addButtonRef.value) return;
@@ -33,6 +40,28 @@ function onKeyDown(e: KeyboardEvent) {
   if (e.key === 'Escape') showSynthPicker.value = false;
 }
 
+function onMixerTrackKeydown(e: KeyboardEvent) {
+  if(e.key === 'Enter') (e.target as HTMLInputElement).blur();
+  if(e.key === 'Escape') (e.target as HTMLInputElement).blur();
+}
+
+function commitMixerTrack(id: string, e: Event) {
+  const input = e.target as HTMLInputElement;
+  const val = parseInt(input.value, 10);
+  if(!isNaN(val) && val >= 0 && mixerManager.getMixerByNumber(val)) {
+    engine.setChannelRoute(id, val);
+    input.value = val.toString();
+  } else {
+    input.value = (channelManager.getChannel(id)?.mixerTrack ?? 0).toString();
+  }
+}
+
+function muteCircleColor(channel: Channel) {
+  if(channel.solo) return 'var(--playhead)';
+  if(channel.muted) return 'var(--step-35)';
+  return 'var(--playhead)';
+}
+
 watch(showSynthPicker, open => {
   if (open) {
     document.addEventListener('pointerdown', onPointerDown, { capture: true });
@@ -47,34 +76,6 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onPointerDown, { capture: true });
   document.removeEventListener('keydown', onKeyDown);
 });
-
-const closeWindow = inject<() => void>('closeWindow');
-const resetWindow = inject<() => void>('resetWindow');
-const dragWindow = inject<(e: PointerEvent) => void>('dragWindow');
-
-const channels = computed(() => channelManager.getAllChannels());
-
-function muteCircleColor(channel: Channel) {
-  if(channel.solo) return 'var(--playhead)';
-  if(channel.muted) return 'var(--step-35)';
-  return 'var(--playhead)';
-}
-
-function onMixerTrackKeydown(e: KeyboardEvent) {
-  if(e.key === 'Enter') (e.target as HTMLInputElement).blur();
-  if(e.key === 'Escape') (e.target as HTMLInputElement).blur();
-}
-
-function commitMixerTrack(id: string, e: Event) {
-  const input = e.target as HTMLInputElement;
-  const val = parseInt(input.value, 10);
-  if(!isNaN(val) && val >= 0) {
-    channelManager.setMixerRoute(id, val);
-    input.value = val.toString();
-  } else {
-    input.value = (channelManager.getChannel(id)?.mixerTrack ?? 0).toString();
-  }
-}
 </script>
 
 <template>
@@ -95,12 +96,12 @@ function commitMixerTrack(id: string, e: Event) {
       <div v-for="channel in channels" :key="channel.id" class="flex flex-row items-center gap-2 px-2 border-b border-mix-20 hover:bg-mix-15 py-1 transition-colors shrink-0">
         <!-- mute toggle (left click) / solo toggle (right click) -->
         <button
-          @click="channelManager.toggleMute(channel.id)"
-          @contextmenu.prevent="channelManager.toggleSolo(channel.id)"
+          @click="engine.toggleChannelMute(channel.id)"
+          @contextmenu.prevent="engine.toggleChannelSolo(channel.id)"
           class="flex items-center justify-center w-6 h-6 rounded shrink-0 focus:outline-none"
           :title="channel.solo ? 'Solo (right-click to toggle)' : channel.muted ? 'Unmute' : 'Mute (right-click to solo)'"
         >
-          <span class="w-3 h-3 rounded-full transition-colors" :style="{ backgroundColor: muteCircleColor(channel) }" />
+          <span class="w-2 h-2 rounded-full transition-colors" :style="{ backgroundColor: muteCircleColor(channel) }" />
         </button>
 
         <!-- mixer track number input -->

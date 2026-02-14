@@ -3,7 +3,7 @@ import { reactive } from "vue";
 export interface MixerTrack {
     id: string;
     name: string;
-    route: number; // default 0 for master
+    route: number; // 0 = master, n = mixer-n, -1 = no route (master only)
     volume: number;
     pan: number;
     muted: boolean;
@@ -13,13 +13,15 @@ export interface MixerTrack {
 
 export class MixerManager {
     private tracks: Map<string, MixerTrack> = reactive(new Map());
+    private soloTrackId: string | null = null;
     private nextId = 1;
+    onMuteStateChanged: (() => void) | null = null;
 
     constructor() {
         this.tracks.set('master', {
             id: 'master',
             name: 'Master',
-            route: -1, // doesnt route anywhere
+            route: -1,
             volume: 0.8,
             pan: 0,
             muted: false,
@@ -38,7 +40,6 @@ export class MixerManager {
             muted: false,
             solo: false
         });
-
         this.nextId++;
     }
 
@@ -47,13 +48,22 @@ export class MixerManager {
     }
 
     getMixer(id: string): MixerTrack | null {
-        const track = this.tracks.get(id);
-        if(!track) return null;
-        return track;
+        return this.tracks.get(id) ?? null;
     }
 
-    getMixers(): MixerTrack[] {
+    getMixerByNumber(n: number): MixerTrack | null {
+        const id = n === 0 ? 'master' : `mixer-${n}`;
+        return this.tracks.get(id) ?? null;
+    }
+
+    getAllMixers(): MixerTrack[] {
         return Array.from(this.tracks.values());
+    }
+
+    setName(id: string, name: string) {
+        const track = this.tracks.get(id);
+        if(!track) return;
+        track.name = name;
     }
 
     setRoute(id: string, route: number) {
@@ -77,13 +87,39 @@ export class MixerManager {
     toggleMute(id: string) {
         const track = this.tracks.get(id);
         if(!track) return;
-        track.muted = !track.muted
+
+        if(this.soloTrackId) {
+            const soloed = this.tracks.get(this.soloTrackId);
+            if(soloed) { soloed.solo = false; }
+            this.soloTrackId = null;
+        }
+
+        track.muted = !track.muted;
+        this.onMuteStateChanged?.();
     }
 
     toggleSolo(id: string) {
         const track = this.tracks.get(id);
         if(!track) return;
-        track.solo = !track.solo
+
+        if(this.soloTrackId === id) {
+            track.solo = false;
+            this.soloTrackId = null;
+            this.tracks.forEach(t => t.muted = false);
+            this.onMuteStateChanged?.();
+            return;
+        }
+
+        if(this.soloTrackId) {
+            const previous = this.tracks.get(this.soloTrackId);
+            if(previous) previous.solo = false;
+        }
+
+        track.solo = true;
+        this.soloTrackId = id;
+        // mute all others except master (inserts route through it)
+        this.tracks.forEach(t => { t.muted = t.id !== id && t.id !== 'master'; });
+        this.onMuteStateChanged?.();
     }
 }
 

@@ -2,7 +2,8 @@
 import { patterns, togglePattern, addPattern, getNextPatternNum, removePattern, activePattern, type Pattern } from '../services/patternsListManager'
 import ConfirmationModal from './modals/ConfirmationModal.vue'
 import { ref, watch, nextTick } from 'vue';
-import { PATTERNS_LIST_WIDTH } from '../constants/layout';
+import { patternsListWidth } from '../services/layoutManager';
+import { PATTERNS_LIST_WIDTH_MIN, PATTERNS_LIST_WIDTH_MAX } from '../constants/layout';
 
 const name = ref('');
 const nameInput = ref<HTMLInputElement | null>(null);
@@ -62,17 +63,37 @@ function handleDragStart(pattern: Pattern, event: DragEvent) {
   event.dataTransfer.setData('pattern-name', pattern.name);
 }
 
+function startResize(e: PointerEvent) {
+  const handle = e.currentTarget as HTMLElement;
+  handle.setPointerCapture(e.pointerId);
+
+  function onMove(ev: PointerEvent) {
+    patternsListWidth.value = Math.max(
+      PATTERNS_LIST_WIDTH_MIN,
+      Math.min(PATTERNS_LIST_WIDTH_MAX, ev.clientX)
+    );
+  }
+
+  function onUp() {
+    handle.releasePointerCapture(e.pointerId);
+    handle.removeEventListener('pointermove', onMove);
+  }
+
+  handle.addEventListener('pointermove', onMove);
+  handle.addEventListener('pointerup', onUp, { once: true });
+  handle.addEventListener('pointercancel', onUp, { once: true });
+}
+
 watch(addModalVisible, async (visible) => {
   if(visible) {
     await nextTick()
     nameInput.value?.focus()
   }
 });
-
 </script>
 
 <template>
-  <div class="flex flex-col border-2 bg-mix-15 border-mix-30" :style="{ width: `${PATTERNS_LIST_WIDTH}px` }">
+  <div class="relative flex flex-col h-full border-2 bg-mix-15 border-mix-30" :style="{ width: `${patternsListWidth}px` }">
     <!-- header -->
     <div class="flex flex-row justify-between items-center p-2.5 border-b-2 border-mix-30">
       <h2 class="font-bold">Patterns</h2>
@@ -103,6 +124,9 @@ watch(addModalVisible, async (visible) => {
         </button>
       </li>
     </ul>
+
+    <!-- right resize handle -->
+    <div class="absolute inset-y-0 -right-1 w-2 cursor-e-resize z-10" @pointerdown="startResize" />
   </div>
 
   <!-- add pattern modal -->

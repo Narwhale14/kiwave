@@ -1,5 +1,5 @@
 import { reactive, ref, computed } from 'vue'
-import { PATTERNS_LIST_WIDTH, HEADER_HEIGHT } from '../constants/layout'
+import { patternsListWidth, headerHeight } from './layoutManager'
 
 /**
  * interface of a general window object to hold contents. used for manipulatable windows like piano roll
@@ -10,12 +10,18 @@ export interface Window {
     y: number,
     width: number,
     height: number,
-    z: number
+    z: number,
+    userModified?: boolean,
 };
 
 export const windows = reactive<Window[]>([]);
 export const activeWindowId = ref<string | null>(null);
 const activeWindow = computed(() => windows.find(w => w.id === activeWindowId.value) ?? null);
+
+// specific windows
+export const arrangementVisible = ref(true);
+export const channelRackVisible = ref(true);
+export const mixerVisible = ref(true);
 
 export type ResizeEdge = 'left' | 'right' | 'top' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 type DragState = { type: 'move'; offsetX: number; offsetY: number } | { type: 'resize'; edge: ResizeEdge; startX: number; startY: number; startW: number; startH: number; startWinX: number; startWinY: number };
@@ -25,6 +31,7 @@ let zCounter = 1;
 
 export function registerWindow(window: Window) {
     window.z = zCounter++;
+    window.userModified = false;
     windows.push(window);
 }
 
@@ -49,10 +56,12 @@ export function positionWindow(id: string, x: number, y: number, width: number, 
     win.y = y;
     win.width = width;
     win.height = height;
+    win.userModified = false;
 }
 
 export function beginMove(id: string, event: PointerEvent) {
     focusWindow(id);
+    activeWindow.value!.userModified = true;
 
     dragState.value = {
         type: 'move',
@@ -66,6 +75,7 @@ export function beginResize(id: string, edge: ResizeEdge, event: PointerEvent) {
 
     const win = windows.find(w => w.id === id);
     if(!win) return;
+    win.userModified = true;
 
     dragState.value = {
         type: 'resize',
@@ -92,8 +102,8 @@ window.addEventListener('pointermove', event => {
 
     if(dragState.value.type === 'move') {
         const win = activeWindow.value!;
-        win.x = Math.max(PATTERNS_LIST_WIDTH, Math.min(window.innerWidth - win.width, event.clientX - dragState.value.offsetX));
-        win.y = Math.max(HEADER_HEIGHT, Math.min(window.innerHeight - win.height, event.clientY - dragState.value.offsetY));
+        win.x = Math.max(patternsListWidth.value, Math.min(window.innerWidth - win.width, event.clientX - dragState.value.offsetX));
+        win.y = Math.max(headerHeight.value, Math.min(window.innerHeight - win.height, event.clientY - dragState.value.offsetY));
     }
 
     if(dragState.value.type === 'resize') {
@@ -108,7 +118,7 @@ window.addEventListener('pointermove', event => {
             win.width = Math.max(minW, Math.min(maxW, dragState.value.startW + dx));
         }
         if(dragState.value.edge.includes('left')) {
-            const maxW = dragState.value.startW + (dragState.value.startWinX - PATTERNS_LIST_WIDTH);
+            const maxW = dragState.value.startW + (dragState.value.startWinX - patternsListWidth.value);
             const newW = Math.max(minW, Math.min(maxW, dragState.value.startW - dx));
             win.x = dragState.value.startWinX + (dragState.value.startW - newW);
             win.width = newW;
@@ -118,7 +128,7 @@ window.addEventListener('pointermove', event => {
             win.height = Math.max(minH, Math.min(maxH, dragState.value.startH + dy));
         }
         if(dragState.value.edge.includes('top')) {
-            const maxH = dragState.value.startH + (dragState.value.startWinY - HEADER_HEIGHT);
+            const maxH = dragState.value.startH + (dragState.value.startWinY - headerHeight.value);
             const newH = Math.max(minH, Math.min(maxH, dragState.value.startH - dy));
             win.y = dragState.value.startWinY + (dragState.value.startH - newH);
             win.height = newH;

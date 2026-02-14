@@ -1,5 +1,4 @@
 import type { ChannelManager } from './channelManager';
-import { MiniSynth } from './MiniSynth';
 
 /**
  * interface used to convert note data to a type the scheduler can read
@@ -29,7 +28,6 @@ type PlayStateCallback = (playing: boolean) => void;
  * scheduler object - schedules notes with a playhead
  */
 export class Scheduler {
-    private synth: MiniSynth;
     private audioContext: AudioContext;
     private channelManager: ChannelManager;
 
@@ -59,17 +57,17 @@ export class Scheduler {
     private animationFrameId: number | null = null;
 
     constructor(
-        synth: MiniSynth, 
-        channelManager: ChannelManager, 
+        audioContext: AudioContext,
+        channelManager: ChannelManager,
         options: SchedulerOptions = {}
     ) {
-        this.synth = synth;
-        this.audioContext = synth.getAudioContext();
+        this.audioContext = audioContext;
         this.channelManager = channelManager;
 
         this._bpm = options.bpm ?? 120;
         this.lookAhead = options.lookAhead ?? 0.1; // 100ms
         this.scheduleInterval = options.scheduleInterval ?? 25; // 25ms
+
     }
 
     // GETTERS
@@ -135,15 +133,24 @@ export class Scheduler {
 
     // SCHEDULING
 
+    private panicAll() {
+        for(const ch of this.channelManager.getAllChannels()) {
+            ch.instrument.panic();
+        }
+    }
+
     addNote(note: SchedulerNote) {
         this.notes.push(note);
     }
 
     removeNote(id: string) {
         const index = this.notes.findIndex(n => n.id === id);
-        if(index !== -1) this.notes.splice(index, 1);
-
-        this.synth.triggerRelease(id, this.audioContext.currentTime);
+        if(index !== -1) {
+            const note = this.notes[index]!;
+            const ch = this.channelManager.getChannel(note.channel);
+            this.notes.splice(index, 1);
+            ch?.instrument.triggerRelease(id, this.audioContext.currentTime);
+        }
     }
 
     updateNote(id: string, updates: Partial<SchedulerNote>) {
@@ -151,7 +158,7 @@ export class Scheduler {
         if(note) {
             Object.assign(note, updates);
         }
-    } 
+    }
 
     // the lookahead
     private schedulerTick = () => {
@@ -195,42 +202,22 @@ export class Scheduler {
 
         const lookBehindTolerance = 0.05;
 
-        if(this.channelManager.getChannel(note.channel)?.muted) return;
+        const ch = this.channelManager.getChannel(note.channel);
+        if(!ch) return;
 
         // schedule note on
         if(noteStartBeat >= currentBeat - lookBehindTolerance && noteStartBeat < scheduleUntilBeat && !this.scheduledNoteOns.has(noteOnKey)) {
             const scheduleTime = Math.max(now, this.beatToAudioTime(noteStartBeat));
-
-            const synth = this.getSynthForNote(note);
-            if(synth) {
-                this.synth.triggerAttack(note.id, note.pitch, scheduleTime, note.velocity);
-                this.scheduledNoteOns.add(noteOnKey);
-            }
+            ch.instrument.triggerAttack(note.id, note.pitch, scheduleTime, note.velocity);
+            this.scheduledNoteOns.add(noteOnKey);
         }
 
-        // schedules note off
+        // schedule note off
         if(noteEndBeat >= currentBeat && noteEndBeat < scheduleUntilBeat && !this.scheduledNoteOffs.has(noteOffKey)) {
             const scheduleTime = Math.max(now, this.beatToAudioTime(noteEndBeat));
-
-            const synth = this.getSynthForNote(note);
-            if(synth) {
-                this.synth.triggerRelease(note.id, scheduleTime);
-                this.scheduledNoteOffs.add(noteOffKey);
-            }
+            ch.instrument.triggerRelease(note.id, scheduleTime);
+            this.scheduledNoteOffs.add(noteOffKey);
         }
-    }
-
-    private getSynthForNote(note: SchedulerNote): MiniSynth | null {
-        if(note.channel) {
-            const channel = this.channelManager.getChannel(note.channel);
-
-            if(channel && !channel.muted) {
-                return channel.instrument;
-            }
-        }
-
-        // temp fallback
-        return this.synth;
     }
 
     private cleanupScheduledSets(currentBeat: number) {
@@ -304,7 +291,7 @@ export class Scheduler {
             this.animationFrameId = null;
         }
 
-        this.synth.panic();
+        this.panicAll();
         if(this.playStateCallback) {
             this.playStateCallback(false);
         }
@@ -337,7 +324,7 @@ export class Scheduler {
         this.scheduledNoteOns.clear();
         this.scheduledNoteOffs.clear();
         if (this._isPlaying) {
-            this.synth.panic();
+            this.panicAll();
             this.schedulerTick();
         }
     }
@@ -370,7 +357,7 @@ export class Scheduler {
                 this.startTime = this.audioContext.currentTime;
                 this.pauseTime = this.loopStart;
 
-                this.synth.panic();
+                this.panicAll();
                 this.scheduledNoteOns.clear();
                 this.scheduledNoteOffs.clear();
 

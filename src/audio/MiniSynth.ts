@@ -22,13 +22,16 @@ export class MiniSynth {
     private attackTime = 0.005;
     private releaseTime = 0.005;
     
-    constructor() {
-        this.audioContext = new AudioContext();
+    constructor(audioContext: AudioContext) {
+        this.audioContext = audioContext;
 
-        // master gain
-        this.masterGain = this.audioContext!.createGain();
-        this.masterGain.gain.value = 0.3;
-        this.masterGain.connect(this.audioContext!.destination);
+        this.masterGain = this.audioContext.createGain();
+        this.masterGain.gain.value = 1;
+    }
+
+    // instruments output gain - must be linked to audiograph
+    getOutputNode(): GainNode {
+        return this.masterGain;
     }
 
     async resume() {
@@ -61,7 +64,7 @@ export class MiniSynth {
       gainNode.connect(this.masterGain);
 
       // attack env
-      gainNode.gain.setValueAtTime(0.001, time);
+      gainNode.gain.setValueAtTime(0, time);
       gainNode.gain.setTargetAtTime(clampedVelocity, time, this.attackTime / 3);
 
       // start
@@ -107,7 +110,7 @@ export class MiniSynth {
       oscillator.connect(gainNode);
       gainNode.connect(this.masterGain);
       
-      gainNode.gain.setValueAtTime(0.001, now);
+      gainNode.gain.setValueAtTime(0, now);
       gainNode.gain.setTargetAtTime(clampedVelocity, now, this.attackTime / 3);
 
       oscillator.start(now);
@@ -179,6 +182,5 @@ export class MiniSynth {
 
     async dispose() {
       this.killAll();
-      await this.audioContext.close();
     }
 }
