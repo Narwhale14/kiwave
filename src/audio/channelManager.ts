@@ -14,14 +14,14 @@ export interface Channel {
 }
 
 export class ChannelManager {
-    private channels: Map<string, Channel> = reactive(new Map());
+    private channels: Channel[] = reactive([]);
     private soloChannelId: string | null = null;
     private nextId = 1;
     onMuteStateChanged: (() => void) | null = null;
 
     addChannel(instrument: MiniSynth, name?: string): string {
         const id = `channel-${this.nextId}`
-        this.channels.set(id, {
+        this.channels.push({
             id,
             name: name || `Channel ${this.nextId}`,
             instrument,
@@ -36,11 +36,12 @@ export class ChannelManager {
     }
 
     removeChannel(id: string) {
-        this.channels.delete(id);
+        const index = this.channels.findIndex(c => c.id === id);
+        if(index !== -1) this.channels.splice(index, 1);
     }
 
     getChannel(id: string): Channel | null {
-        return this.channels.get(id) ?? null;
+        return this.channels.find(c => c.id === id) ?? null;
     }
 
     getAllChannels(): Channel[] {
@@ -48,38 +49,38 @@ export class ChannelManager {
     }
 
     getNumChannels(): number {
-        return this.channels.size;
+        return this.channels.length;
     }
 
     getLatestChannelId(): string | null {
-        if(this.channels.size === 0) return null;
+        if(this.channels.length === 0) return null;
         return `channel-${this.nextId - 1}`;
     }
 
     setMixerRoute(id: string, mixerTrack: number) {
-        const channel = this.channels.get(id);
+        const channel = this.channels.find(c => c.id === id);
         if(!channel) return;
         channel.mixerTrack = mixerTrack;
     }
 
     setVolume(id: string, volume: number) {
-        const channel = this.channels.get(id);
+        const channel = this.channels.find(c => c.id === id);
         if(!channel) return;
         channel.volume = volume;
     }
 
     setPan(id: string, pan: number) {
-        const channel = this.channels.get(id);
+        const channel = this.channels.find(c => c.id === id);
         if(!channel) return;
         channel.pan = pan;
     }
 
     toggleMute(id: string) {
-        const channel = this.channels.get(id);
+        const channel = this.channels.find(c => c.id === id);
         if(!channel) return;
 
         if(this.soloChannelId) {
-            const soloed = this.channels.get(this.soloChannelId);
+            const soloed = this.channels.find(c => c.id === this.soloChannelId);
             if(soloed) { soloed.solo = false; }
             this.soloChannelId = null;
         }
@@ -89,7 +90,7 @@ export class ChannelManager {
     }
 
     toggleSolo(id: string) {
-        const channel = this.channels.get(id);
+        const channel = this.channels.find(c => c.id === id);
         if(!channel) return;
 
         if(this.soloChannelId === id) {
@@ -101,7 +102,7 @@ export class ChannelManager {
         }
 
         if(this.soloChannelId) {
-            const previous = this.channels.get(this.soloChannelId);
+            const previous = this.channels.find(c => c.id === this.soloChannelId);
             if(previous) previous.solo = false;
         }
 

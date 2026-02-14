@@ -12,13 +12,13 @@ export interface MixerTrack {
 }
 
 export class MixerManager {
-    private tracks: Map<string, MixerTrack> = reactive(new Map());
+    private tracks: MixerTrack[] = reactive([]);
     private soloTrackId: string | null = null;
     private nextId = 1;
     onMuteStateChanged: (() => void) | null = null;
 
     constructor() {
-        this.tracks.set('master', {
+        this.tracks.push({
             id: 'master',
             name: 'Master',
             route: -1,
@@ -31,7 +31,7 @@ export class MixerManager {
 
     addMixer(name?: string) {
         const id = `mixer-${this.nextId}`;
-        this.tracks.set(id, {
+        this.tracks.push({
             id,
             name: name || `Mixer ${this.nextId}`,
             route: 0,
@@ -44,16 +44,17 @@ export class MixerManager {
     }
 
     removeMixer(id: string) {
-        this.tracks.delete(id);
+        const index = this.tracks.findIndex(t => t.id === id);
+        if(index !== -1) this.tracks.splice(index, 1);
     }
 
     getMixer(id: string): MixerTrack | null {
-        return this.tracks.get(id) ?? null;
+        return this.tracks.find(t => t.id === id) ?? null;
     }
 
     getMixerByNumber(n: number): MixerTrack | null {
         const id = n === 0 ? 'master' : `mixer-${n}`;
-        return this.tracks.get(id) ?? null;
+        return this.tracks.find(t => t.id === id) ?? null;
     }
 
     getAllMixers(): MixerTrack[] {
@@ -61,35 +62,35 @@ export class MixerManager {
     }
 
     setName(id: string, name: string) {
-        const track = this.tracks.get(id);
+        const track = this.tracks.find(t => t.id === id);
         if(!track) return;
         track.name = name;
     }
 
     setRoute(id: string, route: number) {
-        const track = this.tracks.get(id);
+        const track = this.tracks.find(t => t.id === id);
         if(!track) return;
         track.route = route;
     }
 
     setVolume(id: string, volume: number) {
-        const track = this.tracks.get(id);
+        const track = this.tracks.find(t => t.id === id);
         if(!track) return;
         track.volume = volume;
     }
 
     setPan(id: string, pan: number) {
-        const track = this.tracks.get(id);
+        const track = this.tracks.find(t => t.id === id);
         if(!track) return;
         track.pan = pan;
     }
 
     toggleMute(id: string) {
-        const track = this.tracks.get(id);
+        const track = this.tracks.find(t => t.id === id);
         if(!track) return;
 
         if(this.soloTrackId) {
-            const soloed = this.tracks.get(this.soloTrackId);
+            const soloed = this.tracks.find(t=> t.id === this.soloTrackId);
             if(soloed) { soloed.solo = false; }
             this.soloTrackId = null;
         }
@@ -99,7 +100,7 @@ export class MixerManager {
     }
 
     toggleSolo(id: string) {
-        const track = this.tracks.get(id);
+        const track = this.tracks.find(t => t.id === id);
         if(!track) return;
 
         if(this.soloTrackId === id) {
@@ -111,7 +112,7 @@ export class MixerManager {
         }
 
         if(this.soloTrackId) {
-            const previous = this.tracks.get(this.soloTrackId);
+            const previous = this.tracks.find(t => t.id === this.soloTrackId);
             if(previous) previous.solo = false;
         }
 

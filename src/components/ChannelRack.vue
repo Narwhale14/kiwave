@@ -95,6 +95,8 @@ onBeforeUnmount(() => {
 
     <div>
       <div v-for="channel in channels" :key="channel.id" class="flex flex-row items-center gap-2 px-2 border-b border-mix-20 hover:bg-mix-15 py-1 transition-colors shrink-0">
+        <Knob :size="28" :resistance="0.5" :title="`Volume: ${Math.round(channel.volume * 100)}%`" :model-value="channel.volume" @update:model-value="v => engine.setChannelGain(channel.id, v)"/>
+        
         <!-- mute toggle (left click) / solo toggle (right click) -->
         <button
           @click="engine.toggleChannelMute(channel.id)"

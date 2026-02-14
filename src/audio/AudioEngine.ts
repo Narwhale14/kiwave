@@ -69,27 +69,43 @@ export class AudioEngine {
 
     private _syncChannelGains() {
         const now = this._audioContext.currentTime;
-        for (const ch of channelManager.getAllChannels()) {
-            const node = ch.instrument.getOutputNode();
-            if (ch.muted) {
+        for(const channel of channelManager.getAllChannels()) {
+            const node = channel.instrument.getOutputNode();
+            if(channel.muted) {
                 node.gain.cancelScheduledValues(now);
                 node.gain.setValueAtTime(node.gain.value, now);
                 node.gain.linearRampToValueAtTime(0, now + 0.01);
             } else {
-                node.gain.setTargetAtTime(ch.volume, now, 0.005);
+                node.gain.setTargetAtTime(channel.volume, now, 0.005);
             }
         }
     }
 
+    setChannelGain(channelId: string, volume: number) {
+        const channel = channelManager.getChannel(channelId);
+        if(!channel) return;
+
+        channel.volume = volume;
+        const node = channel.instrument.getOutputNode();
+        node.gain.setTargetAtTime(volume, this._audioContext.currentTime, 0.005);
+    }
+
     private _syncMixerGains() {
         const now = this._audioContext.currentTime;
-        for (const track of mixerManager.getAllMixers()) {
-            if (track.muted) {
+        for(const track of mixerManager.getAllMixers()) {
+            if(track.muted) {
                 this._audioGraph.setGainImmediate(track.id, now);
             } else {
                 this._audioGraph.setGain(track.id, track.volume);
             }
         }
+    }
+
+    setMixerGain(trackId: string, volume: number) {
+        const track = mixerManager.getMixer(trackId);
+        if(!track) return;
+        track.volume = volume;
+        this._audioGraph.setGain(trackId, volume)
     }
 
     // GETTERS
@@ -176,7 +192,7 @@ export class AudioEngine {
         for(const ch of channelManager.getAllChannels()) {
             if (ch.mixerTrack === num) this.setChannelRoute(ch.id, 0);
         }
-        
+
         this._audioGraph.removeNode(mixerId);
         mixerManager.removeMixer(mixerId);
     }

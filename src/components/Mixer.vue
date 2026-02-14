@@ -2,6 +2,7 @@
 import { inject, computed } from 'vue';
 import { mixerManager, type MixerTrack } from '../audio/mixerManager';
 import { getAudioEngine } from '../services/audioEngineManager';
+import Knob from './buttons/Knob.vue'
 
 const closeWindow = inject<() => void>('closeWindow');
 const resetWindow = inject<() => void>('resetWindow');
@@ -60,16 +61,21 @@ function onTrackNameKeydown(e: KeyboardEvent) {
           @blur="commitTrackName(track.id, $event)"
           @keydown="onTrackNameKeydown"
         />
-        
-        <!-- mute toggle (left click) / solo toggle (right click) -->
-        <button
-          @click="engine.toggleMixerMute(track.id)"
-          @contextmenu.prevent="engine.toggleMixerSolo(track.id)"
-          class="flex items-center justify-center w-6 h-6 rounded shrink-0 focus:outline-none"
-          :title="track.solo ? 'Solo (right-click to toggle)' : track.muted ? 'Unmute' : 'Mute (right-click to solo)'"
-        >
-          <span class="w-2 h-2 rounded-full transition-colors" :style="{ backgroundColor: muteCircleColor(track) }" />
-        </button>
+
+        <div class="flex flex-row gap-3">
+          <!-- mute toggle (left click) / solo toggle (right click) -->
+          <button
+            @click="engine.toggleMixerMute(track.id)"
+            @contextmenu.prevent="engine.toggleMixerSolo(track.id)"
+            class="flex items-center justify-center w-6 h-6 rounded shrink-0 focus:outline-none"
+            :title="track.solo ? 'Solo (right-click to toggle)' : track.muted ? 'Unmute' : 'Mute (right-click to solo)'"
+          >
+            <span class="w-2 h-2 rounded-full transition-colors" :style="{ backgroundColor: muteCircleColor(track) }" />
+          </button>
+
+          <!-- gain knob -->
+          <Knob :size="28" :resistance="0.5" :title="`Volume: ${Math.round(track.volume * 100)}%`" :model-value="track.volume" @update:model-value="v => engine.setMixerGain(track.id, v)"/>
+        </div>
 
         <div class="mt-auto p-3">
           <button v-if="track.id !== 'master'" @click="engine.removeMixer(track.id)">
