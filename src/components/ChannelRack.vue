@@ -3,6 +3,7 @@ import { channelManager, type Channel } from '../audio/channelManager';
 import { mixerManager } from '../audio/mixerManager';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
+import Knob from './buttons/Knob.vue';
 
 const engine = getAudioEngine();
 const showSynthPicker = ref(false);

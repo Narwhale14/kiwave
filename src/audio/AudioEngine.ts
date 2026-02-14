@@ -194,6 +194,7 @@ export class AudioEngine {
 
     setBpm(bpm: number) { this.scheduler.setBpm(bpm); }
     setNotes(notes: SchedulerNote[]) { this.scheduler.setNotes(notes); }
+    setMasterVolume(gain: number) { this._audioGraph.setGain('master', gain); }
 
     dispose() {
         this.scheduler.dispose();

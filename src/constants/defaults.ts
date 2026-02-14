@@ -1,0 +1,1 @@
+export const MASTER_VOLUME_DEFAULT = 0.75;

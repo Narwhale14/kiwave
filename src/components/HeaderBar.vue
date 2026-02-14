@@ -8,8 +8,10 @@ import { activeWindowId, focusWindow, clearActiveWindow } from '../services/wind
 import BaseDropdown from './modals/BaseDropdown.vue';
 import { headerHeight } from '../services/layoutManager';
 import { HEADER_HEIGHT_MIN, HEADER_HEIGHT_MAX } from '../constants/layout';
-import { ref, toRef } from 'vue';
+import { MASTER_VOLUME_DEFAULT } from '../constants/defaults';
+import { ref, toRef, watch } from 'vue';
 import { getAudioEngine } from '../services/audioEngineManager';
+import Knob from './buttons/Knob.vue';
 
 const engine = getAudioEngine();
 const playButtonOn = ref(false);
@@ -93,10 +95,15 @@ function startResize(e: PointerEvent) {
   handle.addEventListener('pointerup', onUp, { once: true });
   handle.addEventListener('pointercancel', onUp, { once: true });
 }
+
+const masterVolume = ref(MASTER_VOLUME_DEFAULT);
+watch(masterVolume, (v) => engine.setMasterVolume(v), { immediate: true });
 </script>
 
 <template>
   <div class="relative flex w-full border-2 bg-mix-15 border-mix-30 px-3 gap-2 items-center" :style="{ height: `${headerHeight}px` }">
+    <Knob v-model="masterVolume" :default-value="MASTER_VOLUME_DEFAULT" :size="headerHeight - 10" title="Master Volume" :resistance="1"/>
+
     <!-- playback controls -->
     <div class="flex flex-row items-stretch">
       <div class="flex flex-col border-2 border-mix-25 overflow-hidden text-[9px] font-semibold rounded-l">
