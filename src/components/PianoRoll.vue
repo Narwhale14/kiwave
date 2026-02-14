@@ -348,7 +348,7 @@ onBeforeUnmount(() => {
     <!-- toolbar / drag handle -->
     <div class="window-header border-b-2 border-mix-30 bg-mix-15 px-3 shrink-0"
       @pointerdown.stop="dragWindow?.($event)">
-      {{ props.name }} -
+      <span class="text-xs font-medium">{{ props.name }} - </span>
       <BaseDropdown
         v-model="selectedChannelId"
         :items="channels"
@@ -369,7 +369,7 @@ onBeforeUnmount(() => {
     <!-- piano roll -->
     <div ref="pianoRollContainer" class="flex-1 overflow-auto grid grid-cols-[50px_1fr]">
       <!-- notes column -->
-      <div class="flex flex-col-reverse sticky left-0 z-50" ref="pianoKeysContainer">
+      <div class="flex flex-col-reverse sticky left-0 z-50" ref="pianoKeysContainer" :style="{ height: `${notes.length * rowHeight}px` }">
         <button v-for="key in notes" :key="key.midi" 
           @pointerdown="playNote(key.midi)"
           @pointerup="stopNote(key.midi)"
