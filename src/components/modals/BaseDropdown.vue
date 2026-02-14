@@ -26,16 +26,23 @@ const isOpen = ref(false);
 const highlightedIndex = ref(-1);
 const root = ref<HTMLElement | null>(null);
 const isSelecting = ref(false);
+const menuStyle = ref<{ top: string; left: string }>({ top: '0px', left: '0px' });
 
 const labelKey = computed(() => props.itemLabel ?? 'label');
 const valueKey = computed(() => props.itemValue ?? 'value');
 const selectedItem = computed(() => props.items.find(i => i[valueKey.value] === props.modelValue));
 
 function toggle() {
-  if (isSelecting.value) {
+  if(isSelecting.value) {
     isSelecting.value = false;
     return;
   }
+
+  if(!isOpen.value && root.value) {
+    const rect = root.value.getBoundingClientRect();
+    menuStyle.value = { top: rect.bottom + 'px', left: rect.left + 'px' };
+  }
+  
   isOpen.value = !isOpen.value;
 }
 
@@ -119,20 +126,22 @@ watch(isOpen, (open) => {
       <span class="pi pi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': isOpen }" />
     </button>
 
-    <div v-if="isOpen" class="absolute left-0 mt-1 w-max min-w-full bg-mix-20 border border-mix-40 rounded shadow-lg z-100 max-h-60 overflow-auto">
-      <div
-        v-for="(item, index) in items"
-        :key="item[valueKey]"
-        @click.stop="select(item)"
-        @mouseenter="handleItemHover(index)"
-        class="px-2 py-1 text-xs cursor-pointer transition-colors whitespace-nowrap"
-        :class="index === highlightedIndex ? 'bg-mix-35' : 'bg-mix-20 hover:bg-mix-30'"
-      >
-        <slot name="item" :item="item">
-          {{ item[labelKey] }}
-        </slot>
+    <Teleport to="body">
+      <div v-if="isOpen" class="fixed w-max bg-mix-20 border border-mix-40 rounded shadow-lg z-9999 max-h-60 overflow-auto" :style="menuStyle">
+        <div
+          v-for="(item, index) in items"
+          :key="item[valueKey]"
+          @click.stop="select(item)"
+          @mouseenter="handleItemHover(index)"
+          class="px-2 py-1 text-xs cursor-pointer transition-colors whitespace-nowrap"
+          :class="index === highlightedIndex ? 'bg-mix-35' : 'bg-mix-20 hover:bg-mix-30'"
+        >
+          <slot name="item" :item="item">
+            {{ item[labelKey] }}
+          </slot>
+        </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 

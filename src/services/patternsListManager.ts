@@ -54,6 +54,10 @@ export function closePattern(num: number) {
     if(pattern) pattern.visible = false;
 }
 
+export function openPattern(num: number) {
+    patterns.value.forEach(p => { p.visible = p.num === num; });
+}
+
 export function togglePattern(num: number) {
     const pattern = patterns.value.find(p => p.num === num);
     if(!pattern) return;

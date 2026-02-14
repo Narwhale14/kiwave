@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted } from 'vue'
+import { clamp } from '../../util/parameterMapping'
 
 const props = withDefaults(defineProps<{
   modelValue: number,
@@ -20,10 +21,6 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (event: 'update:modelValue', v: number): void
 }>();
-
-function clamp(v: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, v));
-}
 
 const angle = computed(() => props.minAngle + props.modelValue * (props.maxAngle - props.minAngle));
 

@@ -22,7 +22,7 @@ export class MixerManager {
             id: 'master',
             name: 'Master',
             route: -1,
-            volume: 0.8,
+            volume: 1,
             pan: 0,
             muted: false,
             solo: false

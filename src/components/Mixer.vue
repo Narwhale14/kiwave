@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { inject, computed } from 'vue';
+import { inject, computed, ref } from 'vue';
 import { mixerManager, type MixerTrack } from '../audio/mixerManager';
+import { gainToDb } from '../util/parameterMapping';
 import { getAudioEngine } from '../services/audioEngineManager';
+import Slider from './buttons/Slider.vue'
 import Knob from './buttons/Knob.vue'
 
 const closeWindow = inject<() => void>('closeWindow');
@@ -10,6 +12,7 @@ const dragWindow = inject<(e: PointerEvent) => void>('dragWindow');
 
 const engine = getAudioEngine();
 const tracks = computed(() => mixerManager.getAllMixers());
+const activeTrackId = ref<string | null>('master');
 
 function muteCircleColor(channel: MixerTrack) {
   if(channel.solo) return 'var(--playhead)';
@@ -48,12 +51,7 @@ function onTrackNameKeydown(e: KeyboardEvent) {
     </div>
 
     <div class="flex flex-row flex-1 min-w-0 m-h-0 overflow-auto">
-      <div v-for="track in tracks" :key="track.id" class="flex flex-col w-28 items-center min-w-0 gap-2 px-2 border-r-3 border-mix-20 hover:bg-mix-20 py-1 transition-colors shrink-0">
-        <!-- mixer id num -->
-        <span class="self-start text-xs text-gray-300">
-          {{ parseInt(track.id.replace('mixer-', ''), 10) || 'MASTER' }}
-        </span>
-
+      <div v-for="track in tracks" :key="track.id" class="flex flex-col w-28 items-center min-w-0 gap-1 px-2 border-r-3 border-mix-20 hover:bg-mix-20 py-1 transition-colors shrink-0" @pointerdown="activeTrackId = track.id">
         <input 
           v-model="track.name"
           class="px2 py-0.5 rounded text-sm font-mono bg-mix-10 focus:outline-none w-full text-center truncate px-1"
@@ -62,8 +60,8 @@ function onTrackNameKeydown(e: KeyboardEvent) {
           @keydown="onTrackNameKeydown"
         />
 
-        <div class="flex flex-row gap-3">
-          <!-- mute toggle (left click) / solo toggle (right click) -->
+        <!-- mute + knob row -->
+        <div class="flex flex-row items-center justify-between w-full px-1">
           <button
             @click="engine.toggleMixerMute(track.id)"
             @contextmenu.prevent="engine.toggleMixerSolo(track.id)"
@@ -72,12 +70,21 @@ function onTrackNameKeydown(e: KeyboardEvent) {
           >
             <span class="w-2 h-2 rounded-full transition-colors" :style="{ backgroundColor: muteCircleColor(track) }" />
           </button>
-
-          <!-- gain knob -->
-          <Knob :size="28" :resistance="0.5" :title="`Volume: ${Math.round(track.volume * 100)}%`" :model-value="track.volume" @update:model-value="v => engine.setMixerGain(track.id, v)"/>
+          <Knob :model-value="0.5" :size="28" :show-arc="false" title="Pan" />
         </div>
 
-        <div class="mt-auto p-3">
+        <!-- volume number -->
+        <span class="text-xs text-gray-400">{{ gainToDb(track.volume).toFixed(1) }} dB</span>
+
+        <!-- gain slider -->
+        <div class="flex-1 min-h-0 flex items-stretch">
+          <Slider :default-value="1" :title="`Volume: ${Math.round(track.volume * 100)}%`" :model-value="track.volume" :active="activeTrackId === track.id" @update:model-value="v => engine.setMixerGain(track.id, v)"/>
+        </div>
+
+        <div class="relative flex items-center justify-center mt-auto w-full h-5">
+          <span class="absolute left-1 text-xs text-gray-300">
+            {{ parseInt(track.id.replace('mixer-', ''), 10) || 'MASTER' }}
+          </span>
           <button v-if="track.id !== 'master'" @click="engine.removeMixer(track.id)">
             <span class="pi pi-times text-sm text-red-400"></span>
           </button>

@@ -5,6 +5,7 @@ import { channelManager } from "./channelManager";
 import { mixerManager } from "./mixerManager";
 import { ArrangementCompiler } from "./ArrangementCompiler";
 import { arrangement } from "../audio/Arrangement";
+import { GLOBAL_VOLUME_DEFAULT } from "../constants/defaults";
 
 export interface SynthEntry {
     id: string;
@@ -13,7 +14,7 @@ export interface SynthEntry {
 }
 
 /**
- * Audio engine — owns the AudioContext and AudioGraph, coordinates
+ * audio engine — owns the AudioContext and AudioGraph, coordinates
  * all channel/mixer creation, routing, and mute/solo state.
  */
 export class AudioEngine {
@@ -59,6 +60,7 @@ export class AudioEngine {
         // sync gain nodes with current mute state (HMR)
         this._syncChannelGains();
         this._syncMixerGains();
+        this._audioGraph.setGain('global', GLOBAL_VOLUME_DEFAULT);
 
         // register callbacks — managers update state, engine syncs gains
         channelManager.onMuteStateChanged = () => this._syncChannelGains();
@@ -210,7 +212,7 @@ export class AudioEngine {
 
     setBpm(bpm: number) { this.scheduler.setBpm(bpm); }
     setNotes(notes: SchedulerNote[]) { this.scheduler.setNotes(notes); }
-    setMasterVolume(gain: number) { this._audioGraph.setGain('master', gain); }
+    setGlobalVolume(gain: number) { this._audioGraph.setGain('global', gain); }
 
     dispose() {
         this.scheduler.dispose();

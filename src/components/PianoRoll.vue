@@ -54,7 +54,7 @@ const playhead = reactive({
   playing: false
 });
 
-const rowHeight = ref(20);
+const rowHeight = ref(15);
 const colWidth = 80;
 const beatsPerBar = 4;
 
@@ -76,6 +76,7 @@ function stopNote(midi: number) {
 
 
 function updatePatternLoop() {
+  if(playbackMode.value !== 'pattern') return;
   engine.scheduler.setLoop(true, 0, props.roll.getEndBeat(beatsPerBar));
 }
 
@@ -409,7 +410,7 @@ onBeforeUnmount(() => {
         ></div>
 
         <!-- notes -->
-        <div v-for="(block, i) in roll.getNoteData" :key="i" class="absolute opacity-80 rounded-lg note-color"
+        <div v-for="(block, i) in roll.getNoteData" :key="i" class="absolute opacity-80 rounded-sm note-color"
           :style="{
             top: `${block.row * rowHeight}px`,
             left: `${block.col * colWidth}px`,
@@ -419,7 +420,7 @@ onBeforeUnmount(() => {
         ></div>
 
         <!-- hover cell -->
-        <div v-if="state.hoverCell && !state.hoverNote" class="absolute border-2 opacity-50 pointer-events-none rounded-lg note-outline-color"
+        <div v-if="state.hoverCell && !state.hoverNote" class="absolute border-2 opacity-50 pointer-events-none rounded-sm note-outline-color"
           :style="{
             top: `${state.hoverCell.row * rowHeight}px`,
             left: `${state.hoverCell.col * colWidth}px`,
@@ -429,7 +430,7 @@ onBeforeUnmount(() => {
         ></div>
 
         <!-- hover note -->
-        <div v-if="state.hoverNote" class="absolute border-2 opacity-50 pointer-events-none rounded-lg note-outline-color"
+        <div v-if="state.hoverNote" class="absolute border-2 opacity-50 pointer-events-none rounded-sm note-outline-color"
           :style="{
             top: `${state.hoverNote.row * rowHeight}px`,
             left: `${state.hoverNote.col * colWidth}px`,

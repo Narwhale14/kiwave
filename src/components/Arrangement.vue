@@ -3,8 +3,7 @@ import { reactive, computed, watch, onMounted, onBeforeUnmount, ref, inject } fr
 import { snapDivision, snap, snapNearest } from '../util/snap';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { playbackMode, registerArrangementCallbacks, unregisterArrangementCallbacks } from '../services/playbackModeManager';
-import { patterns } from '../services/patternsListManager';
-import { focusWindow } from '../services/windowManager';
+import { patterns, openPattern } from '../services/patternsListManager';
 import { arrangement } from '../audio/Arrangement';
 import type { ArrangementClip } from '../audio/Arrangement';
 
@@ -25,6 +24,7 @@ const playhead = reactive({
 const workspaceRef = ref<HTMLDivElement | null>(null);
 const cursor = ref('default');
 const interacting = ref(false);
+const selectedClipId = ref<string | null>(null);
 const state = reactive({
   draggingClip: null as ArrangementClip | null,
   resizingClip: null as ArrangementClip | null,
@@ -209,8 +209,7 @@ function handleDoubleClick(event: MouseEvent) {
 
   const pattern = patterns.value.find(p => p.id === clip.patternId);
   if (!pattern) return;
-  pattern.visible = true;
-  focusWindow(pattern.id);
+  openPattern(pattern.num);
 }
 
 function handlePointerDown(event: PointerEvent) {
@@ -224,11 +223,13 @@ function handlePointerDown(event: PointerEvent) {
   if (!clip) return;
 
   if (event.button === 2) {
+    if (selectedClipId.value === clip.id) selectedClipId.value = null;
     arrangement.removeClip(clip.id);
     recompileArrangement();
     return;
   }
 
+  selectedClipId.value = clip.id;
   interacting.value = true;
   if (isNearRightEdge(x, clip)) {
     state.resizingClip = clip;
@@ -335,13 +336,13 @@ onBeforeUnmount(() => {
         }"
       >
         <!-- clips -->
-        <div v-for="clip in arrangement.clips" :key="clip.id" 
-          class="absolute border-2 border-white/30 bg-blue-500/50 rounded overflow-hidden pointer-events-none"
+        <div v-for="clip in arrangement.clips" :key="clip.id"
+          :class="['absolute border-2 clip-color rounded overflow-hidden pointer-events-none', clip.id === selectedClipId ? 'clip-border-color' : 'clip-border-muted']"
           :style="{
             left: `${clip.startBeat * beatWidth}px`,
             top: `${clip.track * trackHeight}px`,
             width: `${clip.duration * beatWidth}px`,
-            height: `${trackHeight}px`
+            height: `${trackHeight}px`,
           }"
         >
           <!-- note preview -->

@@ -14,8 +14,28 @@ export class AudioGraph {
     constructor(audioContext: AudioContext) {
         this.audioContext = audioContext;
 
+        // soft clipper
+        const softClipper = audioContext.createWaveShaper();
+        softClipper.curve = AudioGraph.makeSoftClipCurve();
+        softClipper.oversample = '4x';
+
+        // safety limiter
+        const limiter = audioContext.createDynamicsCompressor();
+        limiter.threshold.value = -6; // headroom
+        limiter.knee.value = 2; // knee
+        limiter.ratio.value = 20; // hard limit
+        limiter.attack.value = 0.001;
+        limiter.release.value = 0.05;
+
+        softClipper.connect(limiter);
+        limiter.connect(audioContext.destination);
+
+        const globalGain = audioContext.createGain();
+        globalGain.connect(softClipper);
+        this.gainNodes.set('global', globalGain);
+
         const masterGain = audioContext.createGain();
-        masterGain.connect(audioContext.destination);
+        masterGain.connect(globalGain);
         this.gainNodes.set('master', masterGain);
     }
 
@@ -67,6 +87,24 @@ export class AudioGraph {
         node.gain.cancelScheduledValues(now);
         node.gain.setValueAtTime(node.gain.value, now);
         node.gain.linearRampToValueAtTime(0, now + 0.01);
+    }
+
+    // piecewise tanh soft clip: linear for |x| <= 0.8, saturates smoothly to ceiling of 1.0 above.
+    // inaudible at normal levels; catches transient peaks before they hit the limiter.
+    private static makeSoftClipCurve(numSamples = 256): Float32Array<ArrayBuffer> {
+        const curve = new Float32Array(new ArrayBuffer(numSamples * 4));
+        for(let i = 0; i < numSamples; i++) {
+            const x = (i * 2) / (numSamples - 1) - 1;
+            const abs = Math.abs(x);
+            const sign = x < 0 ? -1 : 1;
+            if(abs <= 0.8) {
+                curve[i] = x;
+            } else {
+                const t = (abs - 0.8) / 0.2;
+                curve[i] = sign * (0.8 + 0.2 * Math.tanh(t * 2));
+            }
+        }
+        return curve;
     }
 
     dispose(): void {

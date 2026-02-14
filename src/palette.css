@@ -13,9 +13,13 @@
   --button: #bfbfbf;
   --button-hover: #ffffff;
 
-  --note: #3b82f6;
-  --note-outline: #60a5fa;
+  --note: #22c55e;
+  --note-outline: #86efac;
   --playhead: #4ade80;
+
+  --clip: #22c55e;
+  --clip-dark: #15803d;
+  --clip-border: #86efac;
 
   /* steps for gradient */
   --step-0: color-mix(in srgb, var(--g-start), var(--g-end) 0%);
@@ -58,6 +62,18 @@
 
 .util-button:hover {
   color: var(--button-hover);
+}
+
+.clip-color {
+  background: linear-gradient(to bottom, var(--clip), var(--clip-dark));
+}
+
+.clip-border-color {
+  border-color: var(--clip-border);
+}
+
+.clip-border-muted {
+  border-color: var(--clip-dark);
 }
 
 .note-color {

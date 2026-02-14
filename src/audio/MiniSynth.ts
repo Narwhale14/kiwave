@@ -18,6 +18,10 @@ export class MiniSynth {
     private scheduledVoices: Map<string, ActiveVoice> = new Map(); // maped by id (workspace notes)
     private liveVoices: Map<number, ActiveVoice> = new Map(); // mapped by pitch (for keyboard sampling)
 
+    // per-voice headroom budget: -12 dBFS at velocity 1.0.
+    // 4 voices at full velocity sum to ~0 dBFS — clean without limiter involvement.
+    private static readonly BASE_GAIN = 0.25;
+
     // env settings
     private attackTime = 0.005;
     private releaseTime = 0.005;
@@ -51,7 +55,7 @@ export class MiniSynth {
         this.triggerRelease(noteId, time);
       }
 
-      const clampedVelocity = Math.max(0, Math.min(1, velocity));
+      const clampedVelocity = Math.max(0, Math.min(1, velocity)) * MiniSynth.BASE_GAIN;
 
       const oscillator = this.audioContext.createOscillator();
       const gainNode = this.audioContext.createGain();
@@ -99,7 +103,7 @@ export class MiniSynth {
       if(this.liveVoices.has(pitch)) return;
 
       const now = this.audioContext.currentTime;
-      const clampedVelocity = Math.max(0, Math.min(1, velocity));
+      const clampedVelocity = Math.max(0, Math.min(1, velocity)) * MiniSynth.BASE_GAIN;
 
       const oscillator = this.audioContext.createOscillator();
       const gainNode = this.audioContext.createGain();
@@ -109,7 +113,7 @@ export class MiniSynth {
 
       oscillator.connect(gainNode);
       gainNode.connect(this.masterGain);
-      
+
       gainNode.gain.setValueAtTime(0, now);
       gainNode.gain.setTargetAtTime(clampedVelocity, now, this.attackTime / 3);
 
