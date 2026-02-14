@@ -1,4 +1,5 @@
 import { midiToFrequency } from "../util/midiUtils";
+import type { CompiledNoteAutomation } from "./automation/types";
 
 /**
  * interface for a voice
@@ -39,152 +40,180 @@ export class MiniSynth {
     }
 
     async resume() {
-      if(this.audioContext.state === 'suspended') {
-        await this.audioContext.resume();
-      }
+        if(this.audioContext.state === 'suspended') {
+            await this.audioContext.resume();
+        }
     }
 
     getAudioContext(): AudioContext {
-      return this.audioContext;
+        return this.audioContext;
     }
 
     // scheduled playback
 
-    triggerAttack(noteId: string, pitch: number, time: number, velocity: number = 0.8) {
-      if(this.scheduledVoices.has(noteId)) {
-        this.triggerRelease(noteId, time);
-      }
+    triggerAttack(noteId: string, pitch: number, time: number, velocity: number = 0.8, automation: CompiledNoteAutomation = new Map()) {
+        if(this.scheduledVoices.has(noteId)) {
+            this.triggerRelease(noteId, time);
+        }
 
-      const clampedVelocity = Math.max(0, Math.min(1, velocity)) * MiniSynth.BASE_GAIN;
+        const clampedVelocity = Math.max(0, Math.min(1, velocity)) * MiniSynth.BASE_GAIN;
 
-      const oscillator = this.audioContext.createOscillator();
-      const gainNode = this.audioContext.createGain();
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
 
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(midiToFrequency(pitch), time);
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(midiToFrequency(pitch), time);
 
-      // osc -> gain -> master
-      oscillator.connect(gainNode);
-      gainNode.connect(this.masterGain);
+        // osc -> gain -> master
+        oscillator.connect(gainNode);
+        gainNode.connect(this.masterGain);
 
-      // attack env
-      gainNode.gain.setValueAtTime(0, time);
-      gainNode.gain.setTargetAtTime(clampedVelocity, time, this.attackTime / 3);
+        // attack env
+        gainNode.gain.setValueAtTime(0, time);
+        gainNode.gain.setTargetAtTime(clampedVelocity, time, this.attackTime / 3);
 
-      // start
-      oscillator.start(time);
+        // apply pre-compiled automation events
+        const voice: ActiveVoice = { oscillator, gainNode, pitch };
+        for(const [paramName, events] of automation) {
+            const param = this._resolveParam(voice, paramName);
+            if(!param) continue;
+            for(const event of events) {
+                switch(event.type) {
+                    case 'setValueAtTime':
+                        param.setValueAtTime(event.value, event.time);
+                        break;
+                    case 'linearRampToValueAtTime':
+                        param.linearRampToValueAtTime(event.value, event.time);
+                        break;
+                    case 'setValueCurveAtTime':
+                        param.setValueCurveAtTime(event.curve, event.startTime, event.duration);
+                        break;
+                }
+            }
+        }
 
-      this.scheduledVoices.set(noteId, { oscillator, gainNode, pitch });
+        // start
+        oscillator.start(time);
+
+        this.scheduledVoices.set(noteId, voice);
+    }
+
+    private _resolveParam(voice: ActiveVoice, paramName: string): AudioParam | null {
+        switch(paramName) {
+            case 'frequency': return voice.oscillator.frequency;
+            case 'gain':      return voice.gainNode.gain;
+            default:          return null;
+        }
     }
 
     triggerRelease(noteId: string, time: number) {
-      const voice = this.scheduledVoices.get(noteId);
-      if(!voice) return;
+        const voice = this.scheduledVoices.get(noteId);
+        if(!voice) return;
 
-      const { oscillator, gainNode } = voice;
+        const { oscillator, gainNode } = voice;
 
-      gainNode.gain.cancelAndHoldAtTime(time);
-      gainNode.gain.setTargetAtTime(0, time, this.releaseTime / 3);
+        gainNode.gain.cancelAndHoldAtTime(time);
+        gainNode.gain.setTargetAtTime(0, time, this.releaseTime / 3);
 
-      oscillator.stop(time + this.releaseTime + 0.01)
+        oscillator.stop(time + this.releaseTime + 0.01)
 
-      oscillator.onended = () => {
-        if(this.scheduledVoices.get(noteId) === voice) {
-          this.scheduledVoices.delete(noteId);
+        oscillator.onended = () => {
+            if(this.scheduledVoices.get(noteId) === voice) {
+                this.scheduledVoices.delete(noteId);
+            }
+            gainNode.disconnect();
+            oscillator.disconnect();
         }
-        gainNode.disconnect();
-        oscillator.disconnect();
-      }
     }
 
     // live playback (for keyboard playback)
 
     noteOn(pitch: number, velocity: number = 0.8) {
-      if(this.liveVoices.has(pitch)) return;
+        if(this.liveVoices.has(pitch)) return;
 
-      const now = this.audioContext.currentTime;
-      const clampedVelocity = Math.max(0, Math.min(1, velocity)) * MiniSynth.BASE_GAIN;
+        const now = this.audioContext.currentTime;
+        const clampedVelocity = Math.max(0, Math.min(1, velocity)) * MiniSynth.BASE_GAIN;
 
-      const oscillator = this.audioContext.createOscillator();
-      const gainNode = this.audioContext.createGain();
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
 
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(midiToFrequency(pitch), now);
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(midiToFrequency(pitch), now);
 
-      oscillator.connect(gainNode);
-      gainNode.connect(this.masterGain);
+        oscillator.connect(gainNode);
+        gainNode.connect(this.masterGain);
 
-      gainNode.gain.setValueAtTime(0, now);
-      gainNode.gain.setTargetAtTime(clampedVelocity, now, this.attackTime / 3);
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.setTargetAtTime(clampedVelocity, now, this.attackTime / 3);
 
-      oscillator.start(now);
-      this.liveVoices.set(pitch, { oscillator, gainNode, pitch });
+        oscillator.start(now);
+        this.liveVoices.set(pitch, { oscillator, gainNode, pitch });
     }
 
     noteOff(pitch: number) {
-      const voice = this.liveVoices.get(pitch);
-      if(!voice) return;
+        const voice = this.liveVoices.get(pitch);
+        if(!voice) return;
 
-      const now = this.audioContext.currentTime;
-      const { oscillator, gainNode } = voice;
+        const now = this.audioContext.currentTime;
+        const { oscillator, gainNode } = voice;
 
-      gainNode.gain.cancelAndHoldAtTime(now);
-      gainNode.gain.setTargetAtTime(0, now, this.releaseTime / 3);
+        gainNode.gain.cancelAndHoldAtTime(now);
+        gainNode.gain.setTargetAtTime(0, now, this.releaseTime / 3);
 
-      oscillator.stop(now + this.releaseTime + 0.01)
+        oscillator.stop(now + this.releaseTime + 0.01)
 
-      oscillator.onended = () => {
-        if(this.liveVoices.get(pitch) === voice) {
-          this.liveVoices.delete(pitch);
+        oscillator.onended = () => {
+            if(this.liveVoices.get(pitch) === voice) {
+                this.liveVoices.delete(pitch);
+            }
+            gainNode.disconnect();
+            oscillator.disconnect();
         }
-        gainNode.disconnect();
-        oscillator.disconnect();
-      }
     }
 
     // util
 
     panic() {
-      const now = this.audioContext.currentTime;
-      for(const noteId of this.scheduledVoices.keys()) {
-        this.triggerRelease(noteId, now);
-      }
+        const now = this.audioContext.currentTime;
+        for(const noteId of this.scheduledVoices.keys()) {
+            this.triggerRelease(noteId, now);
+        }
     }
 
     killAll() {
-      const now = this.audioContext.currentTime;
-      
-      for(const voice of this.scheduledVoices.values()) {
-        voice.gainNode.gain.cancelScheduledValues(now);
-        voice.gainNode.gain.setValueAtTime(0, now);
-        voice.oscillator.stop(now);
-        voice.gainNode.disconnect();
-        voice.oscillator.disconnect();
-      }
+        const now = this.audioContext.currentTime;
+        
+        for(const voice of this.scheduledVoices.values()) {
+            voice.gainNode.gain.cancelScheduledValues(now);
+            voice.gainNode.gain.setValueAtTime(0, now);
+            voice.oscillator.stop(now);
+            voice.gainNode.disconnect();
+            voice.oscillator.disconnect();
+        }
 
-      this.scheduledVoices.clear();
+        this.scheduledVoices.clear();
 
-      for(const voice of this.liveVoices.values()) {
-        voice.gainNode.gain.cancelScheduledValues(now);
-        voice.gainNode.gain.setValueAtTime(0, now);
-        voice.oscillator.stop(now);
-        voice.gainNode.disconnect();
-        voice.oscillator.disconnect();
-      }
+        for(const voice of this.liveVoices.values()) {
+            voice.gainNode.gain.cancelScheduledValues(now);
+            voice.gainNode.gain.setValueAtTime(0, now);
+            voice.oscillator.stop(now);
+            voice.gainNode.disconnect();
+            voice.oscillator.disconnect();
+        }
 
-      this.liveVoices.clear();
+        this.liveVoices.clear();
     }
 
     setMasterVolume(volume: number) {
-      const clamped = Math.max(0, Math.min(1, volume));
-      this.masterGain.gain.setTargetAtTime(clamped, this.audioContext.currentTime, 0.01);
+        const clamped = Math.max(0, Math.min(1, volume));
+        this.masterGain.gain.setTargetAtTime(clamped, this.audioContext.currentTime, 0.01);
     }
 
     getActiveVoiceCount(): number {
-      return this.scheduledVoices.size + this.liveVoices.size;
+        return this.scheduledVoices.size + this.liveVoices.size;
     }
 
     async dispose() {
-      this.killAll();
+        this.killAll();
     }
 }

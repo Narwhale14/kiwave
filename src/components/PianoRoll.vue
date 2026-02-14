@@ -7,6 +7,9 @@ import { getAudioEngine } from '../services/audioEngineManager';
 import { snap, snapDivision } from '../util/snap';
 import { playbackMode, registerPatternCallbacks, unregisterPatternCallbacks } from '../services/playbackModeManager';
 import BaseDropdown from './modals/BaseDropdown.vue';
+import NoteAutomationOverlay from './features/NoteAutomationOverlay.vue';
+import { ALL_PARAMETERS, PARAMETER_MAP } from '../audio/automation/parameter';
+import type { AutomationCurve } from '../audio/automation/types';
 
 let noteIdCounter = 0;
 
@@ -45,6 +48,7 @@ const state = reactive({
   hoverNote: null as NoteBlock | null,
   cachedLength: 1,
   resizingNote: null as NoteBlock | null,
+  resizeInitialLength: 0,
   draggingNote: null as NoteBlock | null,
   dragStart: { row: 0, col: 0}
 });
@@ -57,6 +61,54 @@ const playhead = reactive({
 const rowHeight = ref(15);
 const colWidth = 80;
 const beatsPerBar = 4;
+
+// AUTOMATION
+
+const activeAutomationLane = ref<string | null>(null);
+const activeLaneDef = computed(() => activeAutomationLane.value ? PARAMETER_MAP.get(activeAutomationLane.value) ?? null : null);
+
+function toggleLane(parameterId: string) {
+  if(activeAutomationLane.value === parameterId) {
+    activeAutomationLane.value = null;
+    return;
+  }
+
+  for(const note of props.roll.getNoteData) {
+    props.roll.activateLane(note.id, parameterId);
+  }
+
+  activeAutomationLane.value = parameterId;
+}
+
+function onAutomationUpdate(noteId: string, curve: AutomationCurve) {
+  props.roll.updateCurve(noteId, curve);
+}
+
+function getOverlayLayout(noteRow: number): { heightPx: number; offsetY: number; snapInterval: number | null } {
+  const def = activeLaneDef.value;
+  if(!def) return { heightPx: rowHeight.value, offsetY: 0, snapInterval: null };
+
+  const rh = rowHeight.value;
+  const overlayRows = def.overlayRows;
+
+  if(overlayRows === 'note') {
+    return { heightPx: rh, offsetY: 0, snapInterval: def.snapInterval };
+  } else if(overlayRows === 'roll') {
+    return {
+      heightPx: (notes.length - 1) * rh,
+      offsetY: noteRow * rh - rh / 2,
+      snapInterval: def.snapInterval,
+    };
+  } else {
+    // fixed row count, centered on the note
+    const rows = overlayRows as number;
+    return {
+      heightPx: rows * rh,
+      offsetY: ((rows - 1) / 2) * rh,
+      snapInterval: def.snapInterval,
+    };
+  }
+}
 
 // LIVE PREVIEW (keyboard sidebar)
 
@@ -142,6 +194,8 @@ function handlePointerMove(event: PointerEvent) {
 
 async function handlePointerDown(event: PointerEvent) {
   if(!state.hoverCell) return;
+  if(activeAutomationLane.value) return; // note editing disabled while a lane is active
+
   const hovered = props.roll.getHoveredNote(state.hoverCell);
 
   // right click delete
@@ -159,6 +213,7 @@ async function handlePointerDown(event: PointerEvent) {
     // resize
     if(isNearRightEdge(event, hovered.note)) {
       state.resizingNote = hovered.note;
+      state.resizeInitialLength = hovered.note.length;
       props.roll.startResize(hovered.note);
       return;
     }
@@ -178,6 +233,11 @@ async function handlePointerDown(event: PointerEvent) {
     const noteId = generateNoteId();
     const midi = props.roll.addNote(state.hoverCell, noteId, state.cachedLength, 0.8, selectedChannelId.value);
 
+    // activate the current automation lane on the new note
+    if(activeAutomationLane.value) {
+      props.roll.activateLane(noteId, activeAutomationLane.value);
+    }
+
     // add note to scheduler
     if(engine.scheduler) {
       // converting note to scheduler note
@@ -190,7 +250,8 @@ async function handlePointerDown(event: PointerEvent) {
           startTime: newNote.col,
           duration: newNote.length,
           velocity: 0.8,
-          channel: newNote.channelId
+          channel: newNote.channelId,
+          automation: newNote.automation,
         });
 
         state.draggingNote = newNote;
@@ -213,7 +274,12 @@ async function handlePointerDown(event: PointerEvent) {
 
 function finalizeEdit() {
   if(props.roll.isResizing() && state.resizingNote) {
+    const note = state.resizingNote;
+    const oldLength = state.resizeInitialLength;
     props.roll.stopResize();
+    if(note.automation.size > 0 && note.length !== oldLength) {
+      props.roll.updateAutomationForResize(note.id, oldLength, note.length);
+    }
     updatePatternLoop();
     state.resizingNote = null;
   }
@@ -274,7 +340,8 @@ function loadPatternNotes() {
       startTime: note.col,
       duration: note.length,
       velocity: 0.8,
-      channel: note.channelId
+      channel: note.channelId,
+      automation: note.automation,
     });
   });
 
@@ -358,9 +425,21 @@ onBeforeUnmount(() => {
         width="30"
       />
       <div class="flex-1" />
+
+      <!-- automation lane toggles -->
+      <button v-for="param in ALL_PARAMETERS" :key="param.id" class="px-2 h-6 rounded text-xs font-medium util-button" :title="`Toggle ${param.label} automation`"
+        :class="{ 'opacity-100': activeAutomationLane === param.id, 'opacity-50': activeAutomationLane !== param.id }"
+        :style="activeAutomationLane === param.id ? { color: param.color, outline: `1px solid ${param.color}` } : {}"
+        @pointerdown.stop
+        @click="toggleLane(param.id)"
+      >
+        {{ param.label }}
+      </button>
+
       <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="resetWindow?.()" title="Reset position and size">
         <span class="pi pi-refresh text-xs" />
       </button>
+
       <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="closeWindow?.()" title="Close window">
         <span class="pi pi-times text-xs" />
       </button>
@@ -417,7 +496,15 @@ onBeforeUnmount(() => {
             width: `${block.length * colWidth}px`,
             height: `${rowHeight}px`
           }"
-        ></div>
+        >
+          <NoteAutomationOverlay v-if="activeLaneDef && block.automation.has(activeLaneDef.id)" v-bind="getOverlayLayout(block.row)"
+            :curve="block.automation.get(activeLaneDef.id)!"
+            :noteLength="block.length"
+            :widthPx="block.length * colWidth"
+            :paramColor="activeLaneDef.color"
+            @update="(c) => onAutomationUpdate(block.id, c)"
+          />
+        </div>
 
         <!-- hover cell -->
         <div v-if="state.hoverCell && !state.hoverNote" class="absolute border-2 opacity-50 pointer-events-none rounded-sm note-outline-color"

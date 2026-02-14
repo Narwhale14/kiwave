@@ -1,5 +1,8 @@
 import { reactive } from 'vue';
 import { snapDivision, snapNearest, getSnapSize } from '../util/snap'
+import type { AutomationCurve } from './automation/types';
+import { PARAMETER_MAP } from './automation/parameter';
+import { createDefaultCurve, resizeNodes } from './automation/nodeOperations';
 
 export type Cell = { row: number; col: number };
 export type NoteBlock = {
@@ -9,7 +12,8 @@ export type NoteBlock = {
     length: number,
     velocity: number,
     channelId: string,
-    midi: number
+    midi: number,
+    automation: Map<string, AutomationCurve>
 };
 
 export class PianoRoll {
@@ -73,7 +77,7 @@ export class PianoRoll {
             return -1;
 
         const midi = this.rowToMidi(cell.row);
-        this._noteData.push({ id, ...cell, length, velocity, channelId, midi });
+        this._noteData.push({ id, ...cell, length, velocity, channelId, midi, automation: new Map() });
         this._state.version++;
         return midi;
     }
@@ -110,6 +114,48 @@ export class PianoRoll {
         note.row = Math.max(0, Math.min(newRow, this._keyboardNotes.length - 1));
         note.col = Math.max(0, newCol);
         note.midi = this.rowToMidi(note.row);
+        this._state.version++;
+    }
+
+    // AUTOMATION
+
+    activateLane(noteId: string, parameterId: string): AutomationCurve {
+        const note = this._noteData.find(n => n.id === noteId);
+        if(!note) throw new Error(`Note ${noteId} not found`);
+
+        if(note.automation.has(parameterId)) {
+            return note.automation.get(parameterId)!;
+        }
+
+        const def = PARAMETER_MAP.get(parameterId)!;
+        const defaultNorm = def.getDefaultNormalized?.(note.midi) ?? def.defaultNormalized;
+        const curve = createDefaultCurve(parameterId, note.length, defaultNorm);
+        note.automation.set(parameterId, curve);
+        this._state.version++;
+        return curve;
+    }
+
+    updateCurve(noteId: string, curve: AutomationCurve): void {
+        const note = this._noteData.find(n => n.id === noteId);
+        if(!note) return;
+        note.automation.set(curve.parameterId, curve);
+        this._state.version++;
+    }
+
+    deactivateLane(noteId: string, parameterId: string): void {
+        const note = this._noteData.find(n => n.id === noteId);
+        note?.automation.delete(parameterId);
+        this._state.version++;
+    }
+
+    updateAutomationForResize(noteId: string, oldLength: number, newLength: number): void {
+        const note = this._noteData.find(n => n.id === noteId);
+        if(!note) return;
+
+        for(const [id, curve] of note.automation) {
+            note.automation.set(id, { ...curve, nodes: resizeNodes(curve.nodes, oldLength, newLength) });
+        }
+        
         this._state.version++;
     }
 }

@@ -1,3 +1,6 @@
+import type { AutomationCurve, CompiledNoteAutomation } from './automation/types';
+import { PARAMETER_MAP } from './automation/parameter';
+import { deriveSegments } from './automation/nodeOperations';
 import type { ChannelManager } from './channelManager';
 
 /**
@@ -10,6 +13,7 @@ export interface SchedulerNote {
     duration: number;
     velocity: number;
     channel: string;
+    automation: Map<string, AutomationCurve>; // may be empty
 }
 
 /**
@@ -193,6 +197,26 @@ export class Scheduler {
         }
     }
 
+    private compileNoteAutomation(automation: Map<string, AutomationCurve>, noteMidi: number, noteStartAudioTime: number, bpm: number): CompiledNoteAutomation {
+        const result: CompiledNoteAutomation = new Map();
+        if(!automation.size) return result;
+
+        for(const [parameterId, curve] of automation) {
+            const def = PARAMETER_MAP.get(parameterId);
+            if(!def) continue;
+
+            const segments = deriveSegments(curve.nodes);
+            const compiled = def.compile(segments, noteMidi, noteStartAudioTime, bpm);
+
+            for(const [paramName, events] of Object.entries(compiled)) {
+                if(!result.has(paramName)) result.set(paramName, []);
+                result.get(paramName)!.push(...events);
+            }
+        }
+
+        return result;
+    }
+
     private scheduleNoteIfInWindow(note: SchedulerNote, noteStartBeat: number, currentBeat: number, scheduleUntilBeat: number, now: number) {
         const noteEndBeat = noteStartBeat + note.duration;
         if(noteEndBeat < currentBeat) return;
@@ -208,7 +232,8 @@ export class Scheduler {
         // schedule note on
         if(noteStartBeat >= currentBeat - lookBehindTolerance && noteStartBeat < scheduleUntilBeat && !this.scheduledNoteOns.has(noteOnKey)) {
             const scheduleTime = Math.max(now, this.beatToAudioTime(noteStartBeat));
-            ch.instrument.triggerAttack(note.id, note.pitch, scheduleTime, note.velocity);
+            const compiled = this.compileNoteAutomation(note.automation, note.pitch, scheduleTime, this._bpm);
+            ch.instrument.triggerAttack(note.id, note.pitch, scheduleTime, note.velocity, compiled);
             this.scheduledNoteOns.add(noteOnKey);
         }
 

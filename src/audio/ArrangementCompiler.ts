@@ -76,7 +76,8 @@ export class ArrangementCompiler {
                 startTime: noteStartInArrangement,
                 duration: noteDuration,
                 velocity: note.velocity,
-                channel: note.channelId
+                channel: note.channelId,
+                automation: note.automation,
             });
         }
 
