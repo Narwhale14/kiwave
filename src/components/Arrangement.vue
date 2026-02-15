@@ -220,9 +220,9 @@ function handlePointerDown(event: PointerEvent) {
   const track = Math.floor(y / trackHeight);
 
   const clip = arrangement.getClipAt(track, rawBeat);
-  if (!clip) return;
+  if(!clip) return;
 
-  if (event.button === 2) {
+  if(event.button === 2) {
     if (selectedClipId.value === clip.id) selectedClipId.value = null;
     arrangement.removeClip(clip.id);
     recompileArrangement();
@@ -231,7 +231,7 @@ function handlePointerDown(event: PointerEvent) {
 
   selectedClipId.value = clip.id;
   interacting.value = true;
-  if (isNearRightEdge(x, clip)) {
+  if(isNearRightEdge(x, clip)) {
     state.resizingClip = clip;
     state.initialDuration = clip.duration;
     cursor.value = 'w-resize';
@@ -362,7 +362,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- playhead (only visible in arrangement mode) -->
-        <div v-if="playbackMode === 'arrangement' && (playhead.playing || playhead.col > 0)"
+        <div v-if="playbackMode === 'arrangement' && playhead.playing"
           class="absolute w-0.75 pointer-events-none playhead-color"
           :style="{
             transform: `translateX(${playhead.col * beatWidth}px)`,

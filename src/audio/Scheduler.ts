@@ -291,6 +291,10 @@ export class Scheduler {
         this.scheduledNoteOns.clear();
         this.scheduledNoteOffs.clear();
 
+        if(this.playheadCallback) {
+            this.playheadCallback(this.playheadPos);
+        }
+
         // schedule immediately to catch notes at playhead position
         this.schedulerTick();
         this.schedulerTimerId = window.setInterval(this.schedulerTick, this.scheduleInterval);
@@ -371,14 +375,18 @@ export class Scheduler {
     }
 
     setLoop(enabled: boolean, start?: number, end?: number) {
+        // capture state before changing anything
+        const wasPlaying = this._isPlaying;
         const currentBeat = this.getCurrentBeat();
 
         this._loopEnabled = enabled;
         if(start !== undefined) this._loopStart = Math.max(0, start);
         if(end !== undefined) this._loopEnd = Math.max(this._loopStart, end);
 
-        if(this._isPlaying && this._loopEnabled) {
+        // if playing, rebase time anchor to prevent modulo jumps
+        if(wasPlaying && this._loopEnabled) {
             if(currentBeat >= this._loopEnd || currentBeat < this._loopStart) {
+                // reset to start of loop
                 this.startTime = this.audioContext.currentTime;
                 this.pauseTime = this.loopStart;
 
@@ -386,10 +394,12 @@ export class Scheduler {
                 this.scheduledNoteOns.clear();
                 this.scheduledNoteOffs.clear();
 
-                if(this.playheadCallback) {
-                    this.playheadCallback(this.loopStart);
-                }
+                if(this.playheadCallback) this.playheadCallback(this.loopStart);
                 this.schedulerTick();
+            } else {
+                // rebase execution to current beat
+                this.startTime = this.audioContext.currentTime;
+                this.pauseTime = currentBeat;
             }
         }
     }

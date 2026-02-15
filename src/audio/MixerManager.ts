@@ -16,8 +16,18 @@ export interface MixerTrack {
 export class MixerManager {
     private tracks: MixerTrack[] = reactive([]);
     private soloTrackId: string | null = null;
-    private nextId = 1;
     onMuteStateChanged: (() => void) | null = null;
+
+    private getNextMixerNum(): number {
+        const used = new Set(
+            this.tracks
+                .filter(t => t.id !== 'master')
+                .map(t => parseInt(t.id.replace('mixer-', ''), 10))
+        );
+        let n = 1;
+        while(used.has(n)) n++;
+        return n;
+    }
 
     constructor() {
         this.tracks.push({
@@ -34,10 +44,11 @@ export class MixerManager {
     }
 
     addMixer(name?: string) {
-        const id = `mixer-${this.nextId}`;
+        const num = this.getNextMixerNum();
+        const id = `mixer-${num}`;
         this.tracks.push({
             id,
-            name: name || `Mixer ${this.nextId}`,
+            name: name || `Mixer ${num}`,
             route: 0,
             volume: 1,
             pan: 0,
@@ -46,7 +57,6 @@ export class MixerManager {
             peakDbL: -Infinity,
             peakDbR: -Infinity,
         });
-        this.nextId++;
     }
 
     removeMixer(id: string) {
@@ -64,7 +74,11 @@ export class MixerManager {
     }
 
     getAllMixers(): MixerTrack[] {
-        return Array.from(this.tracks.values());
+        return [...this.tracks].sort((a, b) => {
+            if(a.id === 'master') return -1;
+            if(b.id === 'master') return 1;
+            return parseInt(a.id.replace('mixer-', ''), 10) - parseInt(b.id.replace('mixer-', ''), 10);
+        });
     }
 
     setName(id: string, name: string) {

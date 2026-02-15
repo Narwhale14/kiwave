@@ -222,7 +222,7 @@ function handlePointerMove(event: PointerEvent) {
 
     const noteIndex = notes.length - 1 - newRow;
     engine.scheduler.updateNote(state.draggingNote.id, {
-      startTime: newCol,
+      startTime: Math.max(0, newCol),
       pitch: notes[noteIndex]?.midi
     });
   }

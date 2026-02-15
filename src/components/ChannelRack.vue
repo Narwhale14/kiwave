@@ -82,13 +82,23 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex flex-col w-full bg-mix-15">
     <!-- toolbar / drag handle -->
-    <div class="window-header border-b-2 border-mix-30 bg-mix-15 px-3 shrink-0"
-      @pointerdown.stop="dragWindow?.($event)">
-      <span class="text-xs font-medium flex-1">Channel Rack</span>
+    <div class="window-header border-b-2 border-mix-30 bg-mix-15 px-3 shrink-0" @pointerdown.stop="dragWindow?.($event)">
+      <span class="text-xs font-medium">Channel Rack</span>
+
+      <div class="flex justify-center items-center p-1 shrink-0">
+        <button ref="addButtonRef" class="util-button flex justify-center items-center w-6" @click="openPicker">
+          <span class="pi pi-plus text-sm"></span>
+        </button>
+      </div>
+
+      <!-- separator -->
+      <div class="flex-1" />
+
       <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="resetWindow?.()" title="Reset position and size">
         <span class="pi pi-refresh text-xs" />
       </button>
-      <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="closeWindow?.()">
+
+      <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="closeWindow?.()" title="Close window">
         <span class="pi pi-times text-xs" />
       </button>
     </div>
@@ -127,12 +137,6 @@ onBeforeUnmount(() => {
 
     <div v-if="channels.length === 0" class="flex items-center justify-center flex-1 opacity-30 text-xs">
       No channels
-    </div>
-
-    <div class="flex justify-center items-center p-1">
-      <button ref="addButtonRef" class="flex justify-center items-center w-10 h-7 bg-mix-10 rounded-lg" @click="openPicker">
-        <span class="pi pi-plus text-sm"></span>
-      </button>
     </div>
 
     <Teleport to="body">

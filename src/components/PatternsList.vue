@@ -17,7 +17,7 @@ const deletePos = ref({ x: 0, y: 0 });
 const patternToDelete = ref<number | null>(null);
 
 function openAddModal() {
-  if (addButton.value) {
+  if(addButton.value) {
     const rect = addButton.value.getBoundingClientRect();
     addPos.value = { x: rect.right, y: rect.top };
   }

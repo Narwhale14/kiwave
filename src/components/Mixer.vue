@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { inject, computed, ref } from 'vue';
+import { inject, computed, ref, watch, nextTick } from 'vue';
 import { mixerManager, type MixerTrack } from '../audio/MixerManager';
 import { gainToDb } from '../util/miscUtil';
 import { getAudioEngine } from '../services/audioEngineManager';
 import Slider from './controls/Slider.vue'
 import Knob from './controls/Knob.vue'
 import VolumeMeter from './meters/VolumeMeter.vue';
+import ConfirmationModal from './modals/ConfirmationModal.vue';
 
 const closeWindow = inject<() => void>('closeWindow');
 const resetWindow = inject<() => void>('resetWindow');
@@ -14,6 +15,47 @@ const dragWindow = inject<(e: PointerEvent) => void>('dragWindow');
 const engine = getAudioEngine();
 const tracks = computed(() => mixerManager.getAllMixers());
 const activeTrackId = ref<string | null>('master');
+
+const name = ref('');
+const nameInput = ref<HTMLInputElement | null>(null);
+const addButtonRef = ref<HTMLButtonElement | null>(null);
+const addModalVisible = ref(false);
+const addPos = ref({ x: 0, y: 0 });
+
+const nextMixerNum = computed(() => {
+  const used = new Set(tracks.value.filter(t => t.id !== 'master').map(t => parseInt(t.id.replace('mixer-', ''), 10)));
+  let n = 1;
+  while(used.has(n)) n++;
+  return n;
+});
+
+function openAddModal() {
+  if(addButtonRef.value) {
+    const rect = addButtonRef.value.getBoundingClientRect();
+    addPos.value = { x: rect.right, y: rect.top };
+  }
+  addModalVisible.value = true;
+}
+
+function createMixer() {
+  engine.addMixer(name.value.trim() || undefined);
+  name.value = '';
+  addModalVisible.value = false;
+}
+
+function onAddKeyDown(event: KeyboardEvent) {
+  if(event.key === 'Enter') {
+    event.preventDefault();
+    createMixer();
+  }
+}
+
+watch(addModalVisible, async (visible) => {
+  if(visible) {
+    await nextTick();
+    nameInput.value?.focus();
+  }
+});
 
 function muteCircleColor(channel: MixerTrack) {
   if(channel.solo) return 'var(--playhead)';
@@ -60,7 +102,16 @@ function commitRoute(id: string, event: Event) {
     <!-- toolbar / drag handle -->
     <div class="window-header border-b-2 border-mix-30 bg-mix-15 px-3 shrink-0"
       @pointerdown.stop="dragWindow?.($event)">
-      <span class="text-xs font-medium flex-1">Mixer</span>
+      <span class="text-xs font-medium">Mixer</span>
+
+      <div class="flex justify-center items-center p-1 shrink-0">
+        <button ref="addButtonRef" class="util-button flex justify-center items-center w-6" @click="openAddModal" title="Add mixer track">
+          <span class="pi pi-plus text-sm"></span>
+        </button>
+      </div>
+
+      <!-- separator -->
+      <div class="flex-1" />
 
       <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="resetWindow?.()" title="Reset position and size">
         <span class="pi pi-refresh text-xs" />
@@ -71,7 +122,7 @@ function commitRoute(id: string, event: Event) {
       </button>
     </div>
 
-    <div class="flex flex-row flex-1 min-w-0 m-h-0 overflow-auto">
+    <div class="flex flex-row flex-1 h-full overflow-x-auto min-w-0">
       <div v-for="track in tracks" :key="track.id" class="flex flex-col w-28 items-center min-w-0 gap-1 px-2 border-r-3 border-mix-20 hover:bg-mix-20 py-1 transition-colors shrink-0" @pointerdown="activeTrackId = track.id">
         <input v-model="track.name" class="px2 py-0.5 rounded text-sm font-mono bg-mix-10 focus:outline-none w-full text-center truncate px-1 border-2 border-mix-30"
           @focus="($event.target as HTMLInputElement).select()"
@@ -124,4 +175,9 @@ function commitRoute(id: string, event: Event) {
       </div>
     </div>
   </div>
+
+  <!-- add mixer modal -->
+  <ConfirmationModal :visible="addModalVisible" :x="addPos.x" :y="addPos.y" @confirm="createMixer" @cancel="addModalVisible = false; name = ''">
+    <input ref="nameInput" v-model="name" @keydown="onAddKeyDown" :placeholder="`Mixer ${nextMixerNum} name`" class="bg-mix-25 p-2 rounded-md" />
+  </ConfirmationModal>
 </template>

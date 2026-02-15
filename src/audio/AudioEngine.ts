@@ -42,13 +42,6 @@ export class AudioEngine {
             }
         }
 
-        // add default mixers
-        if(mixerManager.getAllMixers().length === 1) {
-            this._addMixer('Insert 1');
-            this._addMixer('Insert 2');
-            this._addMixer('Insert 3');
-        }
-
         // wire up existing channels (HMR)
         for(const ch of channelManager.getAllChannels()) {
             this._audioGraph.addPannerNode(ch.id, ch.instrument.getOutputNode(), ch.mixerTrack);
@@ -221,11 +214,13 @@ export class AudioEngine {
 
     // MIXER MANAGEMENT
 
-    private _addMixer(name: string) {
+    addMixer(name?: string) {
         mixerManager.addMixer(name);
         const tracks = mixerManager.getAllMixers();
         const track = tracks[tracks.length - 1]!;
         this._audioGraph.addGainNode(track.id, track.route);
+
+        console.log(`mixer ${track.name} added`);
     }
 
     removeMixer(mixerId: string) {
