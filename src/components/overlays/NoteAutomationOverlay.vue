@@ -22,6 +22,7 @@ const props = defineProps<{
   snapInterval: number | null; // normalized snap step; null = free. shift bypasses.
   curveStyle?: 'bezier' | 'power'; // default = 'bezier'
   readOnly?: boolean; // path only — no nodes/handles/interaction
+  defaultValue?: number; // normalized default; right-click on node resets to this
 }>();
 
 const emit = defineEmits<{
@@ -161,6 +162,12 @@ function onLinePointerDown(event: PointerEvent) {
 function onNodePointerDown(event: PointerEvent, nodeId: string) {
   if(event.button === 2) {
     emit('update', { ...props.curve, nodes: deleteNode(props.curve.nodes, nodeId) });
+    return;
+  }
+
+  if(event.button === 0 && event.ctrlKey) {
+    const node = props.curve.nodes.find(n => n.id === nodeId)!;
+    emit('update', { ...props.curve, nodes: moveNode(props.curve.nodes, nodeId, node.beat, props.defaultValue ?? 0.5) });
     return;
   }
 

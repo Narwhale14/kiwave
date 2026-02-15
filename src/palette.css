@@ -56,6 +56,10 @@
   color: var(--key-white);
 }
 
+.hover\:key:hover {
+  border-color: var(--playhead);
+}
+
 .general-white {
   background-color: var(--general-white);
 }

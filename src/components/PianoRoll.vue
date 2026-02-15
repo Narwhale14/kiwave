@@ -7,11 +7,13 @@ import { getAudioEngine } from '../services/audioEngineManager';
 import { snap, snapDivision } from '../util/snap';
 import { playbackMode, registerPatternCallbacks, unregisterPatternCallbacks } from '../services/playbackModeManager';
 import BaseDropdown from './modals/BaseDropdown.vue';
-import NoteAutomationOverlay from './features/NoteAutomationOverlay.vue';
+import NoteAutomationOverlay from './overlays/NoteAutomationOverlay.vue';
 import { ALL_PARAMETERS, PARAMETER_MAP } from '../audio/automation/parameter';
 import type { AutomationCurve } from '../audio/automation/types';
 import { shiftNodeValues } from '../audio/automation/nodeOperations';
 import { manipulateColor } from '../util/miscUtil';
+
+const VELOCITY_SNAP = 0.05;
 
 let noteIdCounter = 0;
 
@@ -49,6 +51,7 @@ const state = reactive({
   hoverCell: null as Cell | null,
   hoverNote: null as NoteBlock | null,
   cachedLength: 1,
+  cachedVelocity: 0.8,
   resizingNote: null as NoteBlock | null,
   resizeInitialLength: 0,
   draggingNote: null as NoteBlock | null,
@@ -98,6 +101,7 @@ function onAutomationUpdate(noteId: string, curve: AutomationCurve) {
 
 function cacheNoteState(note: NoteBlock) {
   state.cachedLength = note.length;
+  state.cachedVelocity = note.velocity;
   for(const [parameterId, curve] of note.automation) {
     cachedCurves.set(parameterId, { curve, noteMidi: note.midi });
   }
@@ -266,7 +270,7 @@ async function handlePointerDown(event: PointerEvent) {
   // place
   if(event.button === 0 && !hovered?.note) {
     const noteId = generateNoteId();
-    const midi = props.roll.addNote(state.hoverCell, noteId, state.cachedLength, 0.8, selectedChannelId.value);
+    const midi = props.roll.addNote(state.hoverCell, noteId, state.cachedLength, state.cachedVelocity, selectedChannelId.value);
 
     // add note to scheduler
     if(engine.scheduler) {
@@ -293,7 +297,7 @@ async function handlePointerDown(event: PointerEvent) {
           pitch: newNote.midi,
           startTime: newNote.col,
           duration: newNote.length,
-          velocity: 0.8,
+          velocity: newNote.velocity,
           channel: newNote.channelId,
           automation: newNote.automation,
         });
@@ -314,6 +318,15 @@ async function handlePointerDown(event: PointerEvent) {
 
     return;
   }
+}
+
+function handleWheel(event: WheelEvent) {
+  if(!event.ctrlKey || !state.hoverNote || activeAutomationLane.value) return;
+  event.preventDefault();
+  const steps = Math.round(state.hoverNote.velocity / VELOCITY_SNAP);
+  const newVelocity = Math.max(0, Math.min(20, steps + (event.deltaY > 0 ? -1 : 1))) * VELOCITY_SNAP;
+  props.roll.setVelocity(state.hoverNote.id, newVelocity);
+  engine.scheduler.updateNote(state.hoverNote.id, { velocity: newVelocity });
 }
 
 function finalizeEdit() {
@@ -389,7 +402,7 @@ function loadPatternNotes() {
       pitch: note.midi,
       startTime: note.col,
       duration: note.length,
-      velocity: 0.8,
+      velocity: note.velocity,
       channel: note.channelId,
       automation: note.automation,
     });
@@ -467,7 +480,7 @@ onBeforeUnmount(() => {
       @pointerdown.stop="dragWindow?.($event)">
       <span class="text-xs font-medium">{{ props.name }} - </span>
 
-      <BaseDropdown
+      <BaseDropdown title="Instrument"
         v-model="selectedChannelId"
         :items="channels"
         item-label="name"
@@ -476,7 +489,7 @@ onBeforeUnmount(() => {
         width="30"
       />
 
-      <BaseDropdown
+      <BaseDropdown title="Automation Lane"
         :model-value="activeAutomationLane"
         :items="ALL_PARAMETERS"
         item-label="label"
@@ -526,7 +539,7 @@ onBeforeUnmount(() => {
           @pointerup="stopNote(key.midi)"
           @pointerleave="stopNote(key.midi)"
           :class="[
-            'w-full text-sm select-none border-2 border-transparent hover:border-[#646cff]',
+            'w-full text-sm select-none border-2 border-transparent hover:key border-rounded',
             key.isBlack ? 'key-black' : 'key-white'
           ]"
           :style="{ height: rowHeight + 'px' }"> 
@@ -540,6 +553,7 @@ onBeforeUnmount(() => {
         @pointerleave="finalizeEdit"
         @pointerdown="handlePointerDown"
         @pointerup="finalizeEdit"
+        @wheel="handleWheel"
         @contextmenu.prevent
         :style="{
           cursor: cursor,
@@ -561,37 +575,66 @@ onBeforeUnmount(() => {
         ></div>
 
         <!-- notes -->
-        <div v-for="(block, i) in roll.getNoteData" :key="i" class="absolute opacity-80 rounded-sm note-color"
-          :style="{
-            top: `${block.row * rowHeight}px`,
-            left: `${block.col * colWidth}px`,
-            width: `${block.length * colWidth}px`,
-            height: `${rowHeight}px`
-          }"
-        >
-          <NoteAutomationOverlay v-if="activeLaneDef && block.automation.has(activeLaneDef.id)" v-bind="getOverlayLayout(block.row)"
-            :curve="block.automation.get(activeLaneDef.id)!"
-            :noteLength="block.length"
-            :widthPx="block.length * colWidth"
-            :paramColor="activeLaneDef.color"
-            :curveStyle="activeLaneDef.curveStyle ?? 'bezier'"
-            @update="(c) => onAutomationUpdate(block.id, c)"
-          />
-          <!-- read-only curve previews -->
-          <template v-for="paramId in visibleCurveLanes" :key="`ro-${paramId}`">
-            <NoteAutomationOverlay
-              v-if="block.automation.has(paramId) && PARAMETER_MAP.get(paramId) && (!activeLaneDef || activeLaneDef.id !== paramId)"
-              v-bind="getOverlayLayout(block.row, PARAMETER_MAP.get(paramId))"
-              :curve="block.automation.get(paramId)!"
+        <template v-for="(block, i) in roll.getNoteData" :key="i">
+          <!-- visual layer: clipped to note bounds for fills/label -->
+          <div class="absolute opacity-80 rounded-sm overflow-hidden pointer-events-none"
+            :style="{
+              top: `${block.row * rowHeight}px`,
+              left: `${block.col * colWidth}px`,
+              width: `${block.length * colWidth}px`,
+              height: `${rowHeight}px`
+            }"
+          >
+            <!-- dim background (empty velocity) -->
+            <div class="absolute inset-0 note-color opacity-30" />
+
+            <!-- velocity fill from bottom -->
+            <div v-if="block.velocity >= VELOCITY_SNAP + 1e-4" class="absolute bottom-0 left-0 w-full note-color" :style="{ height: `${block.velocity * 100}%` }" />
+            
+              <!-- velocity label on hover -->
+            <div v-if="state.hoverNote?.id === block.id"
+              class="absolute inset-y-0 left-0 flex items-center pl-1 z-10">
+              <span class="text-white font-mono leading-none select-none" style="font-size: 9px;">
+                {{ Math.round(block.velocity * 100) }}%
+              </span>
+            </div>
+          </div>
+
+          <!-- overlay layer: not clipped, for automation overlays -->
+          <div class="absolute"
+            :style="{
+              top: `${block.row * rowHeight}px`,
+              left: `${block.col * colWidth}px`,
+              width: `${block.length * colWidth}px`,
+              height: `${rowHeight}px`
+            }"
+          >
+            <NoteAutomationOverlay v-if="activeLaneDef && block.automation.has(activeLaneDef.id)" v-bind="getOverlayLayout(block.row)"
+              :curve="block.automation.get(activeLaneDef.id)!"
               :noteLength="block.length"
               :widthPx="block.length * colWidth"
-              :paramColor="PARAMETER_MAP.get(paramId)!.color"
-              :curveStyle="PARAMETER_MAP.get(paramId)!.curveStyle ?? 'bezier'"
-              :snapInterval="null"
-              :readOnly="true"
+              :paramColor="activeLaneDef.color"
+              :curveStyle="activeLaneDef.curveStyle ?? 'bezier'"
+              :defaultValue="activeLaneDef.getDefaultNormalized ? activeLaneDef.getDefaultNormalized(block.midi) : activeLaneDef.defaultNormalized"
+              @update="(c) => onAutomationUpdate(block.id, c)"
             />
-          </template>
-        </div>
+
+            <!-- read-only curve previews -->
+            <template v-for="paramId in visibleCurveLanes" :key="`ro-${paramId}`">
+              <NoteAutomationOverlay
+                v-if="block.automation.has(paramId) && PARAMETER_MAP.get(paramId) && (!activeLaneDef || activeLaneDef.id !== paramId)"
+                v-bind="getOverlayLayout(block.row, PARAMETER_MAP.get(paramId))"
+                :curve="block.automation.get(paramId)!"
+                :noteLength="block.length"
+                :widthPx="block.length * colWidth"
+                :paramColor="PARAMETER_MAP.get(paramId)!.color"
+                :curveStyle="PARAMETER_MAP.get(paramId)!.curveStyle ?? 'bezier'"
+                :snapInterval="null"
+                :readOnly="true"
+              />
+            </template>
+          </div>
+        </template>
 
         <!-- hover cell -->
         <div v-if="state.hoverCell && !state.hoverNote && !activeLaneDef" class="absolute border-2 opacity-50 pointer-events-none rounded-sm note-outline-color"
@@ -604,7 +647,7 @@ onBeforeUnmount(() => {
         ></div>
 
         <!-- hover note -->
-        <div v-if="state.hoverNote && !activeLaneDef" class="absolute border-2 opacity-50 pointer-events-none rounded-sm note-outline-color"
+        <div v-if="state.hoverNote && !activeLaneDef" class="absolute border-2 opacity-25 pointer-events-none rounded-sm note-outline-color"
           :style="{
             top: `${state.hoverNote.row * rowHeight}px`,
             left: `${state.hoverNote.col * colWidth}px`,

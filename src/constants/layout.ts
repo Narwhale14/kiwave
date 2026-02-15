@@ -12,11 +12,13 @@ export const PATTERNS_LIST_WIDTH_MAX = 500;
 export const HEADER_HEIGHT = 48;
 export const HEADER_HEIGHT_MIN = 32;
 export const HEADER_HEIGHT_MAX = 120;
-export const CHANNEL_RACK_WIDTH_DEFAULT = 300;
+export const CHANNEL_RACK_WIDTH_DEFAULT = 400;
 
-// percents
-export const ARRANGEMENT_HEIGHT_FILL_DEFAULT = 1 / 3;
+// percent heights
+export const ARRANGEMENT_HEIGHT_FILL_DEFAULT = 3 / 8;
+export const PIANO_ROLL_HEIGHT_FILL_DEFAULT = 5 / 8;
+export const MIXER_HEIGHT_FILL_DEFAULT = 3 / 8;
+
+// percent widths
 export const ARRANGEMENT_WIDTH_FILL_DEFAULT = 2 / 3;
-export const MIXER_HEIGHT_FILL_DEFAULT = 1 / 3;
 export const MIXER_WIDTH_FILL_DEFAULT = 1 / 3;
-export const PIANO_ROLL_HEIGHT_FILL_DEFAULT = 2 / 3;

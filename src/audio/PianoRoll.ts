@@ -87,6 +87,13 @@ export class PianoRoll {
         this._state.version++;
     }
 
+    setVelocity(noteId: string, velocity: number) {
+        const note = this._noteData.find(n => n.id === noteId);
+        if(!note) return;
+        note.velocity = velocity;
+        this._state.version++;
+    }
+
     startResize(note: NoteBlock) {
         this.resizingNote = note;
     }

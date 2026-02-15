@@ -1,12 +1,13 @@
 import { midiToFrequency } from "../util/midiUtils";
 import type { CompiledNoteAutomation } from "./automation/types";
 
-// automationGain (0-1 raw, default 0.5) → envelopeGain (velocity*BASE_GAIN*2) → masterGain
-// Final gain at default automation: 0.5 * velocity * BASE_GAIN * 2 = velocity * BASE_GAIN
+// automationGain (0-1 raw, default 0.5) → envelopeGain (velocity*BASE_GAIN*2) → pannerNode → masterGain
+// final gain at default automation: 0.5 * velocity * BASE_GAIN * 2 = velocity * BASE_GAIN
 interface ActiveVoice {
     oscillator: OscillatorNode;
     automationGain: GainNode; // receives automation curves (gain param, 0-1)
-    envelopeGain: GainNode;   // receives ADSR / velocity
+    envelopeGain: GainNode; // receives ADSR / velocity
+    pannerNode: StereoPannerNode; // receives pan automation (-1 to 1, default 0)
     pitch: number;
 }
 
@@ -60,20 +61,22 @@ export class MiniSynth {
         const oscillator = this.audioContext.createOscillator();
         const automationGain = this.audioContext.createGain();
         const envelopeGain = this.audioContext.createGain();
+        const pannerNode = this.audioContext.createStereoPanner();
 
         oscillator.type = 'sine';
         oscillator.frequency.setValueAtTime(midiToFrequency(pitch), time);
 
-        // osc -> automationGain -> envelopeGain -> master
+        // osc -> automationGain -> envelopeGain -> pannerNode -> master
         oscillator.connect(automationGain);
         automationGain.connect(envelopeGain);
-        envelopeGain.connect(this.masterGain);
+        envelopeGain.connect(pannerNode);
+        pannerNode.connect(this.masterGain);
 
         // automationGain defaults to 0.5 (center); automation events override this
         automationGain.gain.setValueAtTime(0.5, time);
 
         // apply pre-compiled automation events to their dedicated node — no ADSR on this node
-        const voice: ActiveVoice = { oscillator, automationGain, envelopeGain, pitch };
+        const voice: ActiveVoice = { oscillator, automationGain, envelopeGain, pannerNode, pitch };
         for(const [paramName, events] of automation) {
             const param = this._resolveParam(voice, paramName);
             if(!param) continue;
@@ -103,8 +106,9 @@ export class MiniSynth {
     private _resolveParam(voice: ActiveVoice, paramName: string): AudioParam | null {
         switch(paramName) {
             case 'frequency': return voice.oscillator.frequency;
-            case 'gain':      return voice.automationGain.gain;
-            default:          return null;
+            case 'gain': return voice.automationGain.gain;
+            case 'pan': return voice.pannerNode.pan;
+            default: return null;
         }
     }
 
@@ -112,7 +116,7 @@ export class MiniSynth {
         const voice = this.scheduledVoices.get(noteId);
         if(!voice) return;
 
-        const { oscillator, automationGain, envelopeGain } = voice;
+        const { oscillator, automationGain, envelopeGain, pannerNode } = voice;
 
         envelopeGain.gain.cancelAndHoldAtTime(time);
         envelopeGain.gain.setTargetAtTime(0, time, this.releaseTime / 3);
@@ -123,9 +127,10 @@ export class MiniSynth {
             if(this.scheduledVoices.get(noteId) === voice) {
                 this.scheduledVoices.delete(noteId);
             }
+            oscillator.disconnect();
             automationGain.disconnect();
             envelopeGain.disconnect();
-            oscillator.disconnect();
+            pannerNode.disconnect();
         };
     }
 
@@ -140,13 +145,15 @@ export class MiniSynth {
         const oscillator = this.audioContext.createOscillator();
         const automationGain = this.audioContext.createGain();
         const envelopeGain = this.audioContext.createGain();
+        const pannerNode = this.audioContext.createStereoPanner();
 
         oscillator.type = 'sine';
         oscillator.frequency.setValueAtTime(midiToFrequency(pitch), now);
 
         oscillator.connect(automationGain);
         automationGain.connect(envelopeGain);
-        envelopeGain.connect(this.masterGain);
+        envelopeGain.connect(pannerNode);
+        pannerNode.connect(this.masterGain);
 
         automationGain.gain.setValueAtTime(0.5, now);
 
@@ -154,7 +161,7 @@ export class MiniSynth {
         envelopeGain.gain.setTargetAtTime(envelopeTarget, now, this.attackTime / 3);
 
         oscillator.start(now);
-        this.liveVoices.set(pitch, { oscillator, automationGain, envelopeGain, pitch });
+        this.liveVoices.set(pitch, { oscillator, automationGain, envelopeGain, pannerNode, pitch });
     }
 
     noteOff(pitch: number) {
@@ -162,7 +169,7 @@ export class MiniSynth {
         if(!voice) return;
 
         const now = this.audioContext.currentTime;
-        const { oscillator, automationGain, envelopeGain } = voice;
+        const { oscillator, automationGain, envelopeGain, pannerNode } = voice;
 
         envelopeGain.gain.cancelAndHoldAtTime(now);
         envelopeGain.gain.setTargetAtTime(0, now, this.releaseTime / 3);
@@ -173,9 +180,10 @@ export class MiniSynth {
             if(this.liveVoices.get(pitch) === voice) {
                 this.liveVoices.delete(pitch);
             }
+            oscillator.disconnect();
             automationGain.disconnect();
             envelopeGain.disconnect();
-            oscillator.disconnect();
+            pannerNode.disconnect();
         };
     }
 
@@ -195,9 +203,10 @@ export class MiniSynth {
             voice.envelopeGain.gain.cancelScheduledValues(now);
             voice.envelopeGain.gain.setValueAtTime(0, now);
             voice.oscillator.stop(now);
+            voice.oscillator.disconnect();
             voice.automationGain.disconnect();
             voice.envelopeGain.disconnect();
-            voice.oscillator.disconnect();
+            voice.pannerNode.disconnect();
         };
 
         for(const voice of this.scheduledVoices.values()) killVoice(voice);

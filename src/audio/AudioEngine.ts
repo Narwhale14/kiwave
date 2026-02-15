@@ -1,8 +1,8 @@
 import { MiniSynth } from "./MiniSynth";
 import { AudioGraph } from "./AudioGraph";
 import { Scheduler, type SchedulerNote } from "./Scheduler";
-import { channelManager } from "./channelManager";
-import { mixerManager } from "./mixerManager";
+import { channelManager } from "./ChannelManager";
+import { mixerManager } from "./MixerManager";
 import { ArrangementCompiler } from "./ArrangementCompiler";
 import { arrangement } from "../audio/Arrangement";
 import { GLOBAL_VOLUME_DEFAULT } from "../constants/defaults";
@@ -24,6 +24,8 @@ export class AudioEngine {
     // registered synths + bookkeeping
     private _synths: SynthEntry[] = [];
     private _channelSynths: Map<string, { synthId: string; num: number }> = new Map(); // channelId -> { synthId, num }
+    private _meterAnimFrame: number | null = null;
+    private _meterBuf = new Float32Array(256);
 
     private _scheduler = new Scheduler(this._audioContext, channelManager, { bpm: 120 });
     private _compiler = new ArrangementCompiler(arrangement);
@@ -36,7 +38,7 @@ export class AudioEngine {
         // adds a gain node for each mixer track
         for(const track of mixerManager.getAllMixers()) {
             if(track.id !== 'master') {
-                this._audioGraph.addNode(track.id, track.route);
+                this._audioGraph.addGainNode(track.id, track.route);
             }
         }
 
@@ -49,7 +51,7 @@ export class AudioEngine {
 
         // wire up existing channels (HMR)
         for(const ch of channelManager.getAllChannels()) {
-            this._audioGraph.connectChannel(ch.instrument.getOutputNode(), ch.mixerTrack);
+            this._audioGraph.addPannerNode(ch.id, ch.instrument.getOutputNode(), ch.mixerTrack);
         }
 
         // add default channel if none exist
@@ -65,6 +67,31 @@ export class AudioEngine {
         // register callbacks — managers update state, engine syncs gains
         channelManager.onMuteStateChanged = () => this._syncChannelGains();
         mixerManager.onMuteStateChanged = () => this._syncMixerGains();
+
+        this._startMeteringLoop();
+    }
+
+    private _startMeteringLoop() {
+        const buf = this._meterBuf;
+        const loop = () => {
+            for(const track of mixerManager.getAllMixers()) {
+                const analysers = this._audioGraph.getAnalysers(track.id);
+                if(!analysers) { track.peakDbL = -Infinity; track.peakDbR = -Infinity; continue; }
+
+                analysers.left.getFloatTimeDomainData(buf);
+                let peakL = 0;
+                for(let i = 0; i < buf.length; i++) { const a = Math.abs(buf[i]!); if(a > peakL) peakL = a; }
+
+                analysers.right.getFloatTimeDomainData(buf);
+                let peakR = 0;
+                for(let i = 0; i < buf.length; i++) { const a = Math.abs(buf[i]!); if(a > peakR) peakR = a; }
+
+                track.peakDbL = peakL > 0 ? 20 * Math.log10(peakL) : -Infinity;
+                track.peakDbR = peakR > 0 ? 20 * Math.log10(peakR) : -Infinity;
+            }
+            this._meterAnimFrame = requestAnimationFrame(loop);
+        };
+        this._meterAnimFrame = requestAnimationFrame(loop);
     }
 
     // GAIN SYNC
@@ -92,13 +119,21 @@ export class AudioEngine {
         node.gain.setTargetAtTime(volume, this._audioContext.currentTime, 0.005);
     }
 
+    setChannelPan(channelId: string, pan: number) {
+        const channel = channelManager.getChannel(channelId);
+        if(!channel) return;
+        channel.pan = pan;
+        this._audioGraph.setPan(channelId, pan);
+    }
+
     private _syncMixerGains() {
         const now = this._audioContext.currentTime;
         for(const track of mixerManager.getAllMixers()) {
+            this._audioGraph.setGain(track.id, track.volume);
             if(track.muted) {
-                this._audioGraph.setGainImmediate(track.id, now);
+                this._audioGraph.setMuteGainImmediate(track.id, now);
             } else {
-                this._audioGraph.setGain(track.id, track.volume);
+                this._audioGraph.setMuteGain(track.id, 1);
             }
         }
     }
@@ -108,6 +143,13 @@ export class AudioEngine {
         if(!track) return;
         track.volume = volume;
         this._audioGraph.setGain(trackId, volume)
+    }
+
+    setMixerPan(trackId: string, pan: number) {
+        const track = mixerManager.getMixer(trackId);
+        if(!track) return;
+        track.pan = pan;
+        this._audioGraph.setPan(trackId, pan);
     }
 
     // GETTERS
@@ -152,13 +194,13 @@ export class AudioEngine {
         this._channelSynths.set(channelId, { synthId, num }); // store in bookkeeping
 
         // default connect to master
-        this._audioGraph.connectChannel(instrument.getOutputNode(), 0);
+        this._audioGraph.addPannerNode(channelId, instrument.getOutputNode(), 0);
     }
 
     removeChannel(channelId: string) {
         const channel = channelManager.getChannel(channelId);
         if(channel) {
-            this._audioGraph.disconnectChannel(channel.instrument.getOutputNode());
+            this._audioGraph.disconnectNode(channelId);
             channel.instrument.dispose();
         }
         this._channelSynths.delete(channelId);
@@ -170,7 +212,7 @@ export class AudioEngine {
         const channel = channelManager.getChannel(channelId);
         if(!channel) return;
 
-        this._audioGraph.rerouteChannel(channel.instrument.getOutputNode(), mixerTrack);
+        this._audioGraph.rerouteNode(channelId, mixerTrack);
         channelManager.setMixerRoute(channelId, mixerTrack);
     }
 
@@ -183,7 +225,7 @@ export class AudioEngine {
         mixerManager.addMixer(name);
         const tracks = mixerManager.getAllMixers();
         const track = tracks[tracks.length - 1]!;
-        this._audioGraph.addNode(track.id, track.route);
+        this._audioGraph.addGainNode(track.id, track.route);
     }
 
     removeMixer(mixerId: string) {
@@ -192,11 +234,22 @@ export class AudioEngine {
 
         // reroute all channels that were using this mixer back to master
         for(const ch of channelManager.getAllChannels()) {
-            if (ch.mixerTrack === num) this.setChannelRoute(ch.id, 0);
+            if(ch.mixerTrack === num) this.setChannelRoute(ch.id, 0);
         }
 
-        this._audioGraph.removeNode(mixerId);
+        this._audioGraph.removeGainNode(mixerId);
         mixerManager.removeMixer(mixerId);
+    }
+
+    setMixerRoute(mixerId: string, targetMixerNum: number) {
+        if(mixerId === 'master') return;
+        const mixer = mixerManager.getMixer(mixerId);
+        if(!mixer) return;
+        const selfNum = parseInt(mixerId.replace('mixer-', ''), 10);
+        if(selfNum === targetMixerNum) return;
+
+        this._audioGraph.rerouteNode(mixerId, targetMixerNum);
+        mixerManager.setRoute(mixerId, targetMixerNum);
     }
 
     toggleMixerMute(id: string) { mixerManager.toggleMute(id); }
@@ -215,6 +268,7 @@ export class AudioEngine {
     setGlobalVolume(gain: number) { this._audioGraph.setGain('global', gain); }
 
     dispose() {
+        if(this._meterAnimFrame !== null) cancelAnimationFrame(this._meterAnimFrame);
         this.scheduler.dispose();
         this._audioGraph.dispose();
         this._audioContext.close();

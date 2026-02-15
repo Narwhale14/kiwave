@@ -8,6 +8,8 @@ export interface MixerTrack {
     pan: number;
     muted: boolean;
     solo: boolean;
+    peakDbL: number;
+    peakDbR: number;
     // effects: Effect[];
 }
 
@@ -25,7 +27,9 @@ export class MixerManager {
             volume: 1,
             pan: 0,
             muted: false,
-            solo: false
+            solo: false,
+            peakDbL: -Infinity,
+            peakDbR: -Infinity,
         });
     }
 
@@ -38,7 +42,9 @@ export class MixerManager {
             volume: 1,
             pan: 0,
             muted: false,
-            solo: false
+            solo: false,
+            peakDbL: -Infinity,
+            peakDbR: -Infinity,
         });
         this.nextId++;
     }

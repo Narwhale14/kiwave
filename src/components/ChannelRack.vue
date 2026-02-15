@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { channelManager, type Channel } from '../audio/channelManager';
-import { mixerManager } from '../audio/mixerManager';
+import { channelManager, type Channel } from '../audio/ChannelManager';
+import { mixerManager } from '../audio/MixerManager';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
-import Knob from './buttons/Knob.vue';
+import Knob from './controls/Knob.vue';
 
 const engine = getAudioEngine();
 const showSynthPicker = ref(false);
@@ -93,44 +93,40 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <div>
-      <div v-for="channel in channels" :key="channel.id" class="flex flex-row items-center gap-2 px-2 border-b border-mix-20 hover:bg-mix-15 py-1 transition-colors shrink-0">
-        <Knob :size="28" :resistance="0.5" :title="`Volume: ${Math.round(channel.volume * 100)}%`" :model-value="channel.volume" @update:model-value="v => engine.setChannelGain(channel.id, v)"/>
-        
+    <div v-for="channel in channels" :key="channel.id" class="flex flex-row items-center gap-2 px-2 border-b border-mix-20 hover:bg-mix-15 py-1 transition-colors shrink-0">
+      <div class="flex gap-1 bg-mix-10 rounded p-0.5 border-mix-30 border-2">
+        <Knob :size="28" :resistance="0.5" :title="`Volume: ${Math.round(channel.volume * 100)}%`" :model-value="channel.volume" :default-value="1" arc="from-start" @update:model-value="v => engine.setChannelGain(channel.id, v)"/>
+        <Knob :model-value="channel.pan" @update:model-value="p => engine.setChannelPan(channel.id, p)" :min="-1" :max="1" :size="28" :default-value="0" arc="from-center" :colors="['#60a5fa', '#f87171']" title="Pan" />
+
         <!-- mute toggle (left click) / solo toggle (right click) -->
-        <button
-          @click="engine.toggleChannelMute(channel.id)"
-          @contextmenu.prevent="engine.toggleChannelSolo(channel.id)"
+        <button @click="engine.toggleChannelMute(channel.id)" @contextmenu.prevent="engine.toggleChannelSolo(channel.id)"
           class="flex items-center justify-center w-6 h-6 rounded shrink-0 focus:outline-none"
           :title="channel.solo ? 'Solo (right-click to toggle)' : channel.muted ? 'Unmute' : 'Mute (right-click to solo)'"
         >
           <span class="w-2 h-2 rounded-full transition-colors" :style="{ backgroundColor: muteCircleColor(channel) }" />
         </button>
-
-        <!-- mixer track number input -->
-        <input
-          :value="channel.mixerTrack"
-          type="text"
-          inputmode="numeric"
-          class="bg-mix-10 border border-mix-25 rounded text-center text-xs font-mono font-bold w-8 py-0.5 outline-none shrink-0"
-          @focus="($event.target as HTMLInputElement).select()"
-          @blur="commitMixerTrack(channel.id, $event)"
-          @keydown="onMixerTrackKeydown"
-        />
-
-        <!-- channel name button -->
-        <button class="flex-1 text-left px-2 py-0.5 rounded text-sm font-mono bg-mix-10 border border-mix-25 hover:bg-mix-20 transition-colors truncate min-w-0">
-          {{ channel.name }}
-        </button>
-
-        <button @click="engine.removeChannel(channel.id)">
-          <span class="pi pi-times text-sm text-red-400"></span>
-        </button>
       </div>
 
-      <div v-if="channels.length === 0" class="flex items-center justify-center flex-1 opacity-30 text-xs">
-        No channels
-      </div>
+      <!-- mixer track number input -->
+      <input :value="channel.mixerTrack" type="text" inputmode="numeric"
+        class="bg-mix-10 border border-mix-25 rounded text-center text-xs font-mono font-bold w-8 py-0.5 outline-none shrink-0"
+        @focus="($event.target as HTMLInputElement).select()"
+        @blur="commitMixerTrack(channel.id, $event)"
+        @keydown="onMixerTrackKeydown"
+      />
+
+      <!-- channel name button -->
+      <button class="flex-1 text-left px-2 py-0.5 rounded text-sm font-mono bg-mix-10 border-2 border-mix-30 hover:bg-mix-20 transition-colors truncate min-w-0">
+        {{ channel.name }}
+      </button>
+
+      <button @click="engine.removeChannel(channel.id)">
+        <span class="pi pi-times text-sm text-red-400"></span>
+      </button>
+    </div>
+
+    <div v-if="channels.length === 0" class="flex items-center justify-center flex-1 opacity-30 text-xs">
+      No channels
     </div>
 
     <div class="flex justify-center items-center p-1">
@@ -142,9 +138,7 @@ onBeforeUnmount(() => {
     <Teleport to="body">
       <div v-if="showSynthPicker" ref="pickerRef" class="fixed z-9999 -translate-x-1/2 bg-mix-20 border border-mix-40 rounded shadow-lg py-0.5 min-w-max"
         :style="pickerStyle">
-        <button
-          v-for="synth in engine.availableSynths"
-          :key="synth.id"
+        <button v-for="synth in engine.availableSynths" :key="synth.id"
           class="px-2 py-0.5 text-xs cursor-pointer w-full text-left hover:bg-mix-30 transition-colors whitespace-nowrap"
           @click="selectSynth(synth.id)"
         >{{ synth.displayName }}</button>

@@ -1,7 +1,7 @@
 import type { AutomationCurve, CompiledNoteAutomation } from './automation/types';
 import { PARAMETER_MAP } from './automation/parameter';
 import { deriveSegments } from './automation/nodeOperations';
-import type { ChannelManager } from './channelManager';
+import type { ChannelManager } from './ChannelManager';
 
 /**
  * interface used to convert note data to a type the scheduler can read

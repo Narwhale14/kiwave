@@ -11,7 +11,7 @@ import { HEADER_HEIGHT_MIN, HEADER_HEIGHT_MAX } from '../constants/layout';
 import { GLOBAL_VOLUME_DEFAULT } from '../constants/defaults';
 import { ref, toRef } from 'vue';
 import { getAudioEngine } from '../services/audioEngineManager';
-import Knob from './buttons/Knob.vue';
+import Knob from './controls/Knob.vue';
 
 const engine = getAudioEngine();
 const playButtonOn = ref(false);
@@ -101,7 +101,7 @@ const globalVolume = ref(GLOBAL_VOLUME_DEFAULT);
 
 <template>
   <div class="relative flex w-full border-2 bg-mix-15 border-mix-30 px-3 gap-2 items-center" :style="{ height: `${headerHeight}px` }">
-    <Knob v-model="globalVolume" @update:model-value="v => engine.setGlobalVolume(v)" :default-value="GLOBAL_VOLUME_DEFAULT" :size="headerHeight - 10" title="Master Volume" :resistance="1"/>
+    <Knob v-model="globalVolume" @update:model-value="v => engine.setGlobalVolume(v)" :min="0" :max="1" :default-value="GLOBAL_VOLUME_DEFAULT" :size="headerHeight - 10" arc="from-start" title="Master Volume" :resistance="1"/>
 
     <!-- playback controls -->
     <div class="flex flex-row items-stretch">
