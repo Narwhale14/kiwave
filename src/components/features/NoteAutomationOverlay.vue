@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import { insertNode, moveNode, setNodeTension, deleteNode, getHandleValue, getPowerHandleValue, evalPowerCurve } from '../../audio/automation/nodeOperations';
 import { snapNearest, snapDivision } from '../../util/snap';
 import type { AutomationCurve } from '../../audio/automation/types';
-import { manipulateColor } from '../../util/colorManipulation';
+import { manipulateColor } from '../../util/miscUtil';
 
 const LINE_HIT_WIDTH = 16;
 const NODE_HIT_RADIUS = 8;
@@ -19,7 +19,7 @@ const props = defineProps<{
   heightPx: number;
   offsetY: number; // px above note top where overlay starts
   paramColor: string;
-  snapInterval: number | null; // normalized snap step; null = free. Shift bypasses.
+  snapInterval: number | null; // normalized snap step; null = free. shift bypasses.
   curveStyle?: 'bezier' | 'power'; // default = 'bezier'
   readOnly?: boolean; // path only — no nodes/handles/interaction
 }>();
@@ -196,12 +196,9 @@ function onTensionHandlePointerDown(event: PointerEvent, leftNodeId: string) {
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   } else {
-    // Power style: pointer lock + tanh dial for smooth easing near bounds
     const startTension = props.curve.nodes[li]!.curveTension;
     const startH = (startTension + 1) / 2;
-    // atanh clipped to avoid ±Infinity at exact 0/1
     let dialValue = Math.atanh(Math.max(-0.9999, Math.min(0.9999, (startH - 0.5) * 2)));
-    // dragging up should raise the handle regardless of ascending/descending curve
     const direction = rv >= lv ? 1 : -1;
 
     (event.currentTarget as Element).setPointerCapture(event.pointerId);
@@ -233,7 +230,7 @@ function onTensionHandlePointerDown(event: PointerEvent, leftNodeId: string) {
     <path v-if="!readOnly" :d="curvePath" fill="none" stroke="transparent" :stroke-width="LINE_HIT_WIDTH" stroke-linecap="round" style="pointer-events:stroke; cursor:crosshair" @pointerdown.stop="onLinePointerDown"/>
 
     <!-- visible curve path -->
-    <path :d="curvePath" fill="none" :stroke="paramColor" :stroke-width="readOnly ? 1 : 1.5" :opacity="readOnly ? 0.45 : 1" stroke-linecap="round" style="pointer-events:none"/>
+    <path :d="curvePath" fill="none" :stroke="paramColor" :stroke-width="1.5" :opacity="readOnly ? 0.45 : 1" stroke-linecap="round" style="pointer-events:none"/>
 
     <template v-if="!readOnly">
       <!-- tension handle hit circles (between nodes) -->

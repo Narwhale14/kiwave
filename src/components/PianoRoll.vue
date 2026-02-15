@@ -11,7 +11,7 @@ import NoteAutomationOverlay from './features/NoteAutomationOverlay.vue';
 import { ALL_PARAMETERS, PARAMETER_MAP } from '../audio/automation/parameter';
 import type { AutomationCurve } from '../audio/automation/types';
 import { shiftNodeValues } from '../audio/automation/nodeOperations';
-import { manipulateColor } from '../util/colorManipulation';
+import { manipulateColor } from '../util/miscUtil';
 
 let noteIdCounter = 0;
 
@@ -494,8 +494,8 @@ onBeforeUnmount(() => {
       </button>
 
       <!-- curve visibility toggles -->
-      <template v-if="parametersWithCurves.length > 0">
-        <div class="w-px h-4 bg-mix-30 mx-1 shrink-0" />
+      <div v-if="parametersWithCurves.length > 0" class="flex flex-row gap-2 justify-center items-center">
+        <div class="w-px h-4 bg-mix-30 ml-1 shrink-0" />
         <div v-for="param in parametersWithCurves" :key="`vis-${param.id}`"
           class="w-3 h-3 rounded-sm border-2 cursor-pointer shrink-0 transition-colors"
           :title="`${visibleCurveLanes.has(param.id) ? 'Hide' : 'Show'} ${param.label} curves`"
@@ -503,7 +503,7 @@ onBeforeUnmount(() => {
           @pointerdown.stop
           @click="toggleVisibleLane(param.id)"
         />
-      </template>
+      </div>
 
       <!-- separator -->
       <div class="flex-1" />
@@ -577,7 +577,7 @@ onBeforeUnmount(() => {
             :curveStyle="activeLaneDef.curveStyle ?? 'bezier'"
             @update="(c) => onAutomationUpdate(block.id, c)"
           />
-          <!-- read-only curve previews (visible when lane is toggled on but not actively being edited) -->
+          <!-- read-only curve previews -->
           <template v-for="paramId in visibleCurveLanes" :key="`ro-${paramId}`">
             <NoteAutomationOverlay
               v-if="block.automation.has(paramId) && PARAMETER_MAP.get(paramId) && (!activeLaneDef || activeLaneDef.id !== paramId)"

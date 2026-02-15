@@ -82,5 +82,33 @@ export const PITCH_BEND: AutomationParameterDef = {
     }
 };
 
-export const ALL_PARAMETERS: AutomationParameterDef[] = [PITCH_BEND];
+export const VOLUME: AutomationParameterDef = {
+    id: 'volume',
+    label: 'Volume',
+    min: 0,
+    max: 1,
+    defaultNormalized: 0.5,
+    unit: '%',
+    color: '#f98bf9',
+    overlayRows: 'note',
+    snapInterval: null,
+    followNote: true,
+    curveStyle: 'power',
+
+    compile(segments, _noteMidi, t0, bpm) {
+        const events: CompiledParamEvent[] = [];
+        const beatsToSec = (b: number) => (b / bpm) * 60;
+        const toGain = (norm: number) => norm;
+
+        for(const seg of segments) {
+            const tStart = t0 + beatsToSec(seg.startBeat);
+            const tEnd   = t0 + beatsToSec(seg.endBeat);
+            compileSegmentToFreq(seg.startValue, seg.endValue, seg.curveTension, this.curveStyle ?? 'power', tStart, tEnd, toGain, events);
+        }
+
+        return { gain: events };
+    }
+};
+
+export const ALL_PARAMETERS: AutomationParameterDef[] = [PITCH_BEND, VOLUME];
 export const PARAMETER_MAP = new Map(ALL_PARAMETERS.map(p => [p.id, p]));

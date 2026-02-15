@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { clamp } from '../../util/parameterMapping'
+import { clamp } from '../../util/miscUtil'
 
 const props = withDefaults(defineProps<{
   modelValue: number,
@@ -102,6 +102,6 @@ function onRightClick(event: MouseEvent) {
   >
     <div class="absolute left-1/2 -translate-x-1/2 rounded-full bg-mix-25" :style="{ width: trackWidth + 'px', height: effectiveHeight + 'px' }" />
     <div v-if="active" class="absolute left-1/2 -translate-x-1/2 rounded-full playhead-color" :style="{ width: trackWidth / 3 + 'px', height: (effectiveHeight - handleY) + 'px', bottom: 0 }" />
-    <div class="absolute left-1/2 rounded bg-neutral-200 shadow-md" :style="{ width: (trackWidth + 14) + 'px', height: handleHeight + 'px', transform: `translateX(-50%) translateY(${handleY}px)`}" />
+    <div class="absolute left-1/2 rounded general-white shadow-md" :style="{ width: (trackWidth + 14) + 'px', height: handleHeight + 'px', transform: `translateX(-50%) translateY(${handleY}px)`}" />
   </div>
 </template>

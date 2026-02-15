@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { inject, computed, ref } from 'vue';
 import { mixerManager, type MixerTrack } from '../audio/mixerManager';
-import { gainToDb } from '../util/parameterMapping';
+import { gainToDb } from '../util/miscUtil';
 import { getAudioEngine } from '../services/audioEngineManager';
 import Slider from './buttons/Slider.vue'
 import Knob from './buttons/Knob.vue'

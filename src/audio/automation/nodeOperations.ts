@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import type { AutomationNode, AutomationCurve, AutomationSegment } from './types';
-import { clamp } from '../../util/parameterMapping';
+import { clamp } from '../../util/miscUtil';
 
 // The value the curve passes through at the segment midpoint (x = 0.5).
 // tension = 0 → linear midpoint; tension > 0 → bowed up; tension < 0 → bowed down.
