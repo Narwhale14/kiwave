@@ -10,6 +10,8 @@ import BaseDropdown from './modals/BaseDropdown.vue';
 import NoteAutomationOverlay from './features/NoteAutomationOverlay.vue';
 import { ALL_PARAMETERS, PARAMETER_MAP } from '../audio/automation/parameter';
 import type { AutomationCurve } from '../audio/automation/types';
+import { shiftNodeValues } from '../audio/automation/nodeOperations';
+import { manipulateColor } from '../util/colorManipulation';
 
 let noteIdCounter = 0;
 
@@ -67,6 +69,14 @@ const beatsPerBar = 4;
 const activeAutomationLane = ref<string | null>(null);
 const activeLaneDef = computed(() => activeAutomationLane.value ? PARAMETER_MAP.get(activeAutomationLane.value) ?? null : null);
 
+// Curve cache: stores the last-edited curve + source note midi per parameter.
+const cachedCurves = reactive(new Map<string, { curve: AutomationCurve; noteMidi: number }>());
+const hasCurveCache = computed(() => cachedCurves.size > 0);
+
+function clearCurveCache() {
+  cachedCurves.clear();
+}
+
 function toggleLane(parameterId: string) {
   if(activeAutomationLane.value === parameterId) {
     activeAutomationLane.value = null;
@@ -82,10 +92,30 @@ function toggleLane(parameterId: string) {
 
 function onAutomationUpdate(noteId: string, curve: AutomationCurve) {
   props.roll.updateCurve(noteId, curve);
+  const note = props.roll.getNoteData.find(n => n.id === noteId);
+  if(note) cachedCurves.set(curve.parameterId, { curve, noteMidi: note.midi });
 }
 
-function getOverlayLayout(noteRow: number): { heightPx: number; offsetY: number; snapInterval: number | null } {
-  const def = activeLaneDef.value;
+function cacheNoteState(note: NoteBlock) {
+  state.cachedLength = note.length;
+  for(const [parameterId, curve] of note.automation) {
+    cachedCurves.set(parameterId, { curve, noteMidi: note.midi });
+  }
+}
+
+// parametersWithCurves: only those where at least one note already has a curve.
+// Drives the visibility checkboxes — future parameters added at runtime will appear automatically.
+const parametersWithCurves = computed(() =>
+  ALL_PARAMETERS.filter(p => props.roll.getNoteData.some(n => n.automation.has(p.id)))
+);
+
+const visibleCurveLanes = reactive(new Set<string>());
+
+function toggleVisibleLane(id: string) {
+  visibleCurveLanes.has(id) ? visibleCurveLanes.delete(id) : visibleCurveLanes.add(id);
+}
+
+function getOverlayLayout(noteRow: number, def = activeLaneDef.value): { heightPx: number; offsetY: number; snapInterval: number | null } {
   if(!def) return { heightPx: rowHeight.value, offsetY: 0, snapInterval: null };
 
   const rh = rowHeight.value;
@@ -126,7 +156,6 @@ function stopNote(midi: number) {
 
 // CONTROLS
 
-
 function updatePatternLoop() {
   if(playbackMode.value !== 'pattern') return;
   engine.scheduler.setLoop(true, 0, props.roll.getEndBeat(beatsPerBar));
@@ -153,6 +182,7 @@ function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
 }
 
 function handlePointerMove(event: PointerEvent) {
+  if(activeLaneDef.value) return;
   if(props.roll.isResizing() && state.resizingNote) {
     const pointerX = event.clientX - workSpaceContainer.value!.getBoundingClientRect().left;
     state.cachedLength = props.roll.resize(pointerX / colWidth);
@@ -181,7 +211,9 @@ function handlePointerMove(event: PointerEvent) {
     const newCol = cell.col - state.dragStart.col;
     const newRow = cell.row - state.dragStart.row;
 
+    const oldMidi = state.draggingNote.midi;
     props.roll.move(state.draggingNote.id, newRow, newCol);
+    props.roll.followNoteMove(state.draggingNote.id, oldMidi, state.draggingNote.midi);
     selectedInstrument.value?.triggerRelease(state.draggingNote.id, selectedInstrument.value.getAudioContext().currentTime); // cancel current
 
     const noteIndex = notes.length - 1 - newRow;
@@ -210,6 +242,9 @@ async function handlePointerDown(event: PointerEvent) {
       }
     }
 
+    // copy state on any left-click (click, drag, or resize)
+    if(event.button === 0) cacheNoteState(hovered.note);
+
     // resize
     if(isNearRightEdge(event, hovered.note)) {
       state.resizingNote = hovered.note;
@@ -233,17 +268,26 @@ async function handlePointerDown(event: PointerEvent) {
     const noteId = generateNoteId();
     const midi = props.roll.addNote(state.hoverCell, noteId, state.cachedLength, 0.8, selectedChannelId.value);
 
-    // activate the current automation lane on the new note
-    if(activeAutomationLane.value) {
-      props.roll.activateLane(noteId, activeAutomationLane.value);
-    }
-
     // add note to scheduler
     if(engine.scheduler) {
       // converting note to scheduler note
       const noteBlocks = props.roll.getNoteData;
       const newNote = noteBlocks[noteBlocks.length - 1];
       if(newNote) {
+        // apply cached curves, scaling beats to new length and shifting values to new note's pitch
+        for(const [parameterId, { curve: cachedCurve, noteMidi: cachedMidi }] of cachedCurves) {
+          props.roll.activateLane(newNote.id, parameterId);
+          const originalLength = cachedCurve.nodes[cachedCurve.nodes.length - 1]!.beat;
+          const scale = originalLength > 0 ? newNote.length / originalLength : 1;
+          let nodes = cachedCurve.nodes.map(n => ({ ...n, beat: n.beat * scale }));
+          const def = PARAMETER_MAP.get(parameterId);
+          if(def?.followNote && def.getDefaultNormalized) {
+            const delta = def.getDefaultNormalized(newNote.midi) - def.getDefaultNormalized(cachedMidi);
+            nodes = shiftNodeValues(nodes, delta);
+          }
+          props.roll.updateCurve(newNote.id, { ...cachedCurve, nodes });
+        }
+
         engine.scheduler.addNote({
           id: newNote.id,
           pitch: newNote.midi,
@@ -277,9 +321,11 @@ function finalizeEdit() {
     const note = state.resizingNote;
     const oldLength = state.resizeInitialLength;
     props.roll.stopResize();
+
     if(note.automation.size > 0 && note.length !== oldLength) {
       props.roll.updateAutomationForResize(note.id, oldLength, note.length);
     }
+
     updatePatternLoop();
     state.resizingNote = null;
   }
@@ -323,10 +369,14 @@ function onPianoRollKeyDown(event: KeyboardEvent) {
       event.preventDefault();
       element.scrollLeft += colWidth * stepInterval * fastScrollMult;
       break;
+    case 'Escape':
+      if(activeAutomationLane.value) {
+        activeAutomationLane.value = null;
+      }
   }
 }
 
-// Load pattern notes into scheduler (only when in pattern mode)
+// load pattern notes into scheduler (only when in pattern mode)
 function loadPatternNotes() {
   if (playbackMode.value !== 'pattern') return;
 
@@ -353,7 +403,7 @@ function loadPatternNotes() {
 onMounted(async () => {
   await nextTick();
 
-  // Define callbacks for pattern mode
+  // define callbacks for pattern mode
   const playheadCallback = (beat: number) => {
     playhead.col = beat;
     if(!pianoRollContainer.value) return;
@@ -416,6 +466,7 @@ onBeforeUnmount(() => {
     <div class="window-header border-b-2 border-mix-30 bg-mix-15 px-3 shrink-0"
       @pointerdown.stop="dragWindow?.($event)">
       <span class="text-xs font-medium">{{ props.name }} - </span>
+
       <BaseDropdown
         v-model="selectedChannelId"
         :items="channels"
@@ -424,17 +475,38 @@ onBeforeUnmount(() => {
         button-class="px-2 py-0.5 font-mono font-bold min-w-0"
         width="30"
       />
-      <div class="flex-1" />
 
-      <!-- automation lane toggles -->
-      <button v-for="param in ALL_PARAMETERS" :key="param.id" class="px-2 h-6 rounded text-xs font-medium util-button" :title="`Toggle ${param.label} automation`"
-        :class="{ 'opacity-100': activeAutomationLane === param.id, 'opacity-50': activeAutomationLane !== param.id }"
-        :style="activeAutomationLane === param.id ? { color: param.color, outline: `1px solid ${param.color}` } : {}"
-        @pointerdown.stop
-        @click="toggleLane(param.id)"
-      >
-        {{ param.label }}
+      <BaseDropdown
+        :model-value="activeAutomationLane"
+        :items="ALL_PARAMETERS"
+        item-label="label"
+        item-value="id"
+        button-class="px-2 py-0.5 font-mono font-bold min-w-0"
+        width="30"
+        display="image"
+        display-image="/icons/automation-icon-white.png"
+        :button-style="activeLaneDef ? { backgroundColor: manipulateColor(activeLaneDef.color, 0, 0.5)} : {}"
+        @update:model-value="toggleLane"
+      />
+
+      <button v-if="hasCurveCache" class="w-5 h-5 rounded flex items-center justify-center text-red-400 hover:text-red-300 shrink-0" @pointerdown.stop @click="clearCurveCache()" title="Clear automation curve cache">
+        <span class="pi pi-times text-xs" />
       </button>
+
+      <!-- curve visibility toggles -->
+      <template v-if="parametersWithCurves.length > 0">
+        <div class="w-px h-4 bg-mix-30 mx-1 shrink-0" />
+        <div v-for="param in parametersWithCurves" :key="`vis-${param.id}`"
+          class="w-3 h-3 rounded-sm border-2 cursor-pointer shrink-0 transition-colors"
+          :title="`${visibleCurveLanes.has(param.id) ? 'Hide' : 'Show'} ${param.label} curves`"
+          :style="{ borderColor: param.color, backgroundColor: visibleCurveLanes.has(param.id) ? param.color : 'transparent' }"
+          @pointerdown.stop
+          @click="toggleVisibleLane(param.id)"
+        />
+      </template>
+
+      <!-- separator -->
+      <div class="flex-1" />
 
       <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="resetWindow?.()" title="Reset position and size">
         <span class="pi pi-refresh text-xs" />
@@ -502,12 +574,27 @@ onBeforeUnmount(() => {
             :noteLength="block.length"
             :widthPx="block.length * colWidth"
             :paramColor="activeLaneDef.color"
+            :curveStyle="activeLaneDef.curveStyle ?? 'bezier'"
             @update="(c) => onAutomationUpdate(block.id, c)"
           />
+          <!-- read-only curve previews (visible when lane is toggled on but not actively being edited) -->
+          <template v-for="paramId in visibleCurveLanes" :key="`ro-${paramId}`">
+            <NoteAutomationOverlay
+              v-if="block.automation.has(paramId) && PARAMETER_MAP.get(paramId) && (!activeLaneDef || activeLaneDef.id !== paramId)"
+              v-bind="getOverlayLayout(block.row, PARAMETER_MAP.get(paramId))"
+              :curve="block.automation.get(paramId)!"
+              :noteLength="block.length"
+              :widthPx="block.length * colWidth"
+              :paramColor="PARAMETER_MAP.get(paramId)!.color"
+              :curveStyle="PARAMETER_MAP.get(paramId)!.curveStyle ?? 'bezier'"
+              :snapInterval="null"
+              :readOnly="true"
+            />
+          </template>
         </div>
 
         <!-- hover cell -->
-        <div v-if="state.hoverCell && !state.hoverNote" class="absolute border-2 opacity-50 pointer-events-none rounded-sm note-outline-color"
+        <div v-if="state.hoverCell && !state.hoverNote && !activeLaneDef" class="absolute border-2 opacity-50 pointer-events-none rounded-sm note-outline-color"
           :style="{
             top: `${state.hoverCell.row * rowHeight}px`,
             left: `${state.hoverCell.col * colWidth}px`,
@@ -517,7 +604,7 @@ onBeforeUnmount(() => {
         ></div>
 
         <!-- hover note -->
-        <div v-if="state.hoverNote" class="absolute border-2 opacity-50 pointer-events-none rounded-sm note-outline-color"
+        <div v-if="state.hoverNote && !activeLaneDef" class="absolute border-2 opacity-50 pointer-events-none rounded-sm note-outline-color"
           :style="{
             top: `${state.hoverNote.row * rowHeight}px`,
             left: `${state.hoverNote.col * colWidth}px`,

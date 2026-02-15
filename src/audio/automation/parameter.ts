@@ -1,6 +1,6 @@
 import type { AutomationSegment, CompiledParamEvent } from "./types";
 import { midiToFrequency } from "../../util/midiUtils";
-import { buildCurveArray } from "./nodeOperations";
+import { buildCurveArray, buildPowerCurveArray } from "./nodeOperations";
 
 // a single automatable parameter - how it's displayed and compiled
 export interface AutomationParameterDef {
@@ -13,6 +13,8 @@ export interface AutomationParameterDef {
     color: string;
     overlayRows: 'note' | 'roll' | number; // number is range with center on note
     snapInterval: number | null; // 0 to 1
+    curveStyle?: 'bezier' | 'power'; // bezier = handle can bow outside segment; power = bounded FL-studio style
+    followNote?: boolean; // shift curve values when the note's pitch changes
     getDefaultNormalized?: (noteMidi: number) => number;
 
     compile(
@@ -23,14 +25,27 @@ export interface AutomationParameterDef {
     ): Record<string, CompiledParamEvent[]>;
 }
 
-function compileSegmentToFreq(startHz: number, endHz: number, tension: number, startTime: number, endTime: number, events: CompiledParamEvent[]): void {
-    events.push({ type: 'setValueAtTime', value: startHz, time: startTime });
+// Curve must be sampled in normalized [0,1] space first, then each sample mapped through
+// toAudioValue — avoids corrupting the bezier/power math with large Hz numbers.
+function compileSegmentToFreq(
+    startNorm: number, endNorm: number,
+    tension: number, curveStyle: 'bezier' | 'power',
+    startTime: number, endTime: number,
+    toAudioValue: (norm: number) => number,
+    events: CompiledParamEvent[]
+): void {
+    events.push({ type: 'setValueAtTime', value: toAudioValue(startNorm), time: startTime });
 
     if(Math.abs(tension) < 1e-4) {
-        events.push({ type: 'linearRampToValueAtTime', value: endHz, time: endTime });
+        events.push({ type: 'linearRampToValueAtTime', value: toAudioValue(endNorm), time: endTime });
     } else {
-        const curve = buildCurveArray(startHz, endHz, tension);
-        events.push({ type: 'setValueCurveAtTime', curve, startTime, duration: endTime - startTime });
+        const SAMPLES = 64;
+        const normCurve = curveStyle === 'power'
+            ? buildPowerCurveArray(startNorm, endNorm, tension, SAMPLES)
+            : buildCurveArray(startNorm, endNorm, tension, SAMPLES);
+        const audioCurve = new Float32Array(SAMPLES);
+        for(let i = 0; i < SAMPLES; i++) audioCurve[i] = toAudioValue(normCurve[i]!);
+        events.push({ type: 'setValueCurveAtTime', curve: audioCurve, startTime, duration: endTime - startTime });
     }
 }
 
@@ -44,6 +59,8 @@ export const PITCH_BEND: AutomationParameterDef = {
     color: '#a78bfa',
     overlayRows: 'roll',
     snapInterval: 1 / (132 - 12),
+    followNote: true,
+    curveStyle: 'power',
 
     getDefaultNormalized(noteMidi) {
         return (noteMidi - this.min) / (this.max - this.min);
@@ -58,7 +75,7 @@ export const PITCH_BEND: AutomationParameterDef = {
         for(const seg of segments) {
             const tStart = t0 + beatsToSec(seg.startBeat);
             const tEnd   = t0 + beatsToSec(seg.endBeat);
-            compileSegmentToFreq(toHz(seg.startValue), toHz(seg.endValue), seg.curveTension, tStart, tEnd, events);
+            compileSegmentToFreq(seg.startValue, seg.endValue, seg.curveTension, this.curveStyle ?? 'bezier', tStart, tEnd, toHz, events);
         }
 
         return { frequency: events };

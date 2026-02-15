@@ -33,6 +33,11 @@ button {
   display: flex;
 }
 
+.dropdown-button:focus, .util-button:focus {
+  outline: none;
+  box-shadow: none;
+}
+
 .window-header {
   display: flex;
   flex-direction: row;

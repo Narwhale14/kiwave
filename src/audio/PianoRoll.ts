@@ -2,7 +2,7 @@ import { reactive } from 'vue';
 import { snapDivision, snapNearest, getSnapSize } from '../util/snap'
 import type { AutomationCurve } from './automation/types';
 import { PARAMETER_MAP } from './automation/parameter';
-import { createDefaultCurve, resizeNodes } from './automation/nodeOperations';
+import { createDefaultCurve, resizeNodes, shiftNodeValues } from './automation/nodeOperations';
 
 export type Cell = { row: number; col: number };
 export type NoteBlock = {
@@ -148,6 +148,22 @@ export class PianoRoll {
         this._state.version++;
     }
 
+    followNoteMove(noteId: string, oldMidi: number, newMidi: number): void {
+        if(oldMidi === newMidi) return;
+        const note = this._noteData.find(n => n.id === noteId);
+        if(!note) return;
+
+        for(const [parameterId, curve] of note.automation) {
+            const def = PARAMETER_MAP.get(parameterId);
+            if(!def?.followNote || !def.getDefaultNormalized) continue;
+
+            const delta = def.getDefaultNormalized(newMidi) - def.getDefaultNormalized(oldMidi);
+            note.automation.set(parameterId, { ...curve, nodes: shiftNodeValues(curve.nodes, delta) });
+        }
+
+        this._state.version++;
+    }
+
     updateAutomationForResize(noteId: string, oldLength: number, newLength: number): void {
         const note = this._noteData.find(n => n.id === noteId);
         if(!note) return;
@@ -155,7 +171,7 @@ export class PianoRoll {
         for(const [id, curve] of note.automation) {
             note.automation.set(id, { ...curve, nodes: resizeNodes(curve.nodes, oldLength, newLength) });
         }
-        
+
         this._state.version++;
     }
 }
