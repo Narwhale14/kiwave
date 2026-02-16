@@ -2,7 +2,6 @@
 import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref, computed, watch } from 'vue';
 import { PianoRoll, type NoteBlock, type Cell } from '../audio/PianoRoll'
 import { noteToMidi } from '../util/midiUtils';
-import { isWindowActive } from '../services/windowManager';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { snap, snapDivision } from '../util/snap';
 import { playbackMode, registerPatternCallbacks, unregisterPatternCallbacks } from '../services/playbackModeManager';
@@ -11,40 +10,38 @@ import NoteAutomationOverlay from './overlays/NoteAutomationOverlay.vue';
 import { ALL_PARAMETERS, PARAMETER_MAP } from '../audio/automation/parameter';
 import type { AutomationCurve } from '../audio/automation/types';
 import { shiftNodeValues } from '../audio/automation/nodeOperations';
-import { manipulateColor } from '../util/miscUtil';
+import { clamp, manipulateColor } from '../util/miscUtil';
+import ZoomScrollBar from './controls/ZoomScrollBar.vue';
 
 const VELOCITY_SNAP = 0.05;
-
-let noteIdCounter = 0;
-
-function generateNoteId(): string {
-  return `note-${noteIdCounter++}-${Date.now()}`;
-}
-
-// SETUP
 
 const props = defineProps<{
   roll: PianoRoll;
   name: string;
 }>();
 
-const engine = getAudioEngine();
+let noteIdCounter = 0;
+function generateNoteId(): string {
+  return `note-${noteIdCounter++}-${Date.now()}`;
+}
 
+// relevant data
+const engine = getAudioEngine();
 const selectedChannelId = ref(engine.channelManager.getLatestChannelId() || '');
 const channels = computed(() => engine.channelManager.getAllChannels());
-const selectedInstrument = computed(() => engine.channelManager.getChannel(selectedChannelId.value)?.instrument ?? null);
+const instrument = computed(() => engine.channelManager.getChannel(selectedChannelId.value)?.instrument ?? null);
+const notes = props.roll.getKeyboardNotes;
 
 const workSpaceContainer = ref<HTMLDivElement | null>(null);
 const pianoRollContainer = ref<HTMLDivElement | null>(null);
 const cursor = ref('default');
 
-const notes = props.roll.getKeyboardNotes;
-
 const windowElement = inject<Ref<HTMLElement | null>>('windowElement');
-const windowId = inject<string>('windowId');
 const closeWindow = inject<() => void>('closeWindow');
 const resetWindow = inject<() => void>('resetWindow');
-const dragWindow = inject<(e: PointerEvent) => void>('dragWindow');
+const dragWindow = inject<(event: PointerEvent) => void>('dragWindow');
+
+// dumb but has to be here?
 if(!windowElement) throw new Error('PianoRoll must be in a window');
 
 const state = reactive({
@@ -64,21 +61,28 @@ const playhead = reactive({
 });
 
 const rowHeight = ref(15);
-const colWidth = 80;
+const colWidth = ref(80);
 const beatsPerBar = 4;
 
-// AUTOMATION
+// scroll stuff
+const scrollX = ref(0);
+
+const scrollPercent = computed(() => {
+  const total = 128 * beatsPerBar * colWidth.value;
+  return total ? scrollX.value / total : 0;
+});
+
+const viewWidthPercent = computed(() => {
+  if(!pianoRollContainer.value) return 0;
+  const total = 128 * beatsPerBar * colWidth.value;
+  return total ? pianoRollContainer.value.clientWidth / total : 0;
+});
 
 const activeAutomationLane = ref<string | null>(null);
 const activeLaneDef = computed(() => activeAutomationLane.value ? PARAMETER_MAP.get(activeAutomationLane.value) ?? null : null);
-
-// Curve cache: stores the last-edited curve + source note midi per parameter.
+const parametersWithCurves = computed(() => ALL_PARAMETERS.filter(p => props.roll.getNoteData.some(n => n.automation.has(p.id))));
+const visibleCurveLanes = reactive(new Set<string>());
 const cachedCurves = reactive(new Map<string, { curve: AutomationCurve; noteMidi: number }>());
-const hasCurveCache = computed(() => cachedCurves.size > 0);
-
-function clearCurveCache() {
-  cachedCurves.clear();
-}
 
 function toggleLane(parameterId: string) {
   if(activeAutomationLane.value === parameterId) {
@@ -105,18 +109,6 @@ function cacheNoteState(note: NoteBlock) {
   for(const [parameterId, curve] of note.automation) {
     cachedCurves.set(parameterId, { curve, noteMidi: note.midi });
   }
-}
-
-// parametersWithCurves: only those where at least one note already has a curve.
-// Drives the visibility checkboxes — future parameters added at runtime will appear automatically.
-const parametersWithCurves = computed(() =>
-  ALL_PARAMETERS.filter(p => props.roll.getNoteData.some(n => n.automation.has(p.id)))
-);
-
-const visibleCurveLanes = reactive(new Set<string>());
-
-function toggleVisibleLane(id: string) {
-  visibleCurveLanes.has(id) ? visibleCurveLanes.delete(id) : visibleCurveLanes.add(id);
 }
 
 function getOverlayLayout(noteRow: number, def = activeLaneDef.value): { heightPx: number; offsetY: number; snapInterval: number | null } {
@@ -148,40 +140,121 @@ function getOverlayLayout(noteRow: number, def = activeLaneDef.value): { heightP
 
 async function playNote(midi: number) {
   if(engine.scheduler.isPlaying) return;
-  if(!selectedInstrument.value) return;
+  if(!instrument.value) return;
 
-  await selectedInstrument.value.resume();
-  selectedInstrument.value.noteOn(midi);
+  await instrument.value.resume();
+  instrument.value.noteOn(midi);
 }
 
 function stopNote(midi: number) {
-  selectedInstrument.value?.noteOff(midi);
+  instrument.value?.noteOff(midi);
 }
-
-// CONTROLS
 
 function updatePatternLoop() {
   if(playbackMode.value !== 'pattern') return;
   engine.scheduler.setLoop(true, 0, props.roll.getEndBeat(beatsPerBar));
 }
 
-// POINTER HANDLING
-
 function getCellFromPointer(event: PointerEvent) {
   if(!workSpaceContainer.value) return { row: 0, col: 0};
   const rect = workSpaceContainer.value.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
-  return { row: Math.floor(y / rowHeight.value), col: snap(x / colWidth) };
+  return { row: Math.floor(y / rowHeight.value), col: snap(x / colWidth.value) };
+}
+
+// USER CONTROLS
+
+// updating scroll var with native scroll (like trackpad, ig)
+function onNativeScroll() {
+  if(pianoRollContainer.value) {
+    scrollX.value = pianoRollContainer.value.scrollLeft;
+  }
+}
+
+// for wheel keybinds
+function handleWheel(event: WheelEvent) {
+  const element = pianoRollContainer.value;
+  if(!element) return;
+
+  // VELOCITY EDIT (Ctrl + Hover Note)
+  if(event.ctrlKey && state.hoverNote && !activeAutomationLane.value) {
+    event.preventDefault();
+
+    const steps = Math.round(state.hoverNote.velocity / VELOCITY_SNAP);
+    const newVelocity = clamp(steps + (event.deltaY > 0 ? -1 : 1), 0, 20) * VELOCITY_SNAP;
+    props.roll.setVelocity(state.hoverNote.id, newVelocity);
+    engine.scheduler.updateNote(state.hoverNote.id, { velocity: newVelocity });
+    return;
+  }
+
+  // HORIZONTAL ZOOM (Shift + Wheel)
+  if(event.shiftKey) {
+    event.preventDefault();
+  
+    const mouseX = event.clientX - element.getBoundingClientRect().left;
+    const zoomAnchorPercent = (mouseX + element.scrollLeft) / (128 * beatsPerBar * colWidth.value);
+
+    const zoomIntensity = 0.15;
+    const delta = event.deltaY > 0 ? (1 - zoomIntensity) : (1 + zoomIntensity);
+    
+    // apply the delta to the colWidth
+    colWidth.value = clamp(colWidth.value * delta, 10, 500);
+
+    // sync scroll so the mouse stays over the same musical position
+    nextTick(() => {
+      const newTotalWidth = 128 * beatsPerBar * colWidth.value;
+      element.scrollLeft = (zoomAnchorPercent * newTotalWidth) - mouseX;
+      // Mirror the new scroll position to our reactive variable for the scrollbar
+      scrollX.value = element.scrollLeft;
+    });
+    return;
+  }
+}
+
+function onPianoRollKeyDown(event: KeyboardEvent) {
+  const target = event.target as HTMLElement;
+  if(['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
+
+  const element = pianoRollContainer.value;
+  if(!element) return;
+
+  const stepSize = colWidth.value / 2;
+  const multiplier = event.shiftKey ? 4 : 1;
+
+  switch(event.code) {
+    case 'ArrowUp':
+      event.preventDefault();
+      element.scrollTop -= rowHeight.value * multiplier;
+      break;
+    case 'ArrowDown':
+      event.preventDefault();
+      element.scrollTop += rowHeight.value * multiplier;
+      break;
+    case 'ArrowLeft':
+      event.preventDefault();
+      // Directly modify the element; onNativeScroll will catch this and update the scrollbar
+      element.scrollLeft -= stepSize * multiplier;
+      break;
+    case 'ArrowRight':
+      event.preventDefault();
+      element.scrollLeft += stepSize * multiplier;
+      break;
+    case 'Escape':
+      if(activeAutomationLane.value) {
+        activeAutomationLane.value = null;
+      }
+      break;
+  }
 }
 
 function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
   const pianoRoll = workSpaceContainer.value!.getBoundingClientRect();
   const pointerX = event.clientX - pianoRoll.left;
-  const noteRightX = (note.col + note.length) * colWidth;
+  const noteRightX = (note.col + note.length) * colWidth.value;
 
   const region = 20;
-  const mult = region > (note.length * colWidth) / 3 ? region * note.length : region;
+  const mult = region > (note.length * colWidth.value) / 3 ? region * note.length : region;
   return Math.abs(pointerX - noteRightX) <= mult;
 }
 
@@ -189,7 +262,7 @@ function handlePointerMove(event: PointerEvent) {
   if(activeLaneDef.value) return;
   if(props.roll.isResizing() && state.resizingNote) {
     const pointerX = event.clientX - workSpaceContainer.value!.getBoundingClientRect().left;
-    state.cachedLength = props.roll.resize(pointerX / colWidth);
+    state.cachedLength = props.roll.resize(pointerX / colWidth.value);
 
     engine.scheduler.updateNote(state.resizingNote.id, {
       duration: state.resizingNote.length
@@ -218,7 +291,7 @@ function handlePointerMove(event: PointerEvent) {
     const oldMidi = state.draggingNote.midi;
     props.roll.move(state.draggingNote.id, newRow, newCol);
     props.roll.followNoteMove(state.draggingNote.id, oldMidi, state.draggingNote.midi);
-    selectedInstrument.value?.triggerRelease(state.draggingNote.id, selectedInstrument.value.getAudioContext().currentTime); // cancel current
+    instrument.value?.triggerRelease(state.draggingNote.id, instrument.value.getAudioContext().currentTime); // cancel current
 
     const noteIndex = notes.length - 1 - newRow;
     engine.scheduler.updateNote(state.draggingNote.id, {
@@ -228,6 +301,7 @@ function handlePointerMove(event: PointerEvent) {
   }
 }
 
+// when user left/right clicks on the piano roll
 async function handlePointerDown(event: PointerEvent) {
   if(!state.hoverCell) return;
   if(activeAutomationLane.value) return; // note editing disabled while a lane is active
@@ -274,9 +348,9 @@ async function handlePointerDown(event: PointerEvent) {
 
     // add note to scheduler
     if(engine.scheduler) {
-      // converting note to scheduler note
       const noteBlocks = props.roll.getNoteData;
       const newNote = noteBlocks[noteBlocks.length - 1];
+
       if(newNote) {
         // apply cached curves, scaling beats to new length and shifting values to new note's pitch
         for(const [parameterId, { curve: cachedCurve, noteMidi: cachedMidi }] of cachedCurves) {
@@ -285,10 +359,12 @@ async function handlePointerDown(event: PointerEvent) {
           const scale = originalLength > 0 ? newNote.length / originalLength : 1;
           let nodes = cachedCurve.nodes.map(n => ({ ...n, beat: n.beat * scale }));
           const def = PARAMETER_MAP.get(parameterId);
+
           if(def?.followNote && def.getDefaultNormalized) {
             const delta = def.getDefaultNormalized(newNote.midi) - def.getDefaultNormalized(cachedMidi);
             nodes = shiftNodeValues(nodes, delta);
           }
+          
           props.roll.updateCurve(newNote.id, { ...cachedCurve, nodes });
         }
 
@@ -320,15 +396,6 @@ async function handlePointerDown(event: PointerEvent) {
   }
 }
 
-function handleWheel(event: WheelEvent) {
-  if(!event.ctrlKey || !state.hoverNote || activeAutomationLane.value) return;
-  event.preventDefault();
-  const steps = Math.round(state.hoverNote.velocity / VELOCITY_SNAP);
-  const newVelocity = Math.max(0, Math.min(20, steps + (event.deltaY > 0 ? -1 : 1))) * VELOCITY_SNAP;
-  props.roll.setVelocity(state.hoverNote.id, newVelocity);
-  engine.scheduler.updateNote(state.hoverNote.id, { velocity: newVelocity });
-}
-
 function finalizeEdit() {
   if(props.roll.isResizing() && state.resizingNote) {
     const note = state.resizingNote;
@@ -354,39 +421,19 @@ function finalizeEdit() {
   cursor.value = 'default';
 }
 
-function onPianoRollKeyDown(event: KeyboardEvent) {
-  if(!isWindowActive(windowId!)) return;
+function handleViewUpdate({ start, width }: { start: number, width: number }) {
+  if(!pianoRollContainer.value) return;
 
-  const target = event.target as HTMLElement;
-  if(['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
+  const totalBeats = 128 * beatsPerBar;
+  
+  const newColWidth = pianoRollContainer.value.clientWidth / (width * totalBeats);
+  colWidth.value = clamp(newColWidth, 10, 500);
 
-  const element = pianoRollContainer.value;
-  if(!element) return;
+  const newTotalWidth = totalBeats * colWidth.value;
+  const newScrollLeft = start * newTotalWidth;
 
-  const stepInterval = 0.5;
-  const fastScrollMult = event.shiftKey ? 8 : 1;
-  switch(event.code) {
-    case 'ArrowUp':
-      event.preventDefault();
-      element.scrollTop -= rowHeight.value * fastScrollMult;
-      break;
-    case 'ArrowDown':
-      event.preventDefault();
-      element.scrollTop += rowHeight.value * fastScrollMult;
-      break;
-    case 'ArrowLeft':
-      event.preventDefault();
-      element.scrollLeft -= colWidth * stepInterval * fastScrollMult;
-      break;
-    case 'ArrowRight':
-      event.preventDefault();
-      element.scrollLeft += colWidth * stepInterval * fastScrollMult;
-      break;
-    case 'Escape':
-      if(activeAutomationLane.value) {
-        activeAutomationLane.value = null;
-      }
-  }
+  pianoRollContainer.value.scrollLeft = newScrollLeft;
+  scrollX.value = newScrollLeft; 
 }
 
 // load pattern notes into scheduler (only when in pattern mode)
@@ -421,9 +468,9 @@ onMounted(async () => {
     playhead.col = beat;
     if(!pianoRollContainer.value) return;
 
-    const playheadPos = beat * colWidth;
+    const playheadPos = beat * colWidth.value;
     const viewWidth = pianoRollContainer.value.clientWidth;
-    const threshold = colWidth * 4;
+    const threshold = colWidth.value * 4;
 
     if(beat < 1 && pianoRollContainer.value.scrollLeft > 0) {
       pianoRollContainer.value.scrollLeft = 0;
@@ -502,7 +549,7 @@ onBeforeUnmount(() => {
         @update:model-value="toggleLane"
       />
 
-      <button v-if="hasCurveCache" class="w-5 h-5 rounded flex items-center justify-center text-red-400 hover:text-red-300 shrink-0" @pointerdown.stop @click="clearCurveCache()" title="Clear automation curve cache">
+      <button v-if="cachedCurves.size > 0" class="w-5 h-5 rounded flex items-center justify-center text-red-400 hover:text-red-300 shrink-0" @pointerdown.stop @click="cachedCurves.clear();" title="Clear automation curve cache">
         <span class="pi pi-times text-xs" />
       </button>
 
@@ -514,7 +561,7 @@ onBeforeUnmount(() => {
           :title="`${visibleCurveLanes.has(param.id) ? 'Hide' : 'Show'} ${param.label} curves`"
           :style="{ borderColor: param.color, backgroundColor: visibleCurveLanes.has(param.id) ? param.color : 'transparent' }"
           @pointerdown.stop
-          @click="toggleVisibleLane(param.id)"
+          @click="visibleCurveLanes.has(param.id) ? visibleCurveLanes.delete(param.id) : visibleCurveLanes.add(param.id)"
         />
       </div>
 
@@ -530,41 +577,38 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
+    <ZoomScrollBar 
+      :start-percent="scrollPercent"
+      :view-width-percent="viewWidthPercent"
+      @update:view="handleViewUpdate"
+    />
+
     <!-- piano roll -->
-    <div ref="pianoRollContainer" class="flex-1 overflow-auto grid grid-cols-[50px_1fr]">
+    <div ref="pianoRollContainer" class="flex-1 overflow-y-auto overflow-x-hidden grid grid-cols-[50px_1fr]" @scroll="onNativeScroll">
       <!-- notes column -->
       <div class="flex flex-col-reverse sticky left-0 z-50" ref="pianoKeysContainer" :style="{ height: `${notes.length * rowHeight}px` }">
-        <button v-for="key in notes" :key="key.midi" 
-          @pointerdown="playNote(key.midi)"
-          @pointerup="stopNote(key.midi)"
-          @pointerleave="stopNote(key.midi)"
-          :class="[
-            'w-full text-sm select-none border-2 border-transparent hover:key border-rounded',
-            key.isBlack ? 'key-black' : 'key-white'
-          ]"
-          :style="{ height: rowHeight + 'px' }"> 
+        <button v-for="key in notes" :key="key.midi" @pointerdown="playNote(key.midi)" @pointerup="stopNote(key.midi)" @pointerleave="stopNote(key.midi)"
+          :class="[ 'w-full text-sm select-none border-2 border-transparent hover:key border-rounded', key.isBlack ? 'key-black' : 'key-white']"
+          :style="{ height: rowHeight + 'px' }"
+        > 
           {{ key.note }} 
         </button>
       </div>
 
       <!-- workspace -->
-      <div class="relative piano-roll-grid" ref="workSpaceContainer"
-        @pointermove="handlePointerMove"
-        @pointerleave="finalizeEdit"
-        @pointerdown="handlePointerDown"
-        @pointerup="finalizeEdit"
-        @wheel="handleWheel"
-        @contextmenu.prevent
-        :style="{
-          cursor: cursor,
-          height: `${notes.length * rowHeight}px`,
-          width: `${128 * beatsPerBar * colWidth}px`,
-          '--row-h': `${rowHeight}px`,
-          '--col-w': `${colWidth}px`,
-          '--bar-w': `${colWidth * beatsPerBar}px`,
-          '--snap-w': `${snapDivision > 1 ? colWidth / snapDivision : colWidth}px`
-        }"
+      <div class="relative" ref="workSpaceContainer" :style="{ cursor: cursor, height: `${notes.length * rowHeight}px`, width: `${128 * beatsPerBar * colWidth}px`}"
+        @pointermove="handlePointerMove" @pointerleave="finalizeEdit" @pointerdown="handlePointerDown" @pointerup="finalizeEdit" @wheel="handleWheel" @contextmenu.prevent
       >
+        <!-- grid -->
+        <div class="absolute inset-0 piano-roll-grid pointer-events-none"
+          :style="{ 
+            '--row-h': `${rowHeight}px`,
+            '--beat-w': `${colWidth}px`,
+            '--bar-w': `${colWidth * beatsPerBar}px`,
+            '--snap-w': `${snapDivision > 1 ? colWidth / snapDivision : colWidth}px`,
+          }"
+        ></div>
+
         <!-- row backgrounds -->
         <div v-for="(key, i) in notes" :key="key.midi" class="absolute w-full pointer-events-none"
           :style="{

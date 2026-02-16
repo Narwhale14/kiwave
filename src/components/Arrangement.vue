@@ -398,25 +398,20 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div ref="workspaceRef" class="relative arrangement-grid"
-        @pointerdown="handlePointerDown"
-        @dblclick="handleDoubleClick"
-        @pointermove="handlePointerMove"
-        @pointerup="finalizeEdit"
-        @pointerleave="finalizeEdit"
-        @dragover="handleDragOver"
-        @drop="handleDrop"
-        @contextmenu.prevent
-        :style="{
-          '--track-h': `${trackHeight}px`,
-          '--beat-w': `${beatWidth}px`,
-          '--bar-w': `${barWidth}px`,
-          '--snap-w': `${snapWidth}px`,
-          width: `${numBars * barWidth}px`,
-          height: `${arrangement.tracks.length * trackHeight}px`,
-          cursor: cursor
-        }"
+      <div ref="workspaceRef" class="relative overflow-y-auto overflow-x-hidden" :style="{ width: `${numBars * barWidth}px`, height: `${arrangement.tracks.length * trackHeight}px`, cursor: cursor }"
+        @pointerdown="handlePointerDown" @dblclick="handleDoubleClick" @pointermove="handlePointerMove" @pointerup="finalizeEdit" @pointerleave="finalizeEdit"
+        @dragover="handleDragOver" @drop="handleDrop" @contextmenu.prevent
       >
+        <!-- grid -->
+        <div class="absolute inset-0 arrangement-grid pointer-events-none"
+          :style="{
+            '--track-h': `${trackHeight}px`,
+            '--beat-w': `${beatWidth}px`,
+            '--bar-w': `${barWidth}px`,
+            '--snap-w': `${snapWidth}px`
+          }"
+        ></div>
+
         <!-- clips -->
         <div v-for="clip in arrangement.clips" :key="clip.id"
           :class="['absolute border-2 clip-color rounded overflow-hidden pointer-events-none', clip.id === selectedClipId ? 'clip-border-color' : 'clip-border-muted']"
