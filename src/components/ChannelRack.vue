@@ -18,7 +18,7 @@ const dragWindow = inject<(e: PointerEvent) => void>('dragWindow');
 const channels = computed(() => channelManager.getAllChannels());
 
 function openPicker() {
-  if (!addButtonRef.value) return;
+  if(!addButtonRef.value) return;
   const rect = addButtonRef.value.getBoundingClientRect();
   pickerStyle.value = {
     top: `${rect.bottom + 4}px`,
@@ -33,20 +33,20 @@ function selectSynth(id: string) {
 }
 
 function onPointerDown(e: PointerEvent) {
-  if (!pickerRef.value?.contains(e.target as Node) && !addButtonRef.value?.contains(e.target as Node))
+  if(!pickerRef.value?.contains(e.target as Node) && !addButtonRef.value?.contains(e.target as Node))
     showSynthPicker.value = false;
 }
 
 function onKeyDown(e: KeyboardEvent) {
-  if (e.key === 'Escape') showSynthPicker.value = false;
+  if(e.key === 'Escape') showSynthPicker.value = false;
 }
 
-function onMixerTrackKeydown(e: KeyboardEvent) {
+function onMixerRouteKeydown(e: KeyboardEvent) {
   if(e.key === 'Enter') (e.target as HTMLInputElement).blur();
   if(e.key === 'Escape') (e.target as HTMLInputElement).blur();
 }
 
-function commitMixerTrack(id: string, e: Event) {
+function commitMixerRoute(id: string, e: Event) {
   const input = e.target as HTMLInputElement;
   const val = parseInt(input.value, 10);
   if(!isNaN(val) && val >= 0 && mixerManager.getMixerByNumber(val)) {
@@ -64,7 +64,7 @@ function muteCircleColor(channel: Channel) {
 }
 
 watch(showSynthPicker, open => {
-  if (open) {
+  if(open) {
     document.addEventListener('pointerdown', onPointerDown, { capture: true });
     document.addEventListener('keydown', onKeyDown);
   } else {
@@ -121,8 +121,8 @@ onBeforeUnmount(() => {
       <input :value="channel.mixerTrack" type="text" inputmode="numeric"
         class="bg-mix-10 border border-mix-25 rounded text-center text-xs font-mono font-bold w-8 py-0.5 outline-none shrink-0"
         @focus="($event.target as HTMLInputElement).select()"
-        @blur="commitMixerTrack(channel.id, $event)"
-        @keydown="onMixerTrackKeydown"
+        @blur="commitMixerRoute(channel.id, $event)"
+        @keydown="onMixerRouteKeydown"
       />
 
       <!-- channel name button -->

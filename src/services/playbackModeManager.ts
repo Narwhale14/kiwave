@@ -17,7 +17,7 @@ export const playbackMode = ref<PlaybackMode>('pattern');
 const patternCallbacks: ModeCallbacks = { playhead: null, playState: null };
 const arrangementCallbacks: ModeCallbacks = { playhead: null, playState: null };
 
-// Switch active callbacks when mode changes
+// wwitch active callbacks when mode changes
 function updateActiveCallbacks() {
     const engine = getAudioEngine();
     const callbacks = playbackMode.value === 'pattern' ? patternCallbacks : arrangementCallbacks;

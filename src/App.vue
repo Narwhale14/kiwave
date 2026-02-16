@@ -9,6 +9,23 @@ import Arrangement from './components/Arrangement.vue';
 import ChannelRack from './components/ChannelRack.vue';
 import Mixer from './components/Mixer.vue';
 import { arrangementWindow, channelRackWindow, mixerWindow, pianoRollWindow } from './services/layoutManager';
+import { onMounted, onUnmounted } from 'vue';
+import { togglePlaybackMode } from './services/playbackModeManager';
+
+function handleKeyDown(event: KeyboardEvent) {
+  if(event.key === 'l' || event.key === 'L') {
+    togglePlaybackMode();
+  }
+};
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown);
+})
+
 </script>
 
 <template>
