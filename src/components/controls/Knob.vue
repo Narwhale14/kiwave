@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted } from 'vue'
-import { clamp } from '../../util/miscUtil'
+import { clamp } from '../../util/math'
 
 const props = withDefaults(defineProps<{
   modelValue: number,

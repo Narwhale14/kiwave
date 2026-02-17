@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { reactive, computed, watch, onMounted, onBeforeUnmount, ref, inject, nextTick } from 'vue';
-import { snapDivision, snap, snapNearest } from '../util/snap';
+import { snapDivision, getVisualSnapWidth, dynamicSnapNearest, dynamicSnap } from '../util/snap';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { playbackMode, registerArrangementCallbacks, unregisterArrangementCallbacks } from '../services/playbackModeManager';
 import { patterns, openPattern } from '../services/patternsListManager';
 import { arrangement } from '../audio/Arrangement';
 import type { ArrangementClip, ArrangementTrack } from '../audio/Arrangement';
 import ConfirmationModal from './modals/ConfirmationModal.vue';
+import ZoomScrollBar from './controls/ZoomScrollBar.vue';
+import { MAX_ZOOM_FACTOR } from '../constants/defaults';
+import { clamp } from '../util/math';
 
 const closeWindow = inject<() => void>('closeWindow');
 const resetWindow = inject<() => void>('resetWindow');
@@ -19,7 +22,9 @@ const engine = getAudioEngine();
 const tracks = computed(() => arrangement.getAllTracks());
 const playhead = reactive({ col: 0, playing: false });
 
-const workspaceRef = ref<HTMLDivElement | null>(null);
+const arrangementContainer = ref<HTMLDivElement | null>(null);
+const workspaceContainer = ref<HTMLDivElement | null>(null);
+
 const cursor = ref('default');
 const interacting = ref(false);
 const selectedClipId = ref<string | null>(null);
@@ -30,7 +35,7 @@ const state = reactive({
   initialBeat: 0,
   initialTrack: 0,
   initialDuration: 0,
-})
+});
 
 const clipPreviews = computed(() => {
   const map = new Map<string, ClipPreview>();
@@ -61,21 +66,27 @@ const clipPreviews = computed(() => {
 });
 
 const trackHeight = 50; // Height of each track in pixels
-const beatWidth = 80; // Width of one beat in pixels (same as piano roll)
+const colWidth = ref(80); // Width of one beat in pixels (same as piano roll)
 const beatsPerBar = 4; // 4 beats per bar
 const numTracks = 20; // Number of tracks
-const numBars = 32; // Number of bars to show
 
-const barWidth = beatWidth * beatsPerBar;
-const snapWidth = computed(() => beatWidth / snapDivision.value);
+const scrollX = ref(0); // pos of horizontal scroll
+const barCount = computed(() => Math.ceil(arrangement.getEndBeat() / beatsPerBar) + 7);
+const totalWidth = computed(() => barCount.value * beatsPerBar * colWidth.value);
 
 function getWorkspacePos(event: PointerEvent) {
-  const rect = workspaceRef.value!.getBoundingClientRect();
+  const rect = workspaceContainer.value!.getBoundingClientRect();
   return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 }
 
+function onNativeScroll() {
+  if(arrangementContainer.value) {
+    scrollX.value = arrangementContainer.value.scrollLeft;
+  }
+}
+
 function isNearRightEdge(x: number, clip: ArrangementClip): boolean {
-  return Math.abs(x - (clip.startBeat + clip.duration) * beatWidth) <= 12;
+  return Math.abs(x - (clip.startBeat + clip.duration) * colWidth.value) <= 12;
 }
 
 function finalizeEdit() {
@@ -180,20 +191,20 @@ function handleKeyDown(event: KeyboardEvent) {
 }
 
 function handlePointerMove(event: PointerEvent) {
-  if(!workspaceRef.value) return;
+  if(!arrangementContainer.value) return;
   const { x, y } = getWorkspacePos(event);
-  const rawBeat = x / beatWidth;
+  const rawBeat = x / colWidth.value;
   const track = Math.floor(y / trackHeight);
 
   if(state.resizingClip) {
-    const newDuration = Math.max(1 / snapDivision.value, snapNearest(rawBeat) - state.resizingClip.startBeat);
+    const newDuration = Math.max(1 / snapDivision.value, dynamicSnapNearest(rawBeat, colWidth.value) - state.resizingClip.startBeat);
     arrangement.resizeClip(state.resizingClip.id, newDuration);
     cursor.value = 'w-resize';
     return;
   }
 
   if(state.draggingClip) {
-    const newBeat = Math.max(0, snap(rawBeat - state.dragStart.beat));
+    const newBeat = Math.max(0, dynamicSnap(rawBeat - state.dragStart.beat, colWidth.value));
     const newTrack = Math.max(0, Math.min(numTracks - 1, track - state.dragStart.track));
     arrangement.moveClip(state.draggingClip.id, newTrack, newBeat);
     cursor.value = 'grabbing';
@@ -221,7 +232,7 @@ function handleDrop(event: DragEvent) {
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
 
-  const startBeat = snap(x / beatWidth);
+  const startBeat = dynamicSnap(x / colWidth.value, colWidth.value);
   const track = Math.floor(y / trackHeight);
 
   const pattern = patterns.value.find(p => p.id === patternId);
@@ -242,9 +253,9 @@ function onAddKeyDown(event: KeyboardEvent) {
 }
 
 function handleDoubleClick(event: MouseEvent) {
-  if(!workspaceRef.value) return;
-  const rect = workspaceRef.value.getBoundingClientRect();
-  const rawBeat = (event.clientX - rect.left) / beatWidth;
+  if(!arrangementContainer.value) return;
+  const rect = arrangementContainer.value.getBoundingClientRect();
+  const rawBeat = (event.clientX - rect.left) / colWidth.value;
   const track = Math.floor((event.clientY - rect.top) / trackHeight);
 
   const clip = arrangement.getClipAt(track, rawBeat);
@@ -257,9 +268,9 @@ function handleDoubleClick(event: MouseEvent) {
 
 function handlePointerDown(event: PointerEvent) {
   if(event.detail === 2) return;
-  if(!workspaceRef.value) return;
+  if(!arrangementContainer.value) return;
   const { x, y } = getWorkspacePos(event);
-  const rawBeat = x / beatWidth;
+  const rawBeat = x / colWidth.value;
   const track = Math.floor(y / trackHeight);
 
   const clip = arrangement.getClipAt(track, rawBeat);
@@ -285,6 +296,41 @@ function handlePointerDown(event: PointerEvent) {
     state.initialTrack = clip.track;
     cursor.value = 'grabbing';
   }
+}
+
+// for wheel keybinds
+function handleWheel(event: WheelEvent) {
+  const element = arrangementContainer.value;
+  if(!element) return;
+
+  // HORIZONTAL ZOOM (Shift + Wheel)
+  if(event.shiftKey) {
+    event.preventDefault();
+  
+    const mouseX = event.clientX - element.getBoundingClientRect().left;
+    const zoomAnchorPercent = (mouseX + element.scrollLeft) / totalWidth.value;
+
+    const zoomIntensity = 0.15;
+
+    const minColWidth = element.clientWidth / (barCount.value * beatsPerBar);
+    const maxColWidth = element.clientWidth / (barCount.value * beatsPerBar * MAX_ZOOM_FACTOR);
+    colWidth.value = clamp(colWidth.value * (event.deltaY > 0 ? (1 - zoomIntensity) : (1 + zoomIntensity)), minColWidth, maxColWidth);
+
+    // sync scroll so the mouse stays over the same musical position
+    nextTick(() => {
+      element.scrollLeft = (zoomAnchorPercent * totalWidth.value) - mouseX;
+      scrollX.value = element.scrollLeft;
+    });
+    return;
+  }
+}
+
+function handleViewUpdate({ start, width }: { start: number, width: number }) {
+  if(!arrangementContainer.value) return;
+
+  colWidth.value = arrangementContainer.value.clientWidth / (width * barCount.value * beatsPerBar);
+  arrangementContainer.value.scrollLeft = start * totalWidth.value;
+  scrollX.value = arrangementContainer.value.scrollLeft;
 }
 
 // WATCHERS
@@ -354,7 +400,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="w-full h-full flex flex-col bg-mix-20 overflow-hidden">
+  <div class="flex flex-col w-full h-full bg-mix-20 overflow-hidden">
     <!-- toolbar / drag handle -->
     <div class="window-header border-b-2 border-mix-30 bg-mix-15 px-3 shrink-0"
       @pointerdown.stop="dragWindow?.($event)">
@@ -378,10 +424,12 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
+    <ZoomScrollBar :start-percent="scrollX / totalWidth" :view-width-percent="arrangementContainer ? arrangementContainer.clientWidth / totalWidth : 0" @update:view="handleViewUpdate"/>
+
     <!-- workspace -->
-    <div class="flex">
+    <div ref="arrangementContainer" class="flex-1 flex flex-row overflow-x-hidden overflow-y-auto" @scroll="onNativeScroll">
       <!-- track headers -->
-      <div class="flex flex-col sticky left-0 z-50">
+      <div class="flex flex-col sticky left-0 z-50 shrink-0">
         <div v-for="track in arrangement.tracks" :key="track.id" :style="{ height: `${trackHeight}px` }" 
           class="w-25 bg-mix-15 border-y-2 border-r-2 border-mix-30 rounded-r-lg flex flex-col justify-between"
         >
@@ -398,17 +446,24 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div ref="workspaceRef" class="relative overflow-y-auto overflow-x-hidden" :style="{ width: `${numBars * barWidth}px`, height: `${arrangement.tracks.length * trackHeight}px`, cursor: cursor }"
-        @pointerdown="handlePointerDown" @dblclick="handleDoubleClick" @pointermove="handlePointerMove" @pointerup="finalizeEdit" @pointerleave="finalizeEdit"
+      <div ref="workspaceContainer" class="relative shrink-0" :style="{ width: `${totalWidth}px`, height: `${arrangement.tracks.length * trackHeight}px`, cursor: cursor }"
+        @pointerdown="handlePointerDown" @dblclick="handleDoubleClick" @pointermove="handlePointerMove" @pointerup="finalizeEdit" @pointerleave="finalizeEdit" @wheel="handleWheel"
         @dragover="handleDragOver" @drop="handleDrop" @contextmenu.prevent
       >
+        <!-- 4-bar alternating column backgrounds -->
+        <div class="absolute inset-0 pointer-events-none" :style="{
+          backgroundImage: 'linear-gradient(to right, rgba(0,0,0,0.15) 50%, transparent 50%)',
+          backgroundSize: `${colWidth * beatsPerBar * 8}px 100%`,
+          backgroundPosition: `${colWidth * beatsPerBar * 4}px 0`
+        }"></div>
+
         <!-- grid -->
         <div class="absolute inset-0 arrangement-grid pointer-events-none"
           :style="{
             '--track-h': `${trackHeight}px`,
-            '--beat-w': `${beatWidth}px`,
-            '--bar-w': `${barWidth}px`,
-            '--snap-w': `${snapWidth}px`
+            '--beat-w': `${colWidth}px`,
+            '--bar-w': `${colWidth * beatsPerBar}px`,
+            '--snap-w': `${getVisualSnapWidth(colWidth)}px`
           }"
         ></div>
 
@@ -416,9 +471,9 @@ onBeforeUnmount(() => {
         <div v-for="clip in arrangement.clips" :key="clip.id"
           :class="['absolute border-2 clip-color rounded overflow-hidden pointer-events-none', clip.id === selectedClipId ? 'clip-border-color' : 'clip-border-muted']"
           :style="{
-            left: `${clip.startBeat * beatWidth}px`,
+            left: `${clip.startBeat * colWidth}px`,
             top: `${clip.track * trackHeight}px`,
-            width: `${clip.duration * beatWidth}px`,
+            width: `${clip.duration * colWidth}px`,
             height: `${trackHeight}px`,
           }"
         >
@@ -442,7 +497,7 @@ onBeforeUnmount(() => {
         <div v-if="playbackMode === 'arrangement' && playhead.playing"
           class="absolute w-0.75 pointer-events-none playhead-color"
           :style="{
-            transform: `translateX(${playhead.col * beatWidth}px)`,
+            transform: `translateX(${playhead.col * colWidth}px)`,
             top: '0',
             height: `${tracks.length * trackHeight}px`,
             boxShadow: `-1px 0 6px var(--playhead)`
@@ -450,13 +505,13 @@ onBeforeUnmount(() => {
         ></div>
       </div>
     </div>
-
-    <!-- fill extra space -->
-    <span class="flex-1 bg-mix-15 border-t-2 border-mix-30"/>
-
-    <!-- add mixer modal -->
-    <ConfirmationModal :visible="addModalVisible" :x="addPos.x" :y="addPos.y" @confirm="createTrack" @cancel="addModalVisible = false; name = ''">
-      <input ref="nameInput" v-model="name" @keydown="onAddKeyDown" :placeholder="`Track ${nextTrackNum} name`" class="bg-mix-25 p-2 rounded-md" />
-    </ConfirmationModal>
   </div>
+
+  <!-- fill extra space -->
+  <span class="flex-1 bg-mix-15 border-t-2 border-mix-30"/>
+
+  <!-- add mixer modal -->
+  <ConfirmationModal :visible="addModalVisible" :x="addPos.x" :y="addPos.y" @confirm="createTrack" @cancel="addModalVisible = false; name = ''">
+    <input ref="nameInput" v-model="name" @keydown="onAddKeyDown" :placeholder="`Track ${nextTrackNum} name`" class="bg-mix-25 p-2 rounded-md" />
+  </ConfirmationModal>
 </template>

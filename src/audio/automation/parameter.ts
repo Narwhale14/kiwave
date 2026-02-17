@@ -1,5 +1,5 @@
 import type { AutomationSegment, CompiledParamEvent } from "./types";
-import { midiToFrequency } from "../../util/midiUtils";
+import { midiToFrequency } from "../../util/midi";
 import { buildCurveArray, buildPowerCurveArray } from "./nodeOperations";
 
 // a single automatable parameter - how it's displayed and compiled

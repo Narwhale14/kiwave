@@ -225,8 +225,6 @@ export class AudioEngine {
         const mixers = mixerManager.getAllMixers();
         const mixer = mixers[mixers.length - 1]!;
         this._audioGraph.addGainNode(mixer.id, mixer.route);
-
-        console.log(`mixer ${mixer.name} added`);
     }
 
     removeMixer(mixerId: string) {

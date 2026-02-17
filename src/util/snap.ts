@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { stepReduceByInterval } from './math';
 
 // global snap div
 export const snapDivision = ref(4);
@@ -10,13 +11,20 @@ export const snapOptions = [
   { label: '1/4 step', value: 4 },
   { label: '1/6 step', value: 6},
   { label: '1/8 step', value: 8 },
-  { label: '1/16 step', value: 16 },
-  { label: '1/32 step', value: 32 }
+  { label: '1/16 step', value: 16 }
 ];
+
+const SNAP_COALESCE_THRESHOLD_1 = 35;
+const SNAP_COALESCE_THRESHOLD_2 = 70;
 
 export function snap(value: number, division: number = snapDivision.value): number {
     if(division === 0) return value;
     return Math.floor(value * division) / division;
+}
+
+export function dynamicSnap(value: number, width: number) {
+    const division = getDynamicSnapDivision(width);
+    return snap(value, division);
 }
 
 export function snapNearest(value: number, division: number = snapDivision.value): number {
@@ -24,6 +32,35 @@ export function snapNearest(value: number, division: number = snapDivision.value
     return Math.round(value * division) / division;
 }
 
+export function dynamicSnapNearest(value: number, width: number) {
+    const division = getDynamicSnapDivision(width);
+    return snapNearest(value, division);
+}
+
 export function getSnapSize(division: number = snapDivision.value): number {
     return division > 0 ? 1 / division : 1 / 32; // minimum 1/32
+}
+
+function getDynamicSnapDivision(width: number) {
+    if(width < SNAP_COALESCE_THRESHOLD_2) {
+        return stepReduceByInterval(snapDivision.value, 2, 2);
+    }
+
+    if(width < SNAP_COALESCE_THRESHOLD_1) {
+        return stepReduceByInterval(snapDivision.value, 2, 1);
+    }
+
+    return snapDivision.value;
+}
+
+export function getVisualSnapWidth(width: number) {
+    if(width < SNAP_COALESCE_THRESHOLD_2) {
+        return width / stepReduceByInterval(snapDivision.value, 2, 2);
+    }
+
+    if(width < SNAP_COALESCE_THRESHOLD_1) {
+        return width / stepReduceByInterval(snapDivision.value, 2, 1);
+    }
+
+    return width / snapDivision.value;
 }

@@ -117,10 +117,10 @@
     linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px); /* snap div */
 
   /* drive the repetition via size, not math */
-  background-size: 
-    100% var(--row-h), 
-    var(--bar-w) 100%, 
-    var(--beat-w) 100%, 
+  background-size:
+    100% var(--row-h),
+    var(--bar-w) 100%,
+    var(--beat-w) 100%,
     var(--snap-w) 100%;
 }
 

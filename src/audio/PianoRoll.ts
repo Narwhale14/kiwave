@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import { snapDivision, snapNearest, getSnapSize } from '../util/snap'
+import { snapDivision, getSnapSize } from '../util/snap'
 import type { AutomationCurve } from './automation/types';
 import { PARAMETER_MAP } from './automation/parameter';
 import { createDefaultCurve, resizeNodes, shiftNodeValues } from './automation/nodeOperations';
@@ -104,8 +104,7 @@ export class PianoRoll {
 
     resize(targetCol: number): number {
         if(!this.resizingNote) return getSnapSize();
-        const snappedTarget = snapNearest(targetCol);
-        this.resizingNote.length = Math.max(getSnapSize(), snappedTarget - this.resizingNote.col);
+        this.resizingNote.length = Math.max(getSnapSize(), targetCol - this.resizingNote.col);
         this._state.version++;
         return this.resizingNote.length;
     }

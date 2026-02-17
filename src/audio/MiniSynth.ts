@@ -1,4 +1,4 @@
-import { midiToFrequency } from "../util/midiUtils";
+import { midiToFrequency } from "../util/midi";
 import type { CompiledNoteAutomation } from "./automation/types";
 
 // automationGain (0-1 raw, default 0.5) → envelopeGain (velocity*BASE_GAIN*2) → pannerNode → masterGain

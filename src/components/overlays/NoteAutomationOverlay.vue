@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import { insertNode, moveNode, setNodeTension, deleteNode, getHandleValue, getPowerHandleValue, evalPowerCurve } from '../../audio/automation/nodeOperations';
 import { snapNearest, snapDivision } from '../../util/snap';
 import type { AutomationCurve } from '../../audio/automation/types';
-import { manipulateColor } from '../../util/miscUtil';
+import { manipulateColor } from '../../util/display';
 
 const LINE_HIT_WIDTH = 16;
 const NODE_HIT_RADIUS = 8;

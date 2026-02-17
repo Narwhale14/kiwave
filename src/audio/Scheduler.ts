@@ -54,7 +54,7 @@ export class Scheduler {
 
     private _loopEnabled = false;
     private _loopStart = 0;
-    private _loopEnd = 4;
+    private loopEnd = 4;
 
     private playheadCallback: PlayheadCallback | null = null;
     private playStateCallback: PlayStateCallback | null = null;
@@ -92,9 +92,6 @@ export class Scheduler {
         return this._loopStart;
     }
 
-    get loopEnd(): number {
-        return this._loopEnd;
-    }
 
     // MATH HELPERS
 
@@ -117,8 +114,8 @@ export class Scheduler {
     getCurrentBeat(): number {
         const rawBeat = this.getRawBeat();
 
-        if(this._loopEnabled && rawBeat >= this._loopEnd) {
-            const loopLength = this._loopEnd - this._loopStart;
+        if(this._loopEnabled && rawBeat >= this.loopEnd) {
+            const loopLength = this.loopEnd - this._loopStart;
             if(loopLength > 0) return this._loopStart + ((rawBeat - this._loopStart) % loopLength);
         }
 
@@ -179,9 +176,9 @@ export class Scheduler {
             }
 
             // if looping
-            const loopLength = this._loopEnd - this._loopStart;
+            const loopLength = this.loopEnd - this._loopStart;
             if(loopLength <= 0) continue;
-            if(note.startTime < this._loopStart || note.startTime >= this._loopEnd) continue;
+            if(note.startTime < this._loopStart || note.startTime >= this.loopEnd) continue;
 
             // logic to schedule ahead into the next iteration as well
             const loopIteration = Math.floor((rawBeat - this._loopStart) / loopLength);
@@ -381,11 +378,11 @@ export class Scheduler {
 
         this._loopEnabled = enabled;
         if(start !== undefined) this._loopStart = Math.max(0, start);
-        if(end !== undefined) this._loopEnd = Math.max(this._loopStart, end);
+        if(end !== undefined) this.loopEnd = Math.max(this._loopStart, end);
 
         // if playing, rebase time anchor to prevent modulo jumps
         if(wasPlaying && this._loopEnabled) {
-            if(currentBeat >= this._loopEnd || currentBeat < this._loopStart) {
+            if(currentBeat >= this.loopEnd || currentBeat < this._loopStart) {
                 // reset to start of loop
                 this.startTime = this.audioContext.currentTime;
                 this.pauseTime = this.loopStart;

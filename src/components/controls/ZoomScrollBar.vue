@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { clamp } from '../../util/miscUtil';
+import { MAX_ZOOM_FACTOR } from '../../constants/defaults';
+import { clamp } from '../../util/math';
 
 const props = defineProps<{
   startPercent: number;
@@ -10,28 +11,30 @@ const props = defineProps<{
 const emit = defineEmits(['update:view', 'pan']);
 const container = ref<HTMLDivElement | null>(null);
 
-function startDrag(event: PointerEvent, mode: 'pan' | 'left' | 'right', initialStart: number) {
+function startDrag(event: PointerEvent, mode: 'pan' | 'left' | 'right', initialStartPercent: number) {
   if(!container.value) return;
   const rect = container.value!.getBoundingClientRect();
   const initalX = event.clientX;
-  const initialWidth = props.viewWidthPercent;
+  const initialWidthPercent = props.viewWidthPercent;
 
   const move = (eventMove: PointerEvent) => {
     const delta = (eventMove.clientX - initalX) / rect?.width;
-    let nextStart = initialStart;
-    let nextWidth = initialWidth;
+    let nextStartPercent = initialStartPercent;
+    let nextWidthPercent = initialWidthPercent;
 
     if(mode === 'pan') {
-      nextStart = clamp(initialStart + delta, 0, 1 - initialWidth);
+      // only has to change start pos
+      nextStartPercent = clamp(initialStartPercent + delta, 0, 1 - initialWidthPercent); // 0% < newpos < 100% - oldpos
     } else if(mode === 'left') {
-      nextStart = clamp(initialStart + delta, 0, initialStart + initialWidth - 0.05);
-      nextWidth = initialWidth - (nextStart - initialStart);
+      // has to change start pos and width
+      nextStartPercent = clamp(initialStartPercent + delta, 0, initialStartPercent + initialWidthPercent - MAX_ZOOM_FACTOR); // 0% < newpos < as far as right end is
+      nextWidthPercent = initialWidthPercent - (nextStartPercent - initialStartPercent); // diff in pos
     } else if(mode === 'right') {
-      nextWidth = clamp(initialWidth + delta, 0.05, 1 - initialStart);
-      nextStart = initialStart;
+      // has to change width
+      nextWidthPercent = clamp(initialWidthPercent + delta, MAX_ZOOM_FACTOR, 1 - initialStartPercent);
     }
 
-    emit('update:view', { start: nextStart, width: nextWidth });
+    emit('update:view', { start: nextStartPercent, width: nextWidthPercent });
   }
 
   const stop = () => {

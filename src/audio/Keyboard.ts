@@ -1,4 +1,4 @@
-import { noteToMidi, midiToNoteName, isBlackKey } from "../util/midiUtils";
+import { noteToMidi, midiToNoteName, isBlackKey } from "../util/midi";
 
 /**
  * type used to define a note

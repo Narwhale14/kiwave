@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref, computed, watch } from 'vue';
 import { PianoRoll, type NoteBlock, type Cell } from '../audio/PianoRoll'
-import { noteToMidi } from '../util/midiUtils';
+import { noteToMidi } from '../util/midi';
 import { getAudioEngine } from '../services/audioEngineManager';
-import { snap, snapDivision } from '../util/snap';
+import { getVisualSnapWidth, dynamicSnap } from '../util/snap';
 import { playbackMode, registerPatternCallbacks, unregisterPatternCallbacks } from '../services/playbackModeManager';
 import BaseDropdown from './modals/BaseDropdown.vue';
 import NoteAutomationOverlay from './overlays/NoteAutomationOverlay.vue';
 import { ALL_PARAMETERS, PARAMETER_MAP } from '../audio/automation/parameter';
 import type { AutomationCurve } from '../audio/automation/types';
 import { shiftNodeValues } from '../audio/automation/nodeOperations';
-import { clamp, manipulateColor } from '../util/miscUtil';
+import { manipulateColor } from '../util/display';
 import ZoomScrollBar from './controls/ZoomScrollBar.vue';
+import { MAX_ZOOM_FACTOR } from '../constants/defaults';
+import { clamp } from '../util/math';
 
 const VELOCITY_SNAP = 0.05;
 
@@ -32,7 +34,7 @@ const channels = computed(() => engine.channelManager.getAllChannels());
 const instrument = computed(() => engine.channelManager.getChannel(selectedChannelId.value)?.instrument ?? null);
 const notes = props.roll.getKeyboardNotes;
 
-const workSpaceContainer = ref<HTMLDivElement | null>(null);
+const workspaceContainer = ref<HTMLDivElement | null>(null);
 const pianoRollContainer = ref<HTMLDivElement | null>(null);
 const cursor = ref('default');
 
@@ -60,23 +62,13 @@ const playhead = reactive({
   playing: false
 });
 
-const rowHeight = ref(15);
-const colWidth = ref(80);
+const rowHeight = ref(15); // height of row (key)
+const colWidth = ref(80); // width of col (beat)
+const scrollX = ref(0); // pos of horizontal scroll
 const beatsPerBar = 4;
 
-// scroll stuff
-const scrollX = ref(0);
-
-const scrollPercent = computed(() => {
-  const total = 128 * beatsPerBar * colWidth.value;
-  return total ? scrollX.value / total : 0;
-});
-
-const viewWidthPercent = computed(() => {
-  if(!pianoRollContainer.value) return 0;
-  const total = 128 * beatsPerBar * colWidth.value;
-  return total ? pianoRollContainer.value.clientWidth / total : 0;
-});
+const barCount = computed(() => Math.ceil(props.roll.getEndBeat(beatsPerBar) / beatsPerBar) + 7);
+const totalWidth = computed(() => barCount.value * beatsPerBar * colWidth.value);
 
 const activeAutomationLane = ref<string | null>(null);
 const activeLaneDef = computed(() => activeAutomationLane.value ? PARAMETER_MAP.get(activeAutomationLane.value) ?? null : null);
@@ -156,11 +148,16 @@ function updatePatternLoop() {
 }
 
 function getCellFromPointer(event: PointerEvent) {
-  if(!workSpaceContainer.value) return { row: 0, col: 0};
-  const rect = workSpaceContainer.value.getBoundingClientRect();
+  if(!workspaceContainer.value) return { row: 0, col: 0};
+  const rect = workspaceContainer.value.getBoundingClientRect();
+
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
-  return { row: Math.floor(y / rowHeight.value), col: snap(x / colWidth.value) };
+
+  let col = x / colWidth.value;
+  if(!event.shiftKey) col = dynamicSnap(x / colWidth.value, colWidth.value);
+
+  return { row: Math.floor(y / rowHeight.value), col };
 }
 
 // USER CONTROLS
@@ -193,19 +190,17 @@ function handleWheel(event: WheelEvent) {
     event.preventDefault();
   
     const mouseX = event.clientX - element.getBoundingClientRect().left;
-    const zoomAnchorPercent = (mouseX + element.scrollLeft) / (128 * beatsPerBar * colWidth.value);
+    const zoomAnchorPercent = (mouseX + element.scrollLeft) / totalWidth.value;
 
     const zoomIntensity = 0.15;
-    const delta = event.deltaY > 0 ? (1 - zoomIntensity) : (1 + zoomIntensity);
-    
-    // apply the delta to the colWidth
-    colWidth.value = clamp(colWidth.value * delta, 10, 500);
+
+    const minColWidth = element.clientWidth / (barCount.value * beatsPerBar);
+    const maxColWidth = element.clientWidth / (barCount.value * beatsPerBar * MAX_ZOOM_FACTOR);
+    colWidth.value = clamp(colWidth.value * (event.deltaY > 0 ? (1 - zoomIntensity) : (1 + zoomIntensity)), minColWidth, maxColWidth);
 
     // sync scroll so the mouse stays over the same musical position
     nextTick(() => {
-      const newTotalWidth = 128 * beatsPerBar * colWidth.value;
-      element.scrollLeft = (zoomAnchorPercent * newTotalWidth) - mouseX;
-      // Mirror the new scroll position to our reactive variable for the scrollbar
+      element.scrollLeft = (zoomAnchorPercent * totalWidth.value) - mouseX;
       scrollX.value = element.scrollLeft;
     });
     return;
@@ -249,7 +244,7 @@ function onPianoRollKeyDown(event: KeyboardEvent) {
 }
 
 function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
-  const pianoRoll = workSpaceContainer.value!.getBoundingClientRect();
+  const pianoRoll = workspaceContainer.value!.getBoundingClientRect();
   const pointerX = event.clientX - pianoRoll.left;
   const noteRightX = (note.col + note.length) * colWidth.value;
 
@@ -261,8 +256,10 @@ function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
 function handlePointerMove(event: PointerEvent) {
   if(activeLaneDef.value) return;
   if(props.roll.isResizing() && state.resizingNote) {
-    const pointerX = event.clientX - workSpaceContainer.value!.getBoundingClientRect().left;
-    state.cachedLength = props.roll.resize(pointerX / colWidth.value);
+    const pointerX = event.clientX - workspaceContainer.value!.getBoundingClientRect().left;
+    const rawCol = pointerX / colWidth.value;
+    const snappedCol = event.shiftKey ? rawCol : dynamicSnap(rawCol, colWidth.value);
+    state.cachedLength = props.roll.resize(snappedCol);
 
     engine.scheduler.updateNote(state.resizingNote.id, {
       duration: state.resizingNote.length
@@ -424,16 +421,13 @@ function finalizeEdit() {
 function handleViewUpdate({ start, width }: { start: number, width: number }) {
   if(!pianoRollContainer.value) return;
 
-  const totalBeats = 128 * beatsPerBar;
-  
-  const newColWidth = pianoRollContainer.value.clientWidth / (width * totalBeats);
-  colWidth.value = clamp(newColWidth, 10, 500);
+  // start and width are the current position and width percent of the slider's track
+  // start = 0 means the slider is at the far left
+  // width = 1 means the width is 100% of the slider's track
 
-  const newTotalWidth = totalBeats * colWidth.value;
-  const newScrollLeft = start * newTotalWidth;
-
-  pianoRollContainer.value.scrollLeft = newScrollLeft;
-  scrollX.value = newScrollLeft; 
+  colWidth.value = pianoRollContainer.value.clientWidth / (width * barCount.value * beatsPerBar);
+  pianoRollContainer.value.scrollLeft = start * totalWidth.value;
+  scrollX.value = pianoRollContainer.value.scrollLeft;
 }
 
 // load pattern notes into scheduler (only when in pattern mode)
@@ -468,19 +462,9 @@ onMounted(async () => {
     playhead.col = beat;
     if(!pianoRollContainer.value) return;
 
-    const playheadPos = beat * colWidth.value;
-    const viewWidth = pianoRollContainer.value.clientWidth;
-    const threshold = colWidth.value * 4;
-
     if(beat < 1 && pianoRollContainer.value.scrollLeft > 0) {
       pianoRollContainer.value.scrollLeft = 0;
       return;
-    }
-
-    const viewEndpoint = pianoRollContainer.value.scrollLeft + viewWidth;
-
-    if(playheadPos > viewEndpoint - threshold) {
-      pianoRollContainer.value.scrollLeft = playheadPos - pianoRollContainer.value.clientWidth + threshold;
     }
   };
 
@@ -511,13 +495,13 @@ onBeforeUnmount(() => {
   windowElement.value?.removeEventListener('keydown', onPianoRollKeyDown);
   unregisterPatternCallbacks();
 
-  if (playbackMode.value === 'pattern') {
+  if(playbackMode.value === 'pattern') {
     engine.scheduler.setNotes([]);
     if(engine.scheduler.isPlaying) {
       engine.scheduler.stop();
     }
   }
-})
+});
 </script>
 
 <template>
@@ -577,16 +561,12 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <ZoomScrollBar 
-      :start-percent="scrollPercent"
-      :view-width-percent="viewWidthPercent"
-      @update:view="handleViewUpdate"
-    />
+    <ZoomScrollBar :start-percent="scrollX / totalWidth" :view-width-percent="pianoRollContainer ? pianoRollContainer.clientWidth / totalWidth : 0" @update:view="handleViewUpdate"/>
 
     <!-- piano roll -->
     <div ref="pianoRollContainer" class="flex-1 overflow-y-auto overflow-x-hidden grid grid-cols-[50px_1fr]" @scroll="onNativeScroll">
       <!-- notes column -->
-      <div class="flex flex-col-reverse sticky left-0 z-50" ref="pianoKeysContainer" :style="{ height: `${notes.length * rowHeight}px` }">
+      <div class="flex flex-col-reverse sticky left-0 z-50 shrink-0" ref="pianoKeysContainer" :style="{ height: `${notes.length * rowHeight}px` }">
         <button v-for="key in notes" :key="key.midi" @pointerdown="playNote(key.midi)" @pointerup="stopNote(key.midi)" @pointerleave="stopNote(key.midi)"
           :class="[ 'w-full text-sm select-none border-2 border-transparent hover:key border-rounded', key.isBlack ? 'key-black' : 'key-white']"
           :style="{ height: rowHeight + 'px' }"
@@ -596,16 +576,23 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- workspace -->
-      <div class="relative" ref="workSpaceContainer" :style="{ cursor: cursor, height: `${notes.length * rowHeight}px`, width: `${128 * beatsPerBar * colWidth}px`}"
+      <div class="relative" ref="workspaceContainer" :style="{ cursor: cursor, height: `${notes.length * rowHeight}px`, width: `${totalWidth}px`}"
         @pointermove="handlePointerMove" @pointerleave="finalizeEdit" @pointerdown="handlePointerDown" @pointerup="finalizeEdit" @wheel="handleWheel" @contextmenu.prevent
       >
+        <!-- 4-bar alternating column backgrounds -->
+        <div class="absolute inset-0 pointer-events-none" :style="{
+          backgroundImage: 'linear-gradient(to right, rgba(0,0,0,0.15) 50%, transparent 50%)',
+          backgroundSize: `${colWidth * beatsPerBar * 8}px 100%`,
+          backgroundPosition: `${colWidth * beatsPerBar * 4}px 0`
+        }"></div>
+
         <!-- grid -->
         <div class="absolute inset-0 piano-roll-grid pointer-events-none"
           :style="{ 
             '--row-h': `${rowHeight}px`,
             '--beat-w': `${colWidth}px`,
             '--bar-w': `${colWidth * beatsPerBar}px`,
-            '--snap-w': `${snapDivision > 1 ? colWidth / snapDivision : colWidth}px`,
+            '--snap-w': `${getVisualSnapWidth(colWidth)}px`,
           }"
         ></div>
 
