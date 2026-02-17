@@ -116,6 +116,35 @@ export class MixerManager {
         this.onMuteStateChanged?.();
     }
 
+    // --- load/save helpers ---
+
+    /** Add a mixer with a specific ID and route (for state restore). */
+    addMixerWithId(id: string, name: string, route: number) {
+        this.mixers.push({
+            id,
+            name,
+            route,
+            volume: 1,
+            pan: 0,
+            muted: false,
+            solo: false,
+            peakDbL: -Infinity,
+            peakDbR: -Infinity,
+        });
+    }
+
+    /** Remove all non-master mixers (for state restore). */
+    clearNonMasterMixers() {
+        const toRemove = this.mixers.filter(m => m.id !== 'master').map(m => m.id);
+        for(const id of toRemove) this.removeMixer(id);
+        this.soloMixerId = null;
+    }
+
+    /** Directly set the solo mixer ID (for state restore). */
+    restoreSoloState(id: string | null) {
+        this.soloMixerId = id;
+    }
+
     toggleSolo(id: string) {
         const mixer = this.mixers.find(m => m.id === id);
         if(!mixer) return;

@@ -57,6 +57,42 @@ export class ChannelManager {
         return `channel-${this.nextId - 1}`;
     }
 
+    // --- load/save helpers ---
+
+    get nextChannelIdCounter(): number {
+        return this.nextId;
+    }
+
+    setNextId(n: number) {
+        this.nextId = n;
+    }
+
+    /** Add a channel with a specific ID (for state restore). Does not increment nextId. */
+    addChannelWithId(instrument: MiniSynth, id: string, name: string): void {
+        this.channels.push({
+            id,
+            name,
+            instrument,
+            mixerTrack: 0,
+            volume: 1,
+            pan: 0,
+            muted: false,
+            solo: false
+        });
+    }
+
+    /** Remove all channels (for state restore). */
+    clearAllChannels() {
+        this.channels.splice(0, this.channels.length);
+        this.soloChannelId = null;
+        this.nextId = 1;
+    }
+
+    /** Directly set the solo channel ID (for state restore). */
+    restoreSoloState(id: string | null) {
+        this.soloChannelId = id;
+    }
+
     setMixerRoute(id: string, mixerTrack: number) {
         const channel = this.channels.find(c => c.id === id);
         if(!channel) return;

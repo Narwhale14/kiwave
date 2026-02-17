@@ -62,6 +62,42 @@ export class Arrangement {
         return n;
     }
 
+    // --- load/save helpers ---
+
+    get nextClipIdCounter(): number {
+        return this.nextClipId;
+    }
+
+    setNextClipId(n: number) {
+        this.nextClipId = n;
+    }
+
+    /** Remove all tracks (for state restore — clears the 4 constructor defaults). */
+    clearTracks() {
+        this._tracks.splice(0, this._tracks.length);
+        this.soloTrackId = null;
+    }
+
+    /** Remove all clips (for state restore). */
+    clearClips() {
+        this._clips.splice(0, this._clips.length);
+    }
+
+    /** Push a clip directly with its saved ID (for state restore). */
+    loadClip(clip: ArrangementClip) {
+        this._clips.push(clip);
+    }
+
+    /** Push a track directly with its saved ID (for state restore). */
+    loadTrack(track: ArrangementTrack) {
+        this._tracks.push(track);
+    }
+
+    /** Directly set the solo track ID (for state restore). */
+    restoreSoloState(id: string | null) {
+        this.soloTrackId = id;
+    }
+
     // adds a clip
     addClip(patternId: string, track: number, startBeat: number, duration: number, offset: number = 0): void {
         const id = `clip-${this.nextClipId}`;

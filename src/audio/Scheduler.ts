@@ -92,6 +92,14 @@ export class Scheduler {
         return this._loopStart;
     }
 
+    get loopEndBeat(): number {
+        return this.loopEnd;
+    }
+
+    get pauseBeat(): number {
+        return this.pauseTime;
+    }
+
 
     // MATH HELPERS
 
