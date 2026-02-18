@@ -1,5 +1,6 @@
 import { reactive } from "vue";
 import type { MiniSynth } from "./MiniSynth";
+import { markDirty } from '../util/dirty';
 
 export interface Channel {
     id: string;
@@ -32,12 +33,13 @@ export class ChannelManager {
             solo: false
         });
         this.nextId++;
+        markDirty();
         return id;
     }
 
     removeChannel(id: string) {
         const index = this.channels.findIndex(c => c.id === id);
-        if(index !== -1) this.channels.splice(index, 1);
+        if(index !== -1) { this.channels.splice(index, 1); markDirty(); }
     }
 
     getChannel(id: string): Channel | null {
@@ -57,58 +59,25 @@ export class ChannelManager {
         return `channel-${this.nextId - 1}`;
     }
 
-    // --- load/save helpers ---
-
-    get nextChannelIdCounter(): number {
-        return this.nextId;
-    }
-
-    setNextId(n: number) {
-        this.nextId = n;
-    }
-
-    /** Add a channel with a specific ID (for state restore). Does not increment nextId. */
-    addChannelWithId(instrument: MiniSynth, id: string, name: string): void {
-        this.channels.push({
-            id,
-            name,
-            instrument,
-            mixerTrack: 0,
-            volume: 1,
-            pan: 0,
-            muted: false,
-            solo: false
-        });
-    }
-
-    /** Remove all channels (for state restore). */
-    clearAllChannels() {
-        this.channels.splice(0, this.channels.length);
-        this.soloChannelId = null;
-        this.nextId = 1;
-    }
-
-    /** Directly set the solo channel ID (for state restore). */
-    restoreSoloState(id: string | null) {
-        this.soloChannelId = id;
-    }
-
     setMixerRoute(id: string, mixerTrack: number) {
         const channel = this.channels.find(c => c.id === id);
         if(!channel) return;
         channel.mixerTrack = mixerTrack;
+        markDirty();
     }
 
     setVolume(id: string, volume: number) {
         const channel = this.channels.find(c => c.id === id);
         if(!channel) return;
         channel.volume = volume;
+        markDirty();
     }
 
     setPan(id: string, pan: number) {
         const channel = this.channels.find(c => c.id === id);
         if(!channel) return;
         channel.pan = pan;
+        markDirty();
     }
 
     toggleMute(id: string) {
@@ -123,6 +92,7 @@ export class ChannelManager {
 
         channel.muted = !channel.muted;
         this.onMuteStateChanged?.();
+        markDirty();
     }
 
     toggleSolo(id: string) {
@@ -134,6 +104,7 @@ export class ChannelManager {
             this.soloChannelId = null;
             this.channels.forEach(ch => ch.muted = false);
             this.onMuteStateChanged?.();
+            markDirty();
             return;
         }
 
@@ -146,6 +117,40 @@ export class ChannelManager {
         this.soloChannelId = id;
         this.channels.forEach(ch => { ch.muted = ch.id !== id; });
         this.onMuteStateChanged?.();
+        markDirty();
+    }
+
+    // --- load/save helpers ---
+
+    get nextChannelIdCounter(): number {
+        return this.nextId;
+    }
+
+    setNextId(n: number) {
+        this.nextId = n;
+    }
+
+    addChannelWithId(instrument: MiniSynth, id: string, name: string): void {
+        this.channels.push({
+            id,
+            name,
+            instrument,
+            mixerTrack: 0,
+            volume: 1,
+            pan: 0,
+            muted: false,
+            solo: false
+        });
+    }
+
+    clearAllChannels() {
+        this.channels.splice(0, this.channels.length);
+        this.soloChannelId = null;
+        this.nextId = 1;
+    }
+
+    restoreSoloState(id: string | null) {
+        this.soloChannelId = id;
     }
 }
 

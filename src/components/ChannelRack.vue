@@ -105,7 +105,7 @@ onBeforeUnmount(() => {
 
     <div v-for="channel in channels" :key="channel.id" class="flex flex-row items-center gap-2 px-2 border-b border-mix-20 hover:bg-mix-15 py-1 transition-colors shrink-0">
       <div class="flex gap-1 bg-mix-10 rounded p-0.5 border-mix-30 border-2">
-        <Knob :size="28" :resistance="0.5" :title="`Volume: ${Math.round(channel.volume * 100)}%`" :model-value="channel.volume" :default-value="1" arc="from-start" @update:model-value="v => engine.setChannelGain(channel.id, v)"/>
+        <Knob :size="28" :resistance="0.5" :title="`Volume: ${Math.round(channel.volume * 100)}%`" :model-value="channel.volume" :default-value="1" arc="from-start" @update:model-value="v => {engine.setChannelGain(channel.id, v); console.log(channel.id)}"/>
         <Knob :model-value="channel.pan" @update:model-value="p => engine.setChannelPan(channel.id, p)" :min="-1" :max="1" :size="28" :default-value="0" arc="from-center" :colors="['#60a5fa', '#f87171']" title="Pan" />
 
         <!-- mute toggle (left click) / solo toggle (right click) -->

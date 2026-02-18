@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { insertNode, moveNode, setNodeTension, deleteNode, getHandleValue, getPowerHandleValue, evalPowerCurve } from '../../audio/automation/nodeOperations';
+import { insertNode, moveNode, setNodeTension, deleteNode, getHandleValue, getPowerHandleValue, evalPowerCurve, type AutomationCurve } from '../../audio/Automation';
 import { snapNearest, snapDivision } from '../../util/snap';
-import type { AutomationCurve } from '../../audio/automation/types';
 import { manipulateColor } from '../../util/display';
 
 const LINE_HIT_WIDTH = 16;

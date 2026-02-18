@@ -343,8 +343,8 @@ watch(() => arrangement.clips, () => {
 
 // watch for pattern edits
 watch(() => patterns.value.map(p => ({ id: p.id, version: p.roll._state.version })), (newPatterns, oldPatterns) => {
-  if (oldPatterns) {
-    for (let i = 0; i < newPatterns.length; i++) {
+  if(oldPatterns) {
+    for(let i = 0; i < newPatterns.length; i++) {
       const np = newPatterns[i];
       const op = oldPatterns[i];
       if (np && op && np.version !== op.version) {

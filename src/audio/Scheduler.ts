@@ -1,7 +1,7 @@
-import type { AutomationCurve, CompiledNoteAutomation } from './automation/types';
-import { PARAMETER_MAP } from './automation/parameter';
-import { deriveSegments } from './automation/nodeOperations';
+import { PARAMETER_MAP } from './Automation';
+import { deriveSegments, type AutomationCurve, type CompiledNoteAutomation } from './Automation';
 import type { ChannelManager } from './ChannelManager';
+import { markDirty } from '../util/dirty';
 
 /**
  * interface used to convert note data to a type the scheduler can read
@@ -42,8 +42,8 @@ export class Scheduler {
 
     // state
     private _isPlaying = false;
+    private _pauseTime = 0;
     private startTime = 0;
-    private pauseTime = 0;
     private playheadPos = 0;
     private schedulerTimerId: number | null = null;
 
@@ -54,7 +54,7 @@ export class Scheduler {
 
     private _loopEnabled = false;
     private _loopStart = 0;
-    private loopEnd = 4;
+    private _loopEnd = 4;
 
     private playheadCallback: PlayheadCallback | null = null;
     private playStateCallback: PlayStateCallback | null = null;
@@ -92,12 +92,12 @@ export class Scheduler {
         return this._loopStart;
     }
 
-    get loopEndBeat(): number {
-        return this.loopEnd;
+    get loopEnd(): number {
+        return this._loopEnd;
     }
 
-    get pauseBeat(): number {
-        return this.pauseTime;
+    get pauseTime(): number {
+        return this._pauseTime;
     }
 
 
@@ -313,7 +313,7 @@ export class Scheduler {
         if(!this._isPlaying) return;
 
         this._isPlaying = false;
-        this.pauseTime = this.getCurrentBeat();
+        this._pauseTime = this.getCurrentBeat();
 
         if(this.schedulerTimerId !== null) {
             clearInterval(this.schedulerTimerId);
@@ -333,7 +333,7 @@ export class Scheduler {
 
     stop() {
         this.pause();
-        this.pauseTime = this._loopEnabled ? this._loopStart : 0;
+        this._pauseTime = this._loopEnabled ? this._loopStart : 0;
 
         if(this.playheadCallback) {
             this.playheadCallback(this.pauseTime);
@@ -370,13 +370,15 @@ export class Scheduler {
         this._bpm = bpm;
 
         if(this._isPlaying) {
-            this.pauseTime = currentBeat;
+            this._pauseTime = currentBeat;
             this.startTime = this.audioContext.currentTime;
 
             // clear schedule since timing changed
             this.scheduledNoteOns.clear();
             this.scheduledNoteOffs.clear();
         }
+
+        markDirty();
     }
 
     setLoop(enabled: boolean, start?: number, end?: number) {
@@ -386,14 +388,14 @@ export class Scheduler {
 
         this._loopEnabled = enabled;
         if(start !== undefined) this._loopStart = Math.max(0, start);
-        if(end !== undefined) this.loopEnd = Math.max(this._loopStart, end);
+        if(end !== undefined) this._loopEnd = Math.max(this._loopStart, end);
 
         // if playing, rebase time anchor to prevent modulo jumps
         if(wasPlaying && this._loopEnabled) {
             if(currentBeat >= this.loopEnd || currentBeat < this._loopStart) {
                 // reset to start of loop
                 this.startTime = this.audioContext.currentTime;
-                this.pauseTime = this.loopStart;
+                this._pauseTime = this.loopStart;
 
                 this.panicAll();
                 this.scheduledNoteOns.clear();
@@ -404,9 +406,11 @@ export class Scheduler {
             } else {
                 // rebase execution to current beat
                 this.startTime = this.audioContext.currentTime;
-                this.pauseTime = currentBeat;
+                this._pauseTime = currentBeat;
             }
         }
+
+        markDirty();
     }
 
     seek(beat: number) {
@@ -416,7 +420,7 @@ export class Scheduler {
             this.pause();
         }
 
-        this.pauseTime = Math.max(0, beat);
+        this._pauseTime = Math.max(0, beat);
         this.scheduledNoteOns.clear();
         this.scheduledNoteOffs.clear();
 

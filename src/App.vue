@@ -11,6 +11,7 @@ import Mixer from './components/Mixer.vue';
 import { arrangementWindow, channelRackWindow, mixerWindow, pianoRollWindow } from './services/layoutManager';
 import { onMounted, onUnmounted } from 'vue';
 import { togglePlaybackMode } from './services/playbackModeManager';
+import { loadAutoSave, deserializeState } from './services/saveStateManager';
 
 function handleKeyDown(event: KeyboardEvent) {
   if(event.key === 'l' || event.key === 'L') {
@@ -18,8 +19,10 @@ function handleKeyDown(event: KeyboardEvent) {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('keydown', handleKeyDown);
+  const saved = await loadAutoSave();
+  if(saved) await deserializeState(saved);
 });
 
 onUnmounted(() => {
@@ -88,7 +91,7 @@ onUnmounted(() => {
         @close="closePattern(pattern.num)"
         :resizing="{ left: true, right: true, top: true, bottom: true }"
       >
-        <PianoRoll :roll="pattern.roll" :name="pattern.name" />
+        <PianoRoll :roll="pattern.roll" :name="pattern.name" v-model:selectedChannelId="pattern.selectedChannelId" />
       </Window>
     </div>
   </div>

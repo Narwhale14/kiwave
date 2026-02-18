@@ -7,9 +7,8 @@ import { getVisualSnapWidth, dynamicSnap } from '../util/snap';
 import { playbackMode, registerPatternCallbacks, unregisterPatternCallbacks } from '../services/playbackModeManager';
 import BaseDropdown from './modals/BaseDropdown.vue';
 import NoteAutomationOverlay from './overlays/NoteAutomationOverlay.vue';
-import { ALL_PARAMETERS, PARAMETER_MAP } from '../audio/automation/parameter';
-import type { AutomationCurve } from '../audio/automation/types';
-import { shiftNodeValues } from '../audio/automation/nodeOperations';
+import { ALL_PARAMETERS, PARAMETER_MAP } from '../audio/Automation';
+import { shiftNodeValues, type AutomationCurve } from '../audio/Automation';
 import { manipulateColor } from '../util/display';
 import ZoomScrollBar from './controls/ZoomScrollBar.vue';
 import { MAX_ZOOM_FACTOR } from '../constants/defaults';
@@ -20,7 +19,10 @@ const VELOCITY_SNAP = 0.05;
 const props = defineProps<{
   roll: PianoRoll;
   name: string;
+  selectedChannelId: string;
 }>();
+
+const emit = defineEmits<{ 'update:selectedChannelId': [id: string] }>();
 
 let noteIdCounter = 0;
 function generateNoteId(): string {
@@ -29,7 +31,7 @@ function generateNoteId(): string {
 
 // relevant data
 const engine = getAudioEngine();
-const selectedChannelId = ref(engine.channelManager.getLatestChannelId() || '');
+const selectedChannelId = computed({ get: () => props.selectedChannelId, set: (v) => emit('update:selectedChannelId', v) });
 const channels = computed(() => engine.channelManager.getAllChannels());
 const instrument = computed(() => engine.channelManager.getChannel(selectedChannelId.value)?.instrument ?? null);
 const notes = props.roll.getKeyboardNotes;
@@ -248,9 +250,8 @@ function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
   const pointerX = event.clientX - pianoRoll.left;
   const noteRightX = (note.col + note.length) * colWidth.value;
 
-  const region = 20;
-  const mult = region > (note.length * colWidth.value) / 3 ? region * note.length : region;
-  return Math.abs(pointerX - noteRightX) <= mult;
+  const region = 0.25 * note.length * colWidth.value; // 1 quarter of the note scaled by colWidth
+  return Math.abs(pointerX - noteRightX) <= region;
 }
 
 function handlePointerMove(event: PointerEvent) {
@@ -456,6 +457,7 @@ function loadPatternNotes() {
 
 onMounted(async () => {
   await nextTick();
+  if(!props.selectedChannelId) emit('update:selectedChannelId', engine.channelManager.getLatestChannelId() || '');
 
   // define callbacks for pattern mode
   const playheadCallback = (beat: number) => {

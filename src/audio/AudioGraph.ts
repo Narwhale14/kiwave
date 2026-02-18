@@ -89,9 +89,9 @@ export class AudioGraph {
     }
 
     // creates a panner node for a channel or mixer track.
-    // channels:      inputNode → panner → targetGain
-    // mixer tracks:  inputNode → panner → [analyserSplitter] AND [muteGain → targetGain]
-    //                analyers tap pre-mute so meters read even when the track is muted.
+    // channels: inputNode -> panner -> targetGain
+    // mixer tracks: inputNode -> panner -> [analyserSplitter] AND [muteGain → targetGain]
+    // analyers tap pre-mute so meters read even when the track is muted.
     addPannerNode(id: string, inputNode: AudioNode, route: number): void {
         const panner = this.audioContext.createStereoPanner();
         inputNode.connect(panner);
@@ -131,7 +131,7 @@ export class AudioGraph {
 
     // moves a node to a different mixer.
     // mixer tracks: reconnects muteGain output (panner/analyser are untouched)
-    // channels:     reconnects panner output directly
+    // channels: reconnects panner output directly
     rerouteNode(id: string, targetMixerNum: number): void {
         const target = this.gainNodes.get(this.resolveTargetId(targetMixerNum));
 

@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { markDirty } from '../util/dirty';
 
 export interface MixerTrack {
     id: string;
@@ -54,11 +55,12 @@ export class MixerManager {
             peakDbL: -Infinity,
             peakDbR: -Infinity,
         });
+        markDirty();
     }
 
     removeMixer(id: string) {
         const index = this.mixers.findIndex(m => m.id === id);
-        if(index !== -1) this.mixers.splice(index, 1);
+        if(index !== -1) { this.mixers.splice(index, 1); markDirty(); }
     }
 
     getMixer(id: string): MixerTrack | null {
@@ -82,24 +84,28 @@ export class MixerManager {
         const mixer = this.mixers.find(m => m.id === id);
         if(!mixer) return;
         mixer.name = name;
+        markDirty();
     }
 
     setRoute(id: string, route: number) {
         const mixer = this.mixers.find(m => m.id === id);
         if(!mixer) return;
         mixer.route = route;
+        markDirty();
     }
 
     setVolume(id: string, volume: number) {
         const mixer = this.mixers.find(m => m.id === id);
         if(!mixer) return;
         mixer.volume = volume;
+        markDirty();
     }
 
     setPan(id: string, pan: number) {
         const mixer = this.mixers.find(m => m.id === id);
         if(!mixer) return;
         mixer.pan = pan;
+        markDirty();
     }
 
     toggleMute(id: string) {
@@ -114,11 +120,37 @@ export class MixerManager {
 
         mixer.muted = !mixer.muted;
         this.onMuteStateChanged?.();
+        markDirty();
+    }
+
+    toggleSolo(id: string) {
+        const mixer = this.mixers.find(m => m.id === id);
+        if(!mixer) return;
+
+        if(this.soloMixerId === id) {
+            mixer.solo = false;
+            this.soloMixerId = null;
+            this.mixers.forEach(m => m.muted = false);
+            this.onMuteStateChanged?.();
+            markDirty();
+            return;
+        }
+
+        if(this.soloMixerId) {
+            const previous = this.mixers.find(m => m.id === this.soloMixerId);
+            if(previous) previous.solo = false;
+        }
+
+        mixer.solo = true;
+        this.soloMixerId = id;
+        // mute all others except master (inserts route through it)
+        this.mixers.forEach(m => { m.muted = m.id !== id && m.id !== 'master'; });
+        this.onMuteStateChanged?.();
+        markDirty();
     }
 
     // --- load/save helpers ---
 
-    /** Add a mixer with a specific ID and route (for state restore). */
     addMixerWithId(id: string, name: string, route: number) {
         this.mixers.push({
             id,
@@ -133,40 +165,14 @@ export class MixerManager {
         });
     }
 
-    /** Remove all non-master mixers (for state restore). */
-    clearNonMasterMixers() {
+    clearMixers() {
         const toRemove = this.mixers.filter(m => m.id !== 'master').map(m => m.id);
         for(const id of toRemove) this.removeMixer(id);
         this.soloMixerId = null;
     }
 
-    /** Directly set the solo mixer ID (for state restore). */
     restoreSoloState(id: string | null) {
         this.soloMixerId = id;
-    }
-
-    toggleSolo(id: string) {
-        const mixer = this.mixers.find(m => m.id === id);
-        if(!mixer) return;
-
-        if(this.soloMixerId === id) {
-            mixer.solo = false;
-            this.soloMixerId = null;
-            this.mixers.forEach(m => m.muted = false);
-            this.onMuteStateChanged?.();
-            return;
-        }
-
-        if(this.soloMixerId) {
-            const previous = this.mixers.find(m => m.id === this.soloMixerId);
-            if(previous) previous.solo = false;
-        }
-
-        mixer.solo = true;
-        this.soloMixerId = id;
-        // mute all others except master (inserts route through it)
-        this.mixers.forEach(m => { m.muted = m.id !== id && m.id !== 'master'; });
-        this.onMuteStateChanged?.();
     }
 }
 

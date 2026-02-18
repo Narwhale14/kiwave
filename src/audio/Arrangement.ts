@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { markDirty } from '../util/dirty';
 
 export interface ArrangementClip {
     id: string,
@@ -72,28 +73,27 @@ export class Arrangement {
         this.nextClipId = n;
     }
 
-    /** Remove all tracks (for state restore — clears the 4 constructor defaults). */
     clearTracks() {
         this._tracks.splice(0, this._tracks.length);
         this.soloTrackId = null;
     }
 
-    /** Remove all clips (for state restore). */
+    // clears clips, duh
     clearClips() {
         this._clips.splice(0, this._clips.length);
     }
 
-    /** Push a clip directly with its saved ID (for state restore). */
+    // push a clip directly with its clip obj
     loadClip(clip: ArrangementClip) {
         this._clips.push(clip);
     }
 
-    /** Push a track directly with its saved ID (for state restore). */
+    // pushes track directly with track obj
     loadTrack(track: ArrangementTrack) {
         this._tracks.push(track);
     }
 
-    /** Directly set the solo track ID (for state restore). */
+    // restores the solo state
     restoreSoloState(id: string | null) {
         this.soloTrackId = id;
     }
@@ -112,6 +112,7 @@ export class Arrangement {
         });
 
         this.nextClipId++;
+        markDirty();
     }
 
     // removes a clip
@@ -119,6 +120,7 @@ export class Arrangement {
         const index = this._clips.findIndex(c => c.id === id);
         if(index === -1) return;
         this._clips.splice(index, 1);
+        markDirty();
     }
 
     // generic update clip function
@@ -126,6 +128,7 @@ export class Arrangement {
         const clip = this._clips.find(c => c.id === id);
         if(!clip) return;
         Object.assign(clip, updates);
+        markDirty();
     }
 
     // convenience method for moving
@@ -149,6 +152,7 @@ export class Arrangement {
            muted: false,
            solo: false
         });
+        markDirty();
     }
 
     // removes a track
@@ -156,6 +160,7 @@ export class Arrangement {
         const index = this._tracks.findIndex(t => t.id === id);
         if(index === -1) return;
         this._tracks.splice(index, 1);
+        markDirty();
     }
 
     // resizes a track
@@ -163,6 +168,7 @@ export class Arrangement {
         const track = this._tracks.find(t => t.id === id);
         if(!track) return;
         track.height = height;
+        markDirty();
     }
 
     getClipAt(track: number, beat: number): ArrangementClip | null {
@@ -181,6 +187,7 @@ export class Arrangement {
         }
 
         track.muted = !track.muted;
+        markDirty();
     }
 
     // solos a track
@@ -192,6 +199,7 @@ export class Arrangement {
             track.solo = false;
             this.soloTrackId = null;
             this._tracks.forEach(t => t.muted = false);
+            markDirty();
             return;
         }
 
@@ -203,6 +211,7 @@ export class Arrangement {
         track.solo = true;
         this.soloTrackId = id;
         this._tracks.forEach(t => { t.muted = t.id !== id });
+        markDirty();
     }
 }
 

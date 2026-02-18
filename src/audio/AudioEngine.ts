@@ -6,6 +6,7 @@ import { mixerManager } from "./MixerManager";
 import { ArrangementCompiler } from "./ArrangementCompiler";
 import { arrangement } from "../audio/Arrangement";
 import { globalVolume } from "../services/settingsManager";
+import { markDirty } from '../util/dirty';
 
 export interface SynthEntry {
     id: string;
@@ -116,6 +117,7 @@ export class AudioEngine {
         channel.volume = volume;
         const node = channel.instrument.getOutputNode();
         node.gain.setTargetAtTime(volume, this._audioContext.currentTime, 0.005);
+        markDirty();
     }
 
     setChannelPan(channelId: string, pan: number) {
@@ -123,6 +125,7 @@ export class AudioEngine {
         if(!channel) return;
         channel.pan = pan;
         this._audioGraph.setPan(channelId, pan);
+        markDirty();
     }
 
     private _syncMixerGains() {
@@ -141,7 +144,8 @@ export class AudioEngine {
         const mixer = mixerManager.getMixer(mixerId);
         if(!mixer) return;
         mixer.volume = volume;
-        this._audioGraph.setGain(mixerId, volume)
+        this._audioGraph.setGain(mixerId, volume);
+        markDirty();
     }
 
     setMixerPan(mixerId: string, pan: number) {
@@ -149,6 +153,7 @@ export class AudioEngine {
         if(!mixer) return;
         mixer.pan = pan;
         this._audioGraph.setPan(mixerId, pan);
+        markDirty();
     }
 
     // GETTERS
@@ -179,10 +184,8 @@ export class AudioEngine {
 
     // LOAD HELPERS
 
-    /**
-     * Dispose all current channels + non-master mixers so state can be restored from a save file.
-     * Call this before restoring channels/mixers from a SaveFile.
-     */
+    // dispose all current channels + mixers so state can be restored from a save file
+    // should be called before loading save
     resetForLoad() {
         for(const channel of channelManager.getAllChannels()) {
             this._audioGraph.disconnectNode(channel.id);
@@ -196,13 +199,10 @@ export class AudioEngine {
             .forEach(m => {
                 this._audioGraph.removeGainNode(m.id);
             });
-        mixerManager.clearNonMasterMixers();
+        mixerManager.clearMixers();
     }
 
-    /**
-     * Restore a single channel from saved data.
-     * Call resetForLoad() first, then restore idCounters, then call this per channel.
-     */
+    // restore single channel. call resetForLoad, then restore idCounters, then call this per channel
     loadChannel(saved: { id: string; name: string; synthId: string; synthNum: number; mixerTrack: number; volume: number; pan: number; muted: boolean; solo: boolean }) {
         const entry = this._synths.find(s => s.id === saved.synthId);
         if(!entry) return;
@@ -221,10 +221,7 @@ export class AudioEngine {
         this._audioGraph.setPan(saved.id, saved.pan);
     }
 
-    /**
-     * Restore a single non-master mixer from saved data.
-     * Call after resetForLoad() and before restoring channels.
-     */
+    // call after resetForLoad and before restoring channels
     loadMixer(saved: { id: string; name: string; route: number; volume: number; pan: number; muted: boolean; solo: boolean }) {
         mixerManager.addMixerWithId(saved.id, saved.name, saved.route);
         this._audioGraph.addGainNode(saved.id, saved.route);

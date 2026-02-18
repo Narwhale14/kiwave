@@ -14,8 +14,8 @@ export const snapOptions = [
   { label: '1/16 step', value: 16 }
 ];
 
-const SNAP_COALESCE_THRESHOLD_1 = 35;
-const SNAP_COALESCE_THRESHOLD_2 = 70;
+const SNAP_COALESCE_THRESHOLD_1 = 30;
+const SNAP_COALESCE_THRESHOLD_2 = 20;
 
 export function snap(value: number, division: number = snapDivision.value): number {
     if(division === 0) return value;
@@ -42,11 +42,10 @@ export function getSnapSize(division: number = snapDivision.value): number {
 }
 
 function getDynamicSnapDivision(width: number) {
-    if(width < SNAP_COALESCE_THRESHOLD_2) {
-        return stepReduceByInterval(snapDivision.value, 2, 2);
-    }
-
     if(width < SNAP_COALESCE_THRESHOLD_1) {
+        if(width < SNAP_COALESCE_THRESHOLD_2) {
+            return stepReduceByInterval(snapDivision.value, 2, 2);
+        }
         return stepReduceByInterval(snapDivision.value, 2, 1);
     }
 
@@ -54,11 +53,10 @@ function getDynamicSnapDivision(width: number) {
 }
 
 export function getVisualSnapWidth(width: number) {
-    if(width < SNAP_COALESCE_THRESHOLD_2) {
-        return width / stepReduceByInterval(snapDivision.value, 2, 2);
-    }
-
     if(width < SNAP_COALESCE_THRESHOLD_1) {
+        if(width < SNAP_COALESCE_THRESHOLD_2) {
+            return width / stepReduceByInterval(snapDivision.value, 2, 2);
+        }
         return width / stepReduceByInterval(snapDivision.value, 2, 1);
     }
 

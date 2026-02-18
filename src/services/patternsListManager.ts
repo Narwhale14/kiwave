@@ -1,7 +1,8 @@
 import { ref, computed, watch } from 'vue';
 import { PianoRoll } from '../audio/PianoRoll';
-import { Keyboard } from '../audio/Keyboard';
+import { keyboard } from '../audio/Keyboard';
 import { focusWindow } from './windowManager';
+import { markDirty } from '../util/dirty';
 
 /**
  * interface to manage each individual piano roll (PianoRoll has note data)
@@ -12,12 +13,8 @@ export interface Pattern {
     name: string;
     roll: PianoRoll;
     visible: boolean;
+    selectedChannelId: string;
 }
-
-const keyboard = new Keyboard(
-    { note: 'C', octave: 0},
-    { note: 'C', octave: 10}
-);
 
 export const patterns = ref<Pattern[]>([]);
 export const activePattern = computed(() => {
@@ -38,24 +35,28 @@ export function addPattern(name?: string) {
         num,
         name: name || `Pattern ${num}`,
         visible: false,
+        selectedChannelId: '',
         roll: new PianoRoll(keyboard.getRange(), keyboard.getKeyboardInfo())
     }
 
     patterns.value.push(pattern);
+    markDirty();
 }
 
 export function removePattern(num: number) {
     const patternIndex = patterns.value.findIndex(p => p.num === num);
     patterns.value.splice(patternIndex, 1);
+    markDirty();
 }
 
 export function closePattern(num: number) {
     const pattern = patterns.value.find(p => p.num === num);
-    if(pattern) pattern.visible = false;
+    if(pattern) { pattern.visible = false; markDirty(); }
 }
 
 export function openPattern(num: number) {
     patterns.value.forEach(p => { p.visible = p.num === num; });
+    markDirty();
 }
 
 export function togglePattern(num: number) {
@@ -69,6 +70,7 @@ export function togglePattern(num: number) {
     }
 
     pattern.visible = !pattern.visible;
+    markDirty();
 }
 
 watch(activePattern, (pattern) => {
@@ -81,7 +83,7 @@ watch(activePattern, (pattern) => {
 if(patterns.value.length === 0) {
     addPattern('Pattern 1');
     const firstPattern = patterns.value[0];
-    if (firstPattern) {
+    if(firstPattern) {
         firstPattern.visible = true;
     }
 }

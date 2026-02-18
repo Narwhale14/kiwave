@@ -11,12 +11,28 @@ import { HEADER_HEIGHT_MIN, HEADER_HEIGHT_MAX } from '../constants/layout';
 import { ref, toRef } from 'vue';
 import { getAudioEngine } from '../services/audioEngineManager';
 import Knob from './controls/Knob.vue';
-import { globalVolume } from '../services/settingsManager';
+import { globalVolume, projectName } from '../services/settingsManager';
 import { DEFAULT_GLOBAL_VOLUME } from '../constants/defaults';
+import { markDirty, isDirty } from '../util/dirty';
 
 const engine = getAudioEngine();
+
 const playButtonOn = ref(false);
 const bpmInput = ref(engine.scheduler.bpm.toString());
+// const fileMenuValue = ref(null);
+
+// const fileMenuItems = [
+//   { label: 'New Project', value: 'new'},
+//   { label: 'Open Project', value: 'open'},
+//   { label: 'Save Project', value: 'open'},
+//   { label: 'Download Project', value: 'open'}
+// ];
+
+// function handleFileMenu(value: string) {
+//   const item = fileMenuItems.find(i => i.value === value);
+//   if(!item) return;
+//   nextTick(() => { fileMenuValue.value = null; });
+// }
 
 function commitBpm() {
   const val = parseFloat(bpmInput.value);
@@ -131,28 +147,14 @@ function startResize(e: PointerEvent) {
     <!-- tempo -->
     <div class="flex flex-col items-center border-2 border-mix-25 rounded bg-mix-10 px-2 py-0.5">
       <span class="text-[8px] font-bold tracking-widest opacity-50 leading-none">BPM</span>
-      <input
-        v-model="bpmInput"
-        type="text"
-        inputmode="decimal"
-        class="bg-transparent text-center text-sm font-mono font-bold w-12 outline-none leading-tight"
-        @focus="($event.target as HTMLInputElement).select()"
-        @blur="commitBpm"
-        @keydown="onBpmKeydown"
+      <input v-model="bpmInput" type="text" inputmode="decimal" class="bg-transparent text-center text-sm font-mono font-bold w-12 outline-none leading-tight" 
+        @focus="($event.target as HTMLInputElement).select()" @blur="commitBpm" @keydown="onBpmKeydown"
       />
     </div>
 
     <!-- snap division -->
     <div class="flex flex-col items-center border-2 border-mix-25 rounded bg-mix-10" style="font-size: 10px;">
-      <BaseDropdown
-        v-model="snapDivision"
-        :items="snapOptions"
-        item-label="label"
-        item-value="value"
-        button-bg="bg-transparent"
-        button-class="px-2 py-0.5 font-mono font-bold min-w-0"
-        width="0"
-      />
+      <BaseDropdown v-model="snapDivision" :items="snapOptions" item-label="label" item-value="value" button-bg="bg-transparent" button-class="px-2 py-0.5 font-mono font-bold min-w-0" width="0"/>
     </div>
 
     <!-- arrangement toggle -->
@@ -182,6 +184,20 @@ function startResize(e: PointerEvent) {
     >
       <span class="pi pi-sliders-v text-sm"></span>
     </button>
+
+    <div class="ml-auto"></div>
+
+    <!-- autosave indicator -->
+    <span class="w-2 h-2 rounded-full transition-colors duration-500" :class="isDirty() ? 'bg-mix-80' : 'playhead-color opacity-40'"/>
+
+    <!-- project name -->
+    <div class="flex flex-row items-center border-2 border-mix-25 rounded bg-mix-10 px-2 py-0.5">
+      <input v-model="projectName" type="text" class="bg-transparent text-center text-sm font-mono font-bold w-28 outline-none leading-tight"
+        @focus="($event.target as HTMLInputElement).select()"
+        @keydown.enter="($event.target as HTMLInputElement).blur(); markDirty()"
+        @keydown.escape="($event.target as HTMLInputElement).blur()"
+      />
+    </div>
 
     <!-- bottom resize handle -->
     <div class="absolute inset-x-0 -bottom-1 h-2 cursor-s-resize z-10" @pointerdown="startResize" />

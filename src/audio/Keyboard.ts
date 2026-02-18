@@ -39,3 +39,6 @@ export class Keyboard {
         }));
     }
 }
+
+// single instance
+export const keyboard = new Keyboard({ note: 'C', octave: 0 }, { note: 'C', octave: 10 });

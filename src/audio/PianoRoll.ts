@@ -1,8 +1,8 @@
 import { reactive } from 'vue';
 import { snapDivision, getSnapSize } from '../util/snap'
-import type { AutomationCurve } from './automation/types';
-import { PARAMETER_MAP } from './automation/parameter';
-import { createDefaultCurve, resizeNodes, shiftNodeValues } from './automation/nodeOperations';
+import { PARAMETER_MAP } from './Automation';
+import { createDefaultCurve, resizeNodes, shiftNodeValues, type AutomationCurve } from './Automation';
+import { markDirty } from '../util/dirty';
 
 export type Cell = { row: number; col: number };
 export type NoteBlock = {
@@ -33,13 +33,27 @@ export class PianoRoll {
         this._keyboardNotes = keyboardNotes;
     }
 
-
     get getNoteData(): NoteBlock[] {
         return [...this._noteData];
     }
 
     get getKeyboardNotes(): { midi: number; note: string; isBlack: boolean }[] {
         return [...this._keyboardNotes];
+    }
+
+    get version(): number {
+        return this._state.version;
+    }
+
+    incrementState() {
+        this._state.version++;
+        markDirty();
+    }
+
+    loadNote(saved: Omit<NoteBlock, 'automation'> & { automation: AutomationCurve[] }): void {
+        const automation = new Map(saved.automation.map(curve => [curve.parameterId, curve]));
+        this._noteData.push({ ...saved, automation });
+        this.incrementState();
     }
 
     isResizing(): boolean {
@@ -78,20 +92,20 @@ export class PianoRoll {
 
         const midi = this.rowToMidi(cell.row);
         this._noteData.push({ id, ...cell, length, velocity, channelId, midi, automation: new Map() });
-        this._state.version++;
+        this.incrementState();
         return midi;
     }
 
     deleteNote(index: number) {
         this._noteData.splice(index, 1);
-        this._state.version++;
+        this.incrementState();
     }
 
     setVelocity(noteId: string, velocity: number) {
         const note = this._noteData.find(n => n.id === noteId);
         if(!note) return;
         note.velocity = velocity;
-        this._state.version++;
+        this.incrementState();
     }
 
     startResize(note: NoteBlock) {
@@ -105,7 +119,7 @@ export class PianoRoll {
     resize(targetCol: number): number {
         if(!this.resizingNote) return getSnapSize();
         this.resizingNote.length = Math.max(getSnapSize(), targetCol - this.resizingNote.col);
-        this._state.version++;
+        this.incrementState();
         return this.resizingNote.length;
     }
 
@@ -120,7 +134,7 @@ export class PianoRoll {
         note.row = Math.max(0, Math.min(newRow, this._keyboardNotes.length - 1));
         note.col = Math.max(0, newCol);
         note.midi = this.rowToMidi(note.row);
-        this._state.version++;
+        this.incrementState();
     }
 
     // AUTOMATION
@@ -137,7 +151,7 @@ export class PianoRoll {
         const defaultNorm = def.getDefaultNormalized?.(note.midi) ?? def.defaultNormalized;
         const curve = createDefaultCurve(parameterId, note.length, defaultNorm);
         note.automation.set(parameterId, curve);
-        this._state.version++;
+        this.incrementState();
         return curve;
     }
 
@@ -145,13 +159,13 @@ export class PianoRoll {
         const note = this._noteData.find(n => n.id === noteId);
         if(!note) return;
         note.automation.set(curve.parameterId, curve);
-        this._state.version++;
+        this.incrementState();
     }
 
     deactivateLane(noteId: string, parameterId: string): void {
         const note = this._noteData.find(n => n.id === noteId);
         note?.automation.delete(parameterId);
-        this._state.version++;
+        this.incrementState();
     }
 
     followNoteMove(noteId: string, oldMidi: number, newMidi: number): void {
@@ -167,7 +181,7 @@ export class PianoRoll {
             note.automation.set(parameterId, { ...curve, nodes: shiftNodeValues(curve.nodes, delta) });
         }
 
-        this._state.version++;
+        this.incrementState();
     }
 
     updateAutomationForResize(noteId: string, oldLength: number, newLength: number): void {
@@ -178,6 +192,6 @@ export class PianoRoll {
             note.automation.set(id, { ...curve, nodes: resizeNodes(curve.nodes, oldLength, newLength) });
         }
 
-        this._state.version++;
+        this.incrementState();
     }
 }
