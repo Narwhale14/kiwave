@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref, computed, watch } from 'vue';
-import { PianoRoll, type NoteBlock, type Cell } from '../audio/PianoRoll'
+import { PianoRoll, type NoteBlock } from '../audio/PianoRoll'
 import { noteToMidi } from '../util/midi';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { getVisualSnapWidth, dynamicSnap } from '../util/snap';
@@ -49,7 +49,7 @@ const dragWindow = inject<(event: PointerEvent) => void>('dragWindow');
 if(!windowElement) throw new Error('PianoRoll must be in a window');
 
 const state = reactive({
-  hoverCell: null as Cell | null,
+  hoverCell: null as { row: number, col: number } | null,
   hoverNote: null as NoteBlock | null,
   cachedLength: 1,
   cachedVelocity: 0.8,

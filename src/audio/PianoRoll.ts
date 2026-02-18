@@ -4,7 +4,6 @@ import { PARAMETER_MAP } from './Automation';
 import { createDefaultCurve, resizeNodes, shiftNodeValues, type AutomationCurve } from './Automation';
 import { markDirty } from '../util/dirty';
 
-export type Cell = { row: number; col: number };
 export type NoteBlock = {
     id: string,
     row: number,
@@ -65,7 +64,7 @@ export class PianoRoll {
         return this._keyboardNotes[index] ? this._keyboardNotes[index].midi : -1;
     }
 
-    getHoveredNote(cell: Cell) {
+    getHoveredNote(cell: { row: number, col: number }) {
         const gridCol = Math.round(cell.col * snapDivision.value);
         const index = this._noteData.findIndex(n => {
             if(n.row !== cell.row) return false;
@@ -86,7 +85,7 @@ export class PianoRoll {
         return Math.ceil(lastNoteEnd / beatsPerBar) * beatsPerBar;
     }
 
-    addNote(cell: Cell, id: string, length: number, velocity: number, channelId: string): number {
+    addNote(cell: { row: number, col: number }, id: string, length: number, velocity: number, channelId: string): number {
         if(cell.row < 0 || cell.row > (this.range.max - this.range.min))
             return -1;
 

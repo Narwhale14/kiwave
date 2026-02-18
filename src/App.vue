@@ -21,14 +21,15 @@ function handleKeyDown(event: KeyboardEvent) {
 
 onMounted(async () => {
   window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('contextmenu', (event) => { event.preventDefault(); });
+
   const saved = await loadAutoSave();
   if(saved) await deserializeState(saved);
 });
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown);
-})
-
+});
 </script>
 
 <template>

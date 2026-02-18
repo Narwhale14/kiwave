@@ -5,7 +5,6 @@ import { arrangementVisible, mixerVisible } from '../services/windowManager';
 import { channelRackVisible } from '../services/windowManager';
 import { activePattern, patterns, closePattern } from '../services/patternsListManager';
 import { activeWindowId, focusWindow, clearActiveWindow } from '../services/windowManager';
-import BaseDropdown from './modals/BaseDropdown.vue';
 import { headerHeight } from '../services/layoutManager';
 import { HEADER_HEIGHT_MIN, HEADER_HEIGHT_MAX } from '../constants/layout';
 import { ref, toRef } from 'vue';
@@ -14,25 +13,14 @@ import Knob from './controls/Knob.vue';
 import { globalVolume, projectName } from '../services/settingsManager';
 import { DEFAULT_GLOBAL_VOLUME } from '../constants/defaults';
 import { markDirty, isDirty } from '../util/dirty';
+import Menu from './modals/Menu.vue';
 
 const engine = getAudioEngine();
 
 const playButtonOn = ref(false);
 const bpmInput = ref(engine.scheduler.bpm.toString());
-// const fileMenuValue = ref(null);
 
-// const fileMenuItems = [
-//   { label: 'New Project', value: 'new'},
-//   { label: 'Open Project', value: 'open'},
-//   { label: 'Save Project', value: 'open'},
-//   { label: 'Download Project', value: 'open'}
-// ];
-
-// function handleFileMenu(value: string) {
-//   const item = fileMenuItems.find(i => i.value === value);
-//   if(!item) return;
-//   nextTick(() => { fileMenuValue.value = null; });
-// }
+const snapMenu = ref<InstanceType<typeof Menu> | null>(null);
 
 function commitBpm() {
   const val = parseFloat(bpmInput.value);
@@ -152,10 +140,13 @@ function startResize(e: PointerEvent) {
       />
     </div>
 
-    <!-- snap division -->
-    <div class="flex flex-col items-center border-2 border-mix-25 rounded bg-mix-10" style="font-size: 10px;">
-      <BaseDropdown v-model="snapDivision" :items="snapOptions" item-label="label" item-value="value" button-bg="bg-transparent" button-class="px-2 py-0.5 font-mono font-bold min-w-0" width="0"/>
-    </div>
+    <!-- snap div -->
+    <button class="flex flex-col items-center border-2 border-mix-25 rounded bg-mix-10 px-2 py-0.5 hover:bg-mix-20"
+      @click="snapMenu?.toggle($event)"
+    >
+      <span class="text-xs font-mono font-bold">1/{{ snapDivision }} step</span>
+    </button>
+    <Menu ref="snapMenu" :items="snapOptions" :width="120" />
 
     <!-- arrangement toggle -->
     <button class="flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-mix-35" :class="arrangementVisible ? 'bg-mix-30' : 'bg-mix-20'"

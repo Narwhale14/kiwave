@@ -5,13 +5,13 @@ import { stepReduceByInterval } from './math';
 export const snapDivision = ref(4);
 
 export const snapOptions = [
-  { label: '1/1 step', value: 1 },
-  { label: '1/2 step', value: 2 },
-  { label: '1/3 step', value: 3},
-  { label: '1/4 step', value: 4 },
-  { label: '1/6 step', value: 6},
-  { label: '1/8 step', value: 8 },
-  { label: '1/16 step', value: 16 }
+  { label: '1/1 step', action: () => (snapDivision.value = 1) },
+  { label: '1/2 step', action: () => (snapDivision.value = 2) },
+  { label: '1/3 step', action: () => (snapDivision.value = 3)},
+  { label: '1/4 step', action: () => (snapDivision.value = 4) },
+  { label: '1/6 step', action: () => (snapDivision.value = 6)},
+  { label: '1/8 step', action: () => (snapDivision.value = 8) },
+  { label: '1/16 step', action: () => (snapDivision.value = 16) }
 ];
 
 const SNAP_COALESCE_THRESHOLD_1 = 30;
