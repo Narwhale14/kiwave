@@ -318,8 +318,8 @@ function handleWheel(event: WheelEvent) {
   const element = arrangementContainer.value;
   if(!element) return;
 
-  // HORIZONTAL ZOOM (Shift + Wheel)
-  if(event.shiftKey) {
+  // HORIZONTAL ZOOM (Ctrl + Wheel)
+  if(event.ctrlKey) {
     event.preventDefault();
   
     const mouseX = event.clientX - element.getBoundingClientRect().left;
