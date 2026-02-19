@@ -24,14 +24,6 @@ const containerRef = ref<HTMLElement | null>(null);
 const measuredHeight = ref(160);
 
 let ro: ResizeObserver | null = null;
-onMounted(() => {
-  if (props.height !== undefined) return;
-  ro = new ResizeObserver(entries => {
-    if (entries[0]) measuredHeight.value = entries[0].contentRect.height;
-  });
-  if (containerRef.value) ro.observe(containerRef.value);
-});
-onUnmounted(() => ro?.disconnect());
 
 const effectiveHeight = computed(() => props.height ?? measuredHeight.value);
 
@@ -58,8 +50,8 @@ function onPointerDown(event: PointerEvent) {
 }
 
 function onPointerMove(event: PointerEvent) {
-  // Re-anchor when shift is toggled to prevent a value jump
-  if (event.shiftKey !== lastShift) {
+  // re-anchor when shift is toggled to prevent a value jump
+  if(event.shiftKey !== lastShift) {
     const prevFine = lastShift ? 0.25 : 1;
     startValue = clamp(startValue - (event.clientY - startY) * prevFine / (usableHeight.value * props.resistance), 0, 1);
     startY = event.clientY;
@@ -92,6 +84,16 @@ function onRightClick(event: MouseEvent) {
     emit('update:modelValue', props.defaultValue);
   }
 }
+
+onMounted(() => {
+  if (props.height !== undefined) return;
+  ro = new ResizeObserver(entries => {
+    if (entries[0]) measuredHeight.value = entries[0].contentRect.height;
+  });
+  if (containerRef.value) ro.observe(containerRef.value);
+});
+
+onUnmounted(() => ro?.disconnect());
 </script>
 
 <template>

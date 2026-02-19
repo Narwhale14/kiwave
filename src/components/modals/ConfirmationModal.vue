@@ -51,12 +51,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown));
 
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="fixed inset-0 z-9999">
+    <div v-if="visible" class="fixed inset-0 z-9999" :class="x == null ? 'flex items-center justify-center' : ''">
       <!-- focuses only on modal -->
       <div class="absolute inset-0" @click.stop />
 
       <!-- modal -->
-      <div ref="modalRef" class="absolute flex flex-col justify-center gap-2 z-50 border-2 p-3 rounded-md bg-mix-20 border-mix-40" :style="x != null ? pos : undefined">
+      <div ref="modalRef" class="flex flex-col justify-center gap-2 z-50 border-2 p-3 rounded-md bg-mix-20 border-mix-40" :class="x != null ? 'absolute' : 'relative'" :style="x != null ? pos : undefined">
         <slot />
 
         <div class="flex items-center gap-2.5">

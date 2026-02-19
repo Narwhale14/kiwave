@@ -253,8 +253,8 @@ function onAddKeyDown(event: KeyboardEvent) {
 }
 
 function handleDoubleClick(event: MouseEvent) {
-  if(!arrangementContainer.value) return;
-  const rect = arrangementContainer.value.getBoundingClientRect();
+  if(!workspaceContainer.value) return;
+  const rect = workspaceContainer.value.getBoundingClientRect();
   const rawBeat = (event.clientX - rect.left) / colWidth.value;
   const track = Math.floor((event.clientY - rect.top) / trackHeight);
 

@@ -1,7 +1,7 @@
-import { watch, nextTick } from 'vue';
+import { ref, watch, nextTick } from 'vue';
 import { getAudioEngine } from './audioEngineManager';
 import { patterns, getNextPatternNum } from './patternsListManager';
-import { globalVolume, projectName } from './settingsManager';
+import { globalVolume, projectName, bpm } from './settingsManager';
 import { snapDivision } from '../util/snap';
 import { playbackMode, setPlaybackMode } from './playbackModeManager';
 import { patternsListWidth, headerHeight } from './layoutManager';
@@ -16,6 +16,8 @@ import type { Channel } from '../audio/ChannelManager';
 import type { AutomationCurve } from '../audio/Automation';
 import type { Pattern } from './patternsListManager';
 import type { Window } from './windowManager';
+import { DEFAULT_GLOBAL_VOLUME } from '../constants/defaults';
+import { PATTERNS_LIST_WIDTH, HEADER_HEIGHT } from '../constants/layout';
 
 // big boi
 let _db: IDBDatabase | null = null;
@@ -33,8 +35,13 @@ const DB_NAME = 'webdaw';
 const DB_VERSION = 1;
 const AUTOSAVE_STORE = 'autosave';
 const PROJECTS_STORE = 'projects';
+const TEMPSAVE_KEY = 'tempsave';
 
 const AUTOSAVE_DEBOUNCE_MS = 2000;
+
+// tracks which project the user is currently working in
+// null = in tempsave mode (unsaved / new project)
+export const currentProjectId = ref<number | null>(null);
 
 // converting data to saveable types
 type SavedMixer = Omit<MixerTrack, 'peakDbL' | 'peakDbR'>;
@@ -66,6 +73,7 @@ interface SavedIdCounters {
 }
 
 interface SaveFile {
+    id?: number;
     version: string;
 
     metadata: {
@@ -94,6 +102,12 @@ interface SaveFile {
     arrangement: SavedArrangement;
     ui: SavedUI;
     idCounters: SavedIdCounters;
+}
+
+export interface ProjectSummary {
+    id: number;
+    name: string;
+    lastModified: number;
 }
 
 // db management
@@ -126,12 +140,12 @@ function openDb(): Promise<IDBDatabase> {
     });
 }
 
-async function idbPut(storeName: string, value: unknown): Promise<void> {
+async function idbPut(storeName: string, value: unknown): Promise<IDBValidKey> {
     const db = await openDb();
     return new Promise((resolve, reject) => {
         const tx = db.transaction(storeName, 'readwrite');
-        tx.objectStore(storeName).put(value);
-        tx.oncomplete = () => resolve();
+        const req = tx.objectStore(storeName).put(value);
+        tx.oncomplete = () => resolve(req.result);
         tx.onerror = () => reject(tx.error);
     });
 }
@@ -143,6 +157,26 @@ async function idbGet<T>(storeName: string, key: IDBValidKey): Promise<T | null>
         const req = tx.objectStore(storeName).get(key);
         req.onsuccess = () => resolve((req.result as T) ?? null);
         req.onerror = () => reject(req.error);
+    });
+}
+
+async function idbGetAll<T>(storeName: string): Promise<T[]> {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const req = tx.objectStore(storeName).getAll();
+        req.onsuccess = () => resolve(req.result as T[]);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function idbDelete(storeName: string, key: IDBValidKey): Promise<void> {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        tx.objectStore(storeName).delete(key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
     });
 }
 
@@ -235,6 +269,7 @@ export async function deserializeState(save: SaveFile): Promise<void> {
 
         projectName.value = save.metadata.projectName;
         engine.setBpm(save.global.bpm);
+        bpm.value = save.global.bpm;
         globalVolume.value = save.global.globalVolume;
         engine.setGlobalVolume(save.global.globalVolume);
         snapDivision.value = save.global.snapDivision;
@@ -243,8 +278,14 @@ export async function deserializeState(save: SaveFile): Promise<void> {
         engine.resetForLoad();
         channelManager.setNextId(save.idCounters.nextChannelId);
 
+        const master = mixerManager.getMixer('master')!;
         const masterSave = save.mixers.find(m => m.id === 'master');
-        if(masterSave) Object.assign(mixerManager.getMixer('master')!, masterSave);
+        if(masterSave) {
+            Object.assign(master, masterSave);
+        } else {
+            // legacy saves / blank saves without master — reset to defaults
+            Object.assign(master, { volume: 1, pan: 0, muted: false, solo: false });
+        }
 
         for(const mixer of save.mixers.filter(m => m.id !== 'master')) {
             engine.loadMixer(mixer);
@@ -265,10 +306,10 @@ export async function deserializeState(save: SaveFile): Promise<void> {
         }
 
         patterns.value.splice(0, patterns.value.length);
-        for(const sp of save.patterns) {
+        for(const pattern of save.patterns) {
             const roll = new PianoRoll(keyboard.getRange(), keyboard.getKeyboardInfo());
-            for(const note of sp.notes) roll.loadNote(note);
-            patterns.value.push({ id: sp.id, num: sp.num, name: sp.name, visible: sp.visible, selectedChannelId: sp.selectedChannelId ?? '', roll });
+            for(const note of pattern.notes) roll.loadNote(note);
+            patterns.value.push({ id: pattern.id, num: pattern.num, name: pattern.name, visible: pattern.visible, selectedChannelId: pattern.selectedChannelId ?? '', roll });
         }
 
         arrangement.clearClips();
@@ -299,30 +340,136 @@ export async function deserializeState(save: SaveFile): Promise<void> {
     }
 }
 
+// tempsave: always-on autosave for unsaved work / crash recovery
+// NOT listed in Open Project. Separate from official named projects.
+
 export async function autoSaveToDb(): Promise<void> {
-    await idbPut(AUTOSAVE_STORE, { id: 1, ...serializeState() });
+    await idbPut(AUTOSAVE_STORE, { id: TEMPSAVE_KEY, ...serializeState() });
 }
 
 export async function loadAutoSave(): Promise<SaveFile | null> {
-    return idbGet<SaveFile>(AUTOSAVE_STORE, 1);
+    // try new key first, fall back to legacy key 1
+    return (await idbGet<SaveFile>(AUTOSAVE_STORE, TEMPSAVE_KEY))
+        ?? (await idbGet<SaveFile>(AUTOSAVE_STORE, 1));
 }
 
-export async function saveProject(name: string): Promise<void> {
-    projectName.value = name;
+// project management
+
+export async function getAllProjects(): Promise<ProjectSummary[]> {
+    const all = await idbGetAll<SaveFile & { id: number }>(PROJECTS_STORE);
+    return all
+        .map(p => ({ id: p.id, name: p.metadata.projectName, lastModified: p.metadata.lastModified }))
+        .sort((a, b) => b.lastModified - a.lastModified);
+}
+
+export type SaveResult = 'ok' | 'duplicate_name';
+
+export async function saveManualProject(): Promise<SaveResult> {
+    const name = projectName.value.trim();
+
+    // reject if another project already uses this name
+    const projects = await getAllProjects();
+    const duplicate = projects.some(p =>
+        p.name.trim().toLowerCase() === name.toLowerCase() &&
+        p.id !== currentProjectId.value
+    );
+    if(duplicate) return 'duplicate_name';
+
     const save = serializeState();
-    save.metadata.lastModified = Date.now();
-    await idbPut(PROJECTS_STORE, save);
+    const now = Date.now();
+    save.metadata.lastModified = now;
+
+    if(currentProjectId.value !== null) {
+        // update existing project, preserve original created timestamp
+        const existing = await idbGet<SaveFile>(PROJECTS_STORE, currentProjectId.value);
+        if(existing) save.metadata.created = existing.metadata.created;
+        await idbPut(PROJECTS_STORE, { id: currentProjectId.value, ...save });
+    } else {
+        save.metadata.created = now;
+        const newId = await idbPut(PROJECTS_STORE, save);
+        currentProjectId.value = newId as number;
+    }
+    dirty.value = false;
+    return 'ok';
 }
 
-export async function loadProject(id: number): Promise<SaveFile | null> {
-    return idbGet<SaveFile>(PROJECTS_STORE, id);
+export async function loadProjectById(id: number): Promise<void> {
+    const save = await idbGet<SaveFile>(PROJECTS_STORE, id);
+    if(!save) throw new Error(`Project ${id} not found`);
+    await deserializeState(save);
+    currentProjectId.value = id;
+}
+
+function createBlankSave(): SaveFile {
+    const now = Date.now();
+    return {
+        version: SAVE_FILE_VERSION,
+        metadata: { projectName: '', created: now, lastModified: now },
+        global: {
+            bpm: 140,
+            globalVolume: DEFAULT_GLOBAL_VOLUME,
+            snapDivision: 4,
+            playbackMode: 'pattern',
+        },
+        playback: { pauseTime: 0, loopEnabled: false, loopStart: 0, loopEnd: 8 },
+        patterns: [
+            { id: 'pattern-1', num: 1, name: 'Pattern 1', visible: true, notes: [], selectedChannelId: 'channel-1' },
+        ],
+        channels: [
+            { id: 'channel-1', name: 'MiniSynth', synthId: 'minisynth', synthNum: 1, mixerTrack: 0, volume: 1, pan: 0, muted: false, solo: false }
+        ],
+        mixers: [
+            { id: 'master', name: 'Master', route: -1, volume: 1, pan: 0, muted: false, solo: false },
+        ],
+        arrangement: {
+            clips: [],
+            tracks: [
+                { id: 'track-1', name: 'Track 1', height: 100, muted: false, solo: false },
+                { id: 'track-2', name: 'Track 2', height: 100, muted: false, solo: false },
+                { id: 'track-3', name: 'Track 3', height: 100, muted: false, solo: false },
+                { id: 'track-4', name: 'Track 4', height: 100, muted: false, solo: false },
+            ],
+        },
+        ui: {
+            patternsListWidth: PATTERNS_LIST_WIDTH,
+            headerHeight: HEADER_HEIGHT,
+            windowVisibility: { arrangementVisible: true, channelRackVisible: true, mixerVisible: true },
+            windows: [],
+        },
+        idCounters: { nextChannelId: 2, nextClipId: 1, nextPatternNum: 2, nextMixerNum: 1 },
+    };
+}
+
+export async function newProject(): Promise<void> {
+    await deserializeState(createBlankSave());
+    currentProjectId.value = null;
+    await autoSaveToDb();
+}
+
+export async function deleteCurrentProject(): Promise<void> {
+    if(currentProjectId.value === null) return;
+    await idbDelete(PROJECTS_STORE, currentProjectId.value);
+    await newProject();
+}
+
+export async function initLoad(): Promise<void> {
+    const all = await idbGetAll<SaveFile & { id: number }>(PROJECTS_STORE);
+    const recent = all.sort((a, b) => b.metadata.lastModified - a.metadata.lastModified)[0];
+    if(recent) {
+        await deserializeState(recent);
+        currentProjectId.value = recent.id;
+    } else {
+        const tempsave = await loadAutoSave();
+        if(tempsave) await deserializeState(tempsave);
+        currentProjectId.value = null;
+    }
 }
 
 export function scheduleAutosave(debounce = AUTOSAVE_DEBOUNCE_MS) {
     if(isLoading) return;
     if(autosaveTimer !== null) clearTimeout(autosaveTimer);
-    autosaveTimer = setTimeout(() => { 
-        autosaveTimer = null; 
+    autosaveTimer = setTimeout(() => {
+        autosaveTimer = null;
         autoSaveToDb().then(() => { dirty.value = false; }).catch(err => console.error('[saveStateManager] autosave failed:', err));
     }, debounce);
 }

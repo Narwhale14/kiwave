@@ -7,34 +7,127 @@ import { activePattern, patterns, closePattern } from '../services/patternsListM
 import { activeWindowId, focusWindow, clearActiveWindow } from '../services/windowManager';
 import { headerHeight } from '../services/layoutManager';
 import { HEADER_HEIGHT_MIN, HEADER_HEIGHT_MAX } from '../constants/layout';
-import { ref, toRef } from 'vue';
+import { ref, computed, toRef, onMounted, nextTick, watch } from 'vue';
 import { getAudioEngine } from '../services/audioEngineManager';
 import Knob from './controls/Knob.vue';
-import { globalVolume, projectName } from '../services/settingsManager';
+import { globalVolume, projectName, bpm } from '../services/settingsManager';
 import { DEFAULT_GLOBAL_VOLUME } from '../constants/defaults';
 import { markDirty, isDirty } from '../util/dirty';
 import Menu from './modals/Menu.vue';
+import ConfirmationModal from './modals/ConfirmationModal.vue';
+import type { MenuItem } from './modals/Menu.vue';
+import { currentProjectId, saveManualProject, getAllProjects, loadProjectById, newProject, deleteCurrentProject} from '../services/saveStateManager';
+import type { ProjectSummary } from '../services/saveStateManager';
 
 const engine = getAudioEngine();
 
 const playButtonOn = ref(false);
-const bpmInput = ref(engine.scheduler.bpm.toString());
+const bpmInput = ref(bpm.value.toString());
+watch(bpm, val => { bpmInput.value = String(val); });
 
 const snapMenu = ref<InstanceType<typeof Menu> | null>(null);
+const fileMenu = ref<InstanceType<typeof Menu> | null>(null);
+
+const savedProjects = ref<ProjectSummary[]>([]);
+
+async function refreshProjects() {
+  savedProjects.value = await getAllProjects();
+}
+
+onMounted(refreshProjects);
+
+// name prompt modal
+const namePromptVisible = ref(false);
+const namePromptInput = ref<HTMLInputElement | null>(null);
+const pendingName = ref('');
+const saveError = ref('');
+
+async function openNamePrompt(prefill = '') {
+  pendingName.value = prefill;
+  saveError.value = '';
+  namePromptVisible.value = true;
+  await nextTick();
+  namePromptInput.value?.focus();
+}
+
+async function startSave() {
+  if(projectName.value.trim()) {
+    const result = await saveManualProject();
+    if(result === 'duplicate_name') {
+      // let user pick a different name
+      await openNamePrompt(projectName.value);
+      saveError.value = 'This project already exists.';
+    } else {
+      await refreshProjects();
+    }
+  } else {
+    await openNamePrompt();
+  }
+}
+
+async function confirmNameAndSave() {
+  const name = pendingName.value.trim();
+  if (!name) return;
+  projectName.value = name;
+  const result = await saveManualProject();
+  if (result === 'duplicate_name') {
+    saveError.value = 'A project with this name already exists.';
+    return; // keep modal open
+  }
+  namePromptVisible.value = false;
+  saveError.value = '';
+  await refreshProjects();
+}
+
+function cancelNamePrompt() {
+  namePromptVisible.value = false;
+  saveError.value = '';
+}
+
+const isInTempSave = computed(() => currentProjectId.value === null);
+
+const fileOptions = computed<MenuItem[]>(() => [
+  { label: 'Save Project', action: () => { startSave(); } },
+  { label: 'Load Project',
+    subMenu: savedProjects.value.length > 0
+      ? savedProjects.value.map(p => ({
+          label: p.name || '(Untitled)',
+          action: async () => {
+            await loadProjectById(p.id);
+            await refreshProjects();
+          },
+        }))
+      : [{ label: 'No saved projects', disabled: true }]
+  },
+  { separator: true },
+
+  { label: 'New Project', action: async () => { await newProject(); } },
+  { label: 'Delete Project', disabled: isInTempSave.value, action: async () => { await deleteCurrentProject(); await refreshProjects(); } },
+]);
+
+async function openFileMenu(event: MouseEvent) {
+  const element = event.currentTarget as HTMLElement;
+  if(fileMenu.value?.isOpen) {
+    fileMenu.value.close();
+    return;
+  }
+  await refreshProjects();
+  fileMenu.value?.open(element);
+}
 
 function commitBpm() {
   const val = parseFloat(bpmInput.value);
-  if (!isNaN(val) && val > 0 && val <= 999) {
+  if(!isNaN(val) && val > 0 && val <= 999) {
     engine.setBpm(val);
-    bpmInput.value = val.toString();
+    bpm.value = val;
   } else {
-    bpmInput.value = engine.scheduler.bpm.toString();
+    bpmInput.value = String(bpm.value);
   }
 }
 
 function onBpmKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-  if (e.key === 'Escape') {
+  if(e.key === 'Enter') (e.target as HTMLInputElement).blur();
+  if(e.key === 'Escape') {
     bpmInput.value = engine.scheduler.bpm.toString();
     (e.target as HTMLInputElement).blur();
   }
@@ -47,7 +140,6 @@ function handleModeToggle(event: MouseEvent) {
 
 function toggleWindow(visible: { value: boolean }, windowId: string, onClose?: () => void) {
   if(visible.value && activeWindowId.value === windowId) {
-    // capture fallback before closing (activePattern may change after close)
     const p = activePattern.value;
     const fallbackId = (p && p.id !== windowId) ? p.id
       : (arrangementVisible.value && windowId !== 'arrangement-window') ? 'arrangement-window'
@@ -68,7 +160,7 @@ function toggleArrangement() {
 
 function togglePianoRoll() {
   const p = activePattern.value ?? patterns.value[0];
-  if (!p) return;
+  if(!p) return;
   toggleWindow(toRef(p, 'visible'), p.id, () => closePattern(p.num));
 }
 
@@ -135,7 +227,7 @@ function startResize(e: PointerEvent) {
     <!-- tempo -->
     <div class="flex flex-col items-center border-2 border-mix-25 rounded bg-mix-10 px-2 py-0.5">
       <span class="text-[8px] font-bold tracking-widest opacity-50 leading-none">BPM</span>
-      <input v-model="bpmInput" type="text" inputmode="decimal" class="bg-transparent text-center text-sm font-mono font-bold w-12 outline-none leading-tight" 
+      <input v-model="bpmInput" type="text" inputmode="decimal" class="bg-transparent text-center text-sm font-mono font-bold w-12 outline-none leading-tight"
         @focus="($event.target as HTMLInputElement).select()" @blur="commitBpm" @keydown="onBpmKeydown"
       />
     </div>
@@ -179,19 +271,45 @@ function startResize(e: PointerEvent) {
 
     <div class="ml-auto"></div>
 
-    <!-- autosave indicator -->
-    <span class="w-2 h-2 rounded-full transition-colors duration-500" :class="isDirty() ? 'bg-mix-80' : 'playhead-color opacity-40'"/>
+    <!-- save indicator: red = unsaved tempsave, dim = dirty project, accent = saved project -->
+    <span
+      class="w-2 h-2 rounded-full transition-colors duration-500"
+      :class="isInTempSave ? 'bg-red-500' : (isDirty() ? 'bg-mix-80' : 'playhead-color opacity-40')"
+      :title="isInTempSave ? 'Unsaved project' : (isDirty() ? 'Unsaved changes' : 'Saved')"
+    />
 
     <!-- project name -->
     <div class="flex flex-row items-center border-2 border-mix-25 rounded bg-mix-10 px-2 py-0.5">
-      <input v-model="projectName" type="text" class="bg-transparent text-center text-sm font-mono font-bold w-28 outline-none leading-tight"
+      <input v-model="projectName" type="text" placeholder="Untitled"
+        class="bg-transparent text-center text-sm font-mono font-bold w-28 outline-none leading-tight placeholder-mix-40"
         @focus="($event.target as HTMLInputElement).select()"
         @keydown.enter="($event.target as HTMLInputElement).blur(); markDirty()"
         @keydown.escape="($event.target as HTMLInputElement).blur()"
       />
     </div>
 
+    <!-- project manager -->
+    <button class="flex flex-row items-center border-2 border-mix-25 rounded bg-mix-10 px-2 py-0.5 hover:bg-mix-20 gap-2"
+      @click="openFileMenu($event)"
+    >
+      <span class="text-xs font-mono font-bold">FILE</span>
+      <span class="pi pi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': fileMenu?.isOpen }" />
+    </button>
+    <Menu ref="fileMenu" :items="fileOptions" :width="160" />
+
     <!-- bottom resize handle -->
     <div class="absolute inset-x-0 -bottom-1 h-2 cursor-s-resize z-10" @pointerdown="startResize" />
   </div>
+
+  <!-- project name prompt -->
+  <ConfirmationModal :visible="namePromptVisible" @confirm="confirmNameAndSave" @cancel="cancelNamePrompt">
+    <span class="text-xs font-mono font-bold opacity-60 mb-1">Project name</span>
+    <input ref="namePromptInput" v-model="pendingName" type="text" placeholder="My Project"
+      class="bg-mix-10 border rounded px-2 py-1 text-sm font-mono outline-none w-48 transition-colors"
+      :class="saveError ? 'border-red-500' : 'border-mix-35'"
+      @keydown.enter.stop="confirmNameAndSave"
+      @keydown.escape.stop="cancelNamePrompt"
+    />
+    <span v-if="saveError" class="text-xs text-red-400 font-mono">{{ saveError }}</span>
+  </ConfirmationModal>
 </template>

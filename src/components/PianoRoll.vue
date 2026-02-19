@@ -478,12 +478,6 @@ onMounted(async () => {
   // define callbacks for pattern mode
   const playheadCallback = (beat: number) => {
     playhead.col = beat;
-    if(!pianoRollContainer.value) return;
-
-    if(beat < 1 && pianoRollContainer.value.scrollLeft > 0) {
-      pianoRollContainer.value.scrollLeft = 0;
-      return;
-    }
   };
 
   const playStateCallback = (playing: boolean) => {

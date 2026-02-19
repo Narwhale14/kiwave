@@ -99,7 +99,7 @@ const renderedNodes = computed(() =>
   }))
 );
 
-// One tension handle per segment, positioned at the point the curve passes through at x=0.5.
+// one tension handle per segment, positioned at the point the curve passes through at x=0.5.
 const segmentHandles = computed(() =>
   props.curve.nodes.slice(0, -1).map((n, i) => {
     const next = props.curve.nodes[i + 1]!;

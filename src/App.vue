@@ -11,7 +11,7 @@ import Mixer from './components/Mixer.vue';
 import { arrangementWindow, channelRackWindow, mixerWindow, pianoRollWindow } from './services/layoutManager';
 import { onMounted, onUnmounted } from 'vue';
 import { togglePlaybackMode } from './services/playbackModeManager';
-import { loadAutoSave, deserializeState } from './services/saveStateManager';
+import { initLoad } from './services/saveStateManager';
 
 function handleKeyDown(event: KeyboardEvent) {
   if(event.key === 'l' || event.key === 'L') {
@@ -23,8 +23,7 @@ onMounted(async () => {
   window.addEventListener('keydown', handleKeyDown);
   window.addEventListener('contextmenu', (event) => { event.preventDefault(); });
 
-  const saved = await loadAutoSave();
-  if(saved) await deserializeState(saved);
+  await initLoad();
 });
 
 onUnmounted(() => {
