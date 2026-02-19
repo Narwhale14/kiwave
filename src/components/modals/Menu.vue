@@ -56,7 +56,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside);
 });
 
-defineExpose({ toggle, open, close: closeMenu });
+defineExpose({ toggle, open, close: closeMenu, isOpen });
 </script>
 
 <template>

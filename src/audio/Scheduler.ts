@@ -313,7 +313,7 @@ export class Scheduler {
         if(!this._isPlaying) return;
 
         this._isPlaying = false;
-        this._pauseTime = this.getCurrentBeat();
+        this._pauseTime = this._loopEnabled ? this._loopStart : 0;
 
         if(this.schedulerTimerId !== null) {
             clearInterval(this.schedulerTimerId);
@@ -328,6 +328,9 @@ export class Scheduler {
         this.panicAll();
         if(this.playStateCallback) {
             this.playStateCallback(false);
+        }
+        if(this.playheadCallback) {
+            this.playheadCallback(this._pauseTime);
         }
     }
 

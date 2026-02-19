@@ -141,12 +141,13 @@ function startResize(e: PointerEvent) {
     </div>
 
     <!-- snap div -->
-    <button class="flex flex-col items-center border-2 border-mix-25 rounded bg-mix-10 px-2 py-0.5 hover:bg-mix-20"
+    <button class="flex flex-row items-center border-2 border-mix-25 rounded bg-mix-10 px-2 py-0.5 hover:bg-mix-20 gap-2"
       @click="snapMenu?.toggle($event)"
     >
       <span class="text-xs font-mono font-bold">1/{{ snapDivision }} step</span>
+      <span class="pi pi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': snapMenu?.isOpen }" />
     </button>
-    <Menu ref="snapMenu" :items="snapOptions" :width="120" />
+    <Menu ref="snapMenu" :items="snapOptions" />
 
     <!-- arrangement toggle -->
     <button class="flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-mix-35" :class="arrangementVisible ? 'bg-mix-30' : 'bg-mix-20'"

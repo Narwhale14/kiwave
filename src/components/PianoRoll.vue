@@ -5,7 +5,7 @@ import { noteToMidi } from '../util/midi';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { getVisualSnapWidth, dynamicSnap } from '../util/snap';
 import { playbackMode, registerPatternCallbacks, unregisterPatternCallbacks } from '../services/playbackModeManager';
-import BaseDropdown from './modals/BaseDropdown.vue';
+import Menu from './modals/Menu.vue';
 import NoteAutomationOverlay from './overlays/NoteAutomationOverlay.vue';
 import { ALL_PARAMETERS, PARAMETER_MAP } from '../audio/Automation';
 import { shiftNodeValues, type AutomationCurve } from '../audio/Automation';
@@ -71,6 +71,20 @@ const beatsPerBar = 4;
 
 const barCount = computed(() => Math.ceil(props.roll.getEndBeat(beatsPerBar) / beatsPerBar) + 7);
 const totalWidth = computed(() => barCount.value * beatsPerBar * colWidth.value);
+
+// channel selection dropdown
+const channelMenu = ref<InstanceType<typeof Menu> | null>(null);
+const channelMenuItems = computed(() => channels.value.map(ch => ({
+  label: ch.name,
+  action: () => { selectedChannelId.value = ch.id; }
+})));
+
+// lane menu dropdown
+const laneMenu = ref<InstanceType<typeof Menu> | null>(null);
+const laneMenuItems = computed(() => ALL_PARAMETERS.map(p => ({
+  label: p.label,
+  action: () => toggleLane(p.id)
+})));
 
 const activeAutomationLane = ref<string | null>(null);
 const activeLaneDef = computed(() => activeAutomationLane.value ? PARAMETER_MAP.get(activeAutomationLane.value) ?? null : null);
@@ -273,7 +287,8 @@ function handlePointerMove(event: PointerEvent) {
   const cell = getCellFromPointer(event);
   state.hoverCell = cell;
 
-  const hovered = props.roll.getHoveredNote(cell);
+  const rawCol = (event.clientX - workspaceContainer.value!.getBoundingClientRect().left) / colWidth.value;
+  const hovered = props.roll.getHoveredNote({ row: cell.row, col: rawCol });
   state.hoverNote = hovered?.note ?? null;
 
   if(hovered?.note && isNearRightEdge(event, hovered.note)) {
@@ -304,7 +319,8 @@ async function handlePointerDown(event: PointerEvent) {
   if(!state.hoverCell) return;
   if(activeAutomationLane.value) return; // note editing disabled while a lane is active
 
-  const hovered = props.roll.getHoveredNote(state.hoverCell);
+  const rawCol = (event.clientX - workspaceContainer.value!.getBoundingClientRect().left) / colWidth.value;
+  const hovered = props.roll.getHoveredNote({ row: state.hoverCell.row, col: rawCol });
 
   // right click delete
   if(hovered?.note) {
@@ -513,27 +529,23 @@ onBeforeUnmount(() => {
       @pointerdown.stop="dragWindow?.($event)">
       <span class="text-xs font-medium">{{ props.name }} - </span>
 
-      <BaseDropdown title="Instrument"
-        v-model="selectedChannelId"
-        :items="channels"
-        item-label="name"
-        item-value="id"
-        button-class="px-2 py-0.5 font-mono font-bold min-w-0"
-        width="30"
-      />
+      <button class="flex flex-row items-center gap-1 px-2 py-0.5 font-mono font-bold text-xs rounded hover:bg-mix-25 transition-colors"
+        title="Instrument" @pointerdown.stop @click="channelMenu?.toggle($event)"
+      >
+        <span class="truncate max-w-24">{{ channels.find(c => c.id === selectedChannelId)?.name ?? 'Select' }}</span>
+        <span class="pi pi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': channelMenu?.isOpen }" />
+      </button>
+      <Menu ref="channelMenu" :items="channelMenuItems" />
 
-      <BaseDropdown title="Automation Lane"
-        :model-value="activeAutomationLane"
-        :items="ALL_PARAMETERS"
-        item-label="label"
-        item-value="id"
-        button-class="px-2 py-0.5 font-mono font-bold min-w-0"
-        width="30"
-        display="image"
-        display-image="/icons/automation-icon-white.png"
-        :button-style="activeLaneDef ? { backgroundColor: manipulateColor(activeLaneDef.color, 0, 0.5)} : {}"
-        @update:model-value="toggleLane"
-      />
+      <button class="flex flex-row items-center gap-1 px-2 py-0.5 rounded hover:bg-mix-25 transition-colors"
+        title="Automation Lane"
+        :style="activeLaneDef ? { backgroundColor: manipulateColor(activeLaneDef.color, 0, 0.5) } : {}"
+        @pointerdown.stop @click="laneMenu?.toggle($event)"
+      >
+        <img src="/icons/automation-icon-white.png" class="w-3.5 h-3.5 object-contain" />
+        <span class="pi pi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': laneMenu?.isOpen }" />
+      </button>
+      <Menu ref="laneMenu" :items="laneMenuItems" :width="80" />
 
       <button v-if="cachedCurves.size > 0" class="w-5 h-5 rounded flex items-center justify-center text-red-400 hover:text-red-300 shrink-0" @pointerdown.stop @click="cachedCurves.clear();" title="Clear automation curve cache">
         <span class="pi pi-times text-xs" />

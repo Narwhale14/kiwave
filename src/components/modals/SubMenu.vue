@@ -80,13 +80,12 @@ function calculateSubmenuPosition(index: number) {
 </script>
 
 <template>
-  <div class="py-1" :style="{ width: width ? width + 'px' : 'auto' }">
+  <div class="py-1 flex flex-col justify-center items-center" :style="{ width: width ? width + 'px' : 'auto' }">
     <template v-for="(item, index) in items" :key="index">
-      
       <div v-if="item.separator" class="my-1 h-px bg-mix-40"></div>
 
       <div v-else :ref="(element) => setItemRef(element, index)" 
-        class="relative flex items-center justify-between px-1.5 py-0.5 text-sm transition-colors"
+        class="relative flex items-center justify-between px-1.5 py-0.5 text-xs font-mono font-bold transition-colors"
         :class="[
           item.disabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-mix-25 cursor-pointer',
           (hoveredIndex === index || openSubmenuIndex === index) && !item.disabled ? 'bg-mix-25' : ''
@@ -95,7 +94,7 @@ function calculateSubmenuPosition(index: number) {
         @mouseleave="onMouseLeave(index)" 
         @click="handleClick(item)"
       >
-        <span class="truncate pr-2">{{ item.label }}</span>
+        <span class="truncate pr-1">{{ item.label }}</span>
         
         <span v-if="item.subMenu" class="shrink-0 ml-auto text-xs pi pi-caret-right"/>
 

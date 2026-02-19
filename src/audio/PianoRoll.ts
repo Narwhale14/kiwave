@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import { snapDivision, getSnapSize } from '../util/snap'
+import { getSnapSize } from '../util/snap'
 import { PARAMETER_MAP } from './Automation';
 import { createDefaultCurve, resizeNodes, shiftNodeValues, type AutomationCurve } from './Automation';
 import { markDirty } from '../util/dirty';
@@ -65,15 +65,9 @@ export class PianoRoll {
     }
 
     getHoveredNote(cell: { row: number, col: number }) {
-        const gridCol = Math.round(cell.col * snapDivision.value);
-        const index = this._noteData.findIndex(n => {
-            if(n.row !== cell.row) return false;
-
-            const noteStart = Math.round(n.col * snapDivision.value);
-            const noteEnd = Math.round((n.col + n.length) * snapDivision.value);
-
-            return gridCol >= noteStart && gridCol < noteEnd;
-        });
+        const index = this._noteData.findIndex(n =>
+            n.row === cell.row && cell.col >= n.col && cell.col < n.col + n.length
+        );
 
         return index === -1 ? null : { note: this._noteData[index], index };
     }
