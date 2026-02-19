@@ -25,6 +25,7 @@ let _db: IDBDatabase | null = null;
 // auto save stuff
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let isLoading = false;
+let isSaving = false;
 
 import { dirty, markDirty } from '../util/dirty';
 watch(dirty, (ready) => { if(ready) scheduleAutosave(); });
@@ -237,8 +238,8 @@ export function serializeState(): SaveFile {
         channels: savedChannels,
         mixers: savedMixers,
         arrangement: {
-            clips: arrangement.clips.map(c => ({ ...c })),
-            tracks: arrangement.getAllTracks().map(t => ({ ...t })),
+            clips: arrangement.clips.map(clip => ({ ...clip })),
+            tracks: arrangement.getAllTracks().map(track => ({ ...track })),
         },
         ui: {
             patternsListWidth: patternsListWidth.value,
@@ -248,13 +249,13 @@ export function serializeState(): SaveFile {
                 channelRackVisible: channelRackVisible.value,
                 mixerVisible: mixerVisible.value,
             },
-            windows: windows.map(w => ({ ...w })),
+            windows: windows.map(window => ({ ...window })),
         },
         idCounters: {
             nextChannelId: channelManager.nextChannelIdCounter,
             nextClipId: arrangement.nextClipIdCounter,
             nextPatternNum: getNextPatternNum(),
-            nextMixerNum: savedMixers.filter(m => m.id !== 'master').length + 1,
+            nextMixerNum: savedMixers.filter(mixer => mixer.id !== 'master').length + 1,
         },
     };
 }
@@ -344,7 +345,18 @@ export async function deserializeState(save: SaveFile): Promise<void> {
 // NOT listed in Open Project. Separate from official named projects.
 
 export async function autoSaveToDb(): Promise<void> {
-    await idbPut(AUTOSAVE_STORE, { id: TEMPSAVE_KEY, ...serializeState() });
+    if(isSaving) return;
+    isSaving = true;
+
+    try {
+        if(currentProjectId.value === null) {
+            await idbPut(AUTOSAVE_STORE, { id: TEMPSAVE_KEY, ...serializeState() });
+        } else {
+            await idbPut(PROJECTS_STORE, { id: currentProjectId.value, ...serializeState() });
+        }
+    } finally {
+        isSaving = false;
+    }
 }
 
 export async function loadAutoSave(): Promise<SaveFile | null> {

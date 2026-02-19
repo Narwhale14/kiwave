@@ -150,6 +150,8 @@ async function playNote(midi: number) {
   if(engine.scheduler.isPlaying) return;
   if(!instrument.value) return;
 
+  engine.scheduler.seek(10);
+
   await instrument.value.resume();
   instrument.value.noteOn(midi);
 }
@@ -531,10 +533,10 @@ onBeforeUnmount(() => {
       </button>
       <Menu ref="channelMenu" :items="channelMenuItems" />
 
-      <button class="flex flex-row items-center gap-1 px-2 py-0.5 rounded hover:bg-mix-25 transition-colors"
+      <button class="flex flex-row items-center gap-1 px-2 py-0.5 rounded hover:bg-mix-25 transition-colors focus:outline-none"
         title="Automation Lane"
         :style="activeLaneDef ? { backgroundColor: manipulateColor(activeLaneDef.color, 0, 0.5) } : {}"
-        @pointerdown.stop @click="laneMenu?.toggle($event)"
+        @pointerdown.stop @click.prevent="laneMenu?.toggle($event)"
       >
         <img src="/icons/automation-icon-white.png" class="w-3.5 h-3.5 object-contain" />
         <span class="pi pi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': laneMenu?.isOpen }" />
@@ -575,7 +577,7 @@ onBeforeUnmount(() => {
     <div ref="pianoRollContainer" class="flex-1 overflow-y-auto overflow-x-hidden grid grid-cols-[50px_1fr]" @scroll="onNativeScroll">
       <!-- notes column -->
       <div class="flex flex-col-reverse sticky left-0 z-50 shrink-0" ref="pianoKeysContainer" :style="{ height: `${notes.length * rowHeight}px` }">
-        <button v-for="key in notes" :key="key.midi" @pointerdown="playNote(key.midi)" @pointerup="stopNote(key.midi)" @pointerleave="stopNote(key.midi)"
+        <button v-for="key in notes" :key="key.midi" @pointerdown.prevent="playNote(key.midi)" @pointerup="stopNote(key.midi)" @pointerleave="stopNote(key.midi)"
           :class="[ 'w-full text-sm select-none border-2 border-transparent hover:key border-rounded', key.isBlack ? 'key-black' : 'key-white']"
           :style="{ height: rowHeight + 'px' }"
         > 

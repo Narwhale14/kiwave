@@ -14,8 +14,8 @@ export const snapOptions = [
   { label: '1/16 step', action: () => (snapDivision.value = 16) }
 ];
 
-const SNAP_COALESCE_THRESHOLD_1 = 30;
-const SNAP_COALESCE_THRESHOLD_2 = 20;
+const SNAP_COALESCE_THRESHOLD_1 = 45;
+const SNAP_COALESCE_THRESHOLD_2 = 30;
 
 export function snap(value: number, division: number = snapDivision.value): number {
     if(division === 0) return value;

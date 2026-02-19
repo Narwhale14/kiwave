@@ -12,10 +12,17 @@ import { arrangementWindow, channelRackWindow, mixerWindow, pianoRollWindow } fr
 import { onMounted, onUnmounted } from 'vue';
 import { togglePlaybackMode } from './services/playbackModeManager';
 import { initLoad } from './services/saveStateManager';
+import { markDirty } from './util/dirty';
 
 function handleKeyDown(event: KeyboardEvent) {
-  if(event.key === 'l' || event.key === 'L') {
+  if(event.key.toLowerCase() === 'l') {
     togglePlaybackMode();
+  }
+
+  if((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault();
+
+    markDirty();
   }
 };
 

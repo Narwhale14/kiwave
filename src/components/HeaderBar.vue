@@ -272,9 +272,8 @@ function startResize(e: PointerEvent) {
     <div class="ml-auto"></div>
 
     <!-- save indicator: red = unsaved tempsave, dim = dirty project, accent = saved project -->
-    <span
-      class="w-2 h-2 rounded-full transition-colors duration-500"
-      :class="isInTempSave ? 'bg-red-500' : (isDirty() ? 'bg-mix-80' : 'playhead-color opacity-40')"
+    <span class="w-2 h-2 rounded-full transition-colors duration-500"
+      :class="isInTempSave ? 'bg-red-500' : (isDirty() ? 'bg-yellow-500' : 'playhead-color opacity-40')"
       :title="isInTempSave ? 'Unsaved project' : (isDirty() ? 'Unsaved changes' : 'Saved')"
     />
 

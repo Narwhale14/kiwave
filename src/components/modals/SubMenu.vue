@@ -115,7 +115,7 @@ function calculateSubmenuPosition(index: number) {
         ]"
         @mouseenter="onMouseEnter(index, item)"
         @mouseleave="onMouseLeave(index)"
-        @click="handleClick(item)"
+        @mousedown.prevent="handleClick(item)"
       >
         <span class="truncate pr-1">{{ item.label }}</span>
 

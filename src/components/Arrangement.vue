@@ -65,7 +65,7 @@ const clipPreviews = computed(() => {
   return map;
 });
 
-const trackHeight = 50; // Height of each track in pixels
+const trackHeight = 75; // Height of each track in pixels
 const colWidth = ref(80); // Width of one beat in pixels (same as piano roll)
 const beatsPerBar = 4; // 4 beats per bar
 const numTracks = 20; // Number of tracks
@@ -298,6 +298,21 @@ function handlePointerDown(event: PointerEvent) {
   }
 }
 
+function commitTrackName(id: string, event: Event) {
+  const input = event.target as HTMLInputElement;
+
+  if(input.value) {
+    arrangement.setTrackName(id, input.value);
+  } else {
+    input.value = arrangement.getTrack(id)?.name ?? 'Unnamed';
+  }
+}
+
+function onTrackNameKeydown(event: KeyboardEvent) {
+  if(event.key === 'Enter') (event.target as HTMLInputElement).blur();
+  if(event.key === 'Escape') (event.target as HTMLInputElement).blur();
+}
+
 // for wheel keybinds
 function handleWheel(event: WheelEvent) {
   const element = arrangementContainer.value;
@@ -429,20 +444,34 @@ onBeforeUnmount(() => {
     <!-- workspace -->
     <div ref="arrangementContainer" class="flex-1 flex flex-row overflow-x-hidden overflow-y-auto" @scroll="onNativeScroll">
       <!-- track headers -->
-      <div class="flex flex-col sticky left-0 z-50 shrink-0">
-        <div v-for="track in arrangement.tracks" :key="track.id" :style="{ height: `${trackHeight}px` }" 
-          class="w-25 bg-mix-15 border-y-2 border-r-2 border-mix-30 rounded-r-lg flex flex-col justify-between"
+      <div class="flex flex-col sticky left-0 z-50 shrink-0" :style="{ height: `${arrangement.tracks.length * trackHeight}px` }">
+        <div v-for="track in arrangement.tracks" :key="track.id" :style="{ height: `${trackHeight }px` }" 
+          class="w-30 bg-mix-15 border-y-2 border-r-2 border-mix-30 rounded-r-lg flex justify-between flex-col"
         >
-          <!-- track name -->
-          <span class="text-xs font-medium truncate px-2 py-1">{{ track.name }}</span>
+          <!-- top section -->
+          <div class="flex items-start justify-between px-2 pt-1">
+            <!-- track name name -->
+            <input v-model="track.name" class="px2 py-0.5 rounded text-sm font-mono bg-mix-10 focus:outline-none w-full text-center truncate px-1 border-2 border-mix-30"
+              @focus="($event.target as HTMLInputElement).select()"
+              @blur="commitTrackName(track.id, $event)"
+              @keydown="onTrackNameKeydown"
+            />
+          </div>
 
-          <!-- mute toggle (left click) / solo toggle (right click) -->
-          <button @click="arrangement.toggleMuteTrack(track.id)" @contextmenu.prevent="arrangement.toggleSoloTrack(track.id)"
-            class="flex items-center justify-center w-6 h-6 rounded self-end shrink-0 focus:outline-none"
-            :title="track.solo ? 'Solo (right-click to toggle)' : track.muted ? 'Unmute' : 'Mute (right-click to solo)'"
-          >
-            <span class="w-2 h-2 rounded-full transition-colors" :style="{ backgroundColor: muteCircleColor(track) }" />
-          </button>
+          <div class="flex justify-between px-2 pb-1 items-center">
+            <!-- remove button -->
+            <button @click="arrangement.removeTrack(track.id)" class="flex justify-center w-6">
+              <span class="pi pi-times text-sm text-red-400"></span>
+            </button>
+
+            <!-- mute toggle (left click) / solo toggle (right click) -->
+            <button @click="arrangement.toggleMuteTrack(track.id)" @contextmenu.prevent="arrangement.toggleSoloTrack(track.id)"
+              class="flex items-center justify-center w-6 h-6 rounded self-end shrink-0 focus:outline-none"
+              :title="track.solo ? 'Solo (right-click to toggle)' : track.muted ? 'Unmute' : 'Mute (right-click to solo)'"
+            >
+              <span class="w-2 h-2 rounded-full transition-colors" :style="{ backgroundColor: muteCircleColor(track) }" />
+            </button>
+          </div>
         </div>
       </div>
 

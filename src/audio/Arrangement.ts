@@ -48,6 +48,12 @@ export class Arrangement {
         });
     }
 
+    getTrack(id: string): ArrangementTrack | null {
+        const track = this._tracks.find(track => track.id === id);
+        if(!track) return null;
+        return track;
+    }
+
     // gets the last beat of any clip in the arrangement
     getEndBeat(): number {
         if(this._clips.length === 0) return 0;
@@ -168,6 +174,13 @@ export class Arrangement {
         const track = this._tracks.find(t => t.id === id);
         if(!track) return;
         track.height = height;
+        markDirty();
+    }
+
+    setTrackName(id: string, name: string) {
+        const track = this._tracks.find(t => t.id === id);
+        if(!track) return;
+        track.name = name;
         markDirty();
     }
 
