@@ -61,7 +61,7 @@ function onTrackClick(event: PointerEvent) {
 </script>
 
 <template>
-  <div ref="container" class="h-5 bg-mix-15 border-b-2 border-mix-30 relative select-none overflow-hidden touch-none" @pointerdown="onTrackClick">
+  <div ref="container" class="h-5 bg-mix-13 relative border-t-2 border-mix-30 select-none overflow-hidden touch-none" @pointerdown="onTrackClick">
     <div class="flex flex-row justify-between absolute bg-mix-40 border border-mix-60 group hover:bg-mix-50 inset-y-0"
       :style="{ left: `${props.startPercent * 100}%`, width: `${props.viewWidthPercent * 100}%` }"
       @pointerdown.stop="startDrag($event, 'pan', props.startPercent)"

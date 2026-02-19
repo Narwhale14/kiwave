@@ -2,7 +2,7 @@
 import { reactive, computed, watch, onMounted, onBeforeUnmount, ref, inject, nextTick } from 'vue';
 import { snapDivision, getVisualSnapWidth, dynamicSnapNearest, dynamicSnap } from '../util/snap';
 import { getAudioEngine } from '../services/audioEngineManager';
-import { playbackMode, registerArrangementCallbacks, unregisterArrangementCallbacks } from '../services/playbackModeManager';
+import { playbackMode, registerArrangementCallbacks, unregisterArrangementCallbacks, setPlaybackMode } from '../services/playbackModeManager';
 import { patterns, openPattern } from '../services/patternsListManager';
 import { arrangement } from '../audio/Arrangement';
 import type { ArrangementClip, ArrangementTrack } from '../audio/Arrangement';
@@ -348,6 +348,31 @@ function handleViewUpdate({ start, width }: { start: number, width: number }) {
   scrollX.value = arrangementContainer.value.scrollLeft;
 }
 
+function seekToPointer(event: PointerEvent) {
+  if(!workspaceContainer.value) return;
+  const rect = workspaceContainer.value.getBoundingClientRect();
+  
+  let beat = 0;
+  if(event.shiftKey) {
+    beat = (event.clientX - rect.left) / colWidth.value;
+  } else {
+    beat = dynamicSnapNearest((event.clientX - rect.left) / colWidth.value, colWidth.value);
+  }
+
+  engine.scheduler.seek(Math.max(0, beat));
+}
+
+function handleTimelinePointerDown(event: PointerEvent) {
+  if(playbackMode.value !== 'arrangement') setPlaybackMode('arrangement');
+  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  seekToPointer(event);
+}
+
+function handleTimelineScrub(event: PointerEvent) {
+  if(!(event.currentTarget as HTMLElement).hasPointerCapture(event.pointerId)) return;
+  seekToPointer(event);
+}
+
 // WATCHERS
 
 // watch for arrangement changes
@@ -416,41 +441,48 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex flex-col w-full h-full bg-mix-20 overflow-hidden">
-    <!-- toolbar / drag handle -->
-    <div class="window-header border-b-2 border-mix-30 bg-mix-15 px-3 shrink-0"
-      @pointerdown.stop="dragWindow?.($event)">
-      <span class="text-xs font-medium">Arrangement</span>
+    <div class="grid grid-cols-[7.5rem_1fr] shrink-0 border-b-2 border-mix-30">
+      <div class="bg-mix-15 border-r-2 border-mix-30" /> <!-- bocks LMFAOOOOO -->
 
-      <div class="flex justify-center items-center p-1 shrink-0">
-        <button ref="addButtonRef" class="util-button flex justify-center items-center w-6" @click="openAddModal" title="Add arrangement track">
-          <span class="pi pi-plus text-sm"></span>
-        </button>
+      <div class="flex flex-col">
+        <!-- toolbar / drag handle -->
+        <div class="window-header bg-mix-15 px-3 shrink-0"
+          @pointerdown.stop="dragWindow?.($event)">
+          <span class="text-xs font-medium">Arrangement</span>
+
+          <div class="flex justify-center items-center p-1 shrink-0">
+            <button ref="addButtonRef" class="util-button flex justify-center items-center w-6" @click="openAddModal" title="Add arrangement track">
+              <span class="pi pi-plus text-sm"></span>
+            </button>
+          </div>
+
+          <!-- separator -->
+          <div class="flex-1" />
+
+          <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="resetWindow?.()" title="Reset position and size">
+            <span class="pi pi-refresh text-xs" />
+          </button>
+
+          <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="closeWindow?.()">
+            <span class="pi pi-times text-xs" />
+          </button>
+        </div>
+
+        <ZoomScrollBar :start-percent="scrollX / totalWidth" :view-width-percent="arrangementContainer ? arrangementContainer.clientWidth / totalWidth : 0" @update:view="handleViewUpdate"/>
       </div>
-
-      <!-- separator -->
-      <div class="flex-1" />
-
-      <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="resetWindow?.()" title="Reset position and size">
-        <span class="pi pi-refresh text-xs" />
-      </button>
-
-      <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="closeWindow?.()">
-        <span class="pi pi-times text-xs" />
-      </button>
     </div>
 
-    <ZoomScrollBar :start-percent="scrollX / totalWidth" :view-width-percent="arrangementContainer ? arrangementContainer.clientWidth / totalWidth : 0" @update:view="handleViewUpdate"/>
-
-    <!-- workspace -->
-    <div ref="arrangementContainer" class="flex-1 flex flex-row overflow-x-hidden overflow-y-auto" @scroll="onNativeScroll">
+    <!-- arrangement body -->
+    <div ref="arrangementContainer" class="flex-1 overflow-x-hidden overflow-y-auto grid grid-cols-[7.5rem_1fr]" @scroll="onNativeScroll">
       <!-- track headers -->
-      <div class="flex flex-col sticky left-0 z-50 shrink-0" :style="{ height: `${arrangement.tracks.length * trackHeight}px` }">
-        <div v-for="track in arrangement.tracks" :key="track.id" :style="{ height: `${trackHeight }px` }" 
-          class="w-30 bg-mix-15 border-y-2 border-r-2 border-mix-30 rounded-r-lg flex justify-between flex-col"
+      <div class="sticky left-0 z-50 shrink-0 flex flex-col" :style="{ height: `${arrangement.tracks.length * trackHeight + 20}px` }">
+        <div class="h-5 bg-mix-15 sticky top-0 z-10 border-r-2 border-mix-30" />
+
+        <div v-for="track in arrangement.tracks" :key="track.id" :style="{ height: `${trackHeight}px` }"
+          class="w-30 bg-mix-15 border-y-2 border-r-2 border-mix-30 flex justify-between flex-col"
         >
-          <!-- top section -->
+          <!-- name input box -->
           <div class="flex items-start justify-between px-2 pt-1">
-            <!-- track name name -->
             <input v-model="track.name" class="px2 py-0.5 rounded text-sm font-mono bg-mix-10 focus:outline-none w-full text-center truncate px-1 border-2 border-mix-30"
               @focus="($event.target as HTMLInputElement).select()"
               @blur="commitTrackName(track.id, $event)"
@@ -458,13 +490,12 @@ onBeforeUnmount(() => {
             />
           </div>
 
+          <!-- buttons -->
           <div class="flex justify-between px-2 pb-1 items-center">
-            <!-- remove button -->
             <button @click="arrangement.removeTrack(track.id)" class="flex justify-center w-6">
               <span class="pi pi-times text-sm text-red-400"></span>
             </button>
 
-            <!-- mute toggle (left click) / solo toggle (right click) -->
             <button @click="arrangement.toggleMuteTrack(track.id)" @contextmenu.prevent="arrangement.toggleSoloTrack(track.id)"
               class="flex items-center justify-center w-6 h-6 rounded self-end shrink-0 focus:outline-none"
               :title="track.solo ? 'Solo (right-click to toggle)' : track.muted ? 'Unmute' : 'Mute (right-click to solo)'"
@@ -475,63 +506,75 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div ref="workspaceContainer" class="relative shrink-0" :style="{ width: `${totalWidth}px`, height: `${arrangement.tracks.length * trackHeight}px`, cursor: cursor }"
-        @pointerdown="handlePointerDown" @dblclick="handleDoubleClick" @pointermove="handlePointerMove" @pointerup="finalizeEdit" @pointerleave="finalizeEdit" @wheel="handleWheel"
-        @dragover="handleDragOver" @drop="handleDrop" @contextmenu.prevent
-      >
-        <!-- 4-bar alternating column backgrounds -->
-        <div class="absolute inset-0 pointer-events-none" :style="{
-          backgroundImage: 'linear-gradient(to right, rgba(0,0,0,0.15) 50%, transparent 50%)',
-          backgroundSize: `${colWidth * beatsPerBar * 8}px 100%`,
-          backgroundPosition: `${colWidth * beatsPerBar * 4}px 0`
-        }"></div>
-
-        <!-- grid -->
-        <div class="absolute inset-0 arrangement-grid pointer-events-none"
-          :style="{
-            '--track-h': `${trackHeight}px`,
-            '--beat-w': `${colWidth}px`,
-            '--bar-w': `${colWidth * beatsPerBar}px`,
-            '--snap-w': `${getVisualSnapWidth(colWidth)}px`
-          }"
-        ></div>
-
-        <!-- clips -->
-        <div v-for="clip in arrangement.clips" :key="clip.id"
-          :class="['absolute border-2 clip-color rounded overflow-hidden pointer-events-none', clip.id === selectedClipId ? 'clip-border-color' : 'clip-border-muted']"
-          :style="{
-            left: `${clip.startBeat * colWidth}px`,
-            top: `${clip.track * trackHeight}px`,
-            width: `${clip.duration * colWidth}px`,
-            height: `${trackHeight}px`,
-          }"
-        >
-          <!-- notes in clip's pattern -->
-          <svg v-if="clipPreviews.get(clip.id)" class="absolute inset-0 w-full h-full" preserveAspectRatio="none" :viewBox="clipPreviews.get(clip.id)!.viewBox">
-            <rect
-              v-for="(note, i) in clipPreviews.get(clip.id)!.notes"
-              :key="i"
-              :x="note.x" :y="note.y"
-              :width="note.width" :height="note.height"
-              fill="white" opacity="0.6"
-            />
-          </svg>
-          <!-- clip's pattern name -->
-          <div class="relative z-10 px-1 pt-0.5 text-xs truncate drop-shadow">
-            {{ patterns.find(p => p.id === clip.patternId)?.name || 'Pattern' }}
+      <div :style="{ width: `${totalWidth}px`, height: `${arrangement.tracks.length * trackHeight + 20}px` }">
+        <!-- timeline -->
+        <div class="bg-mix-10 flex flex-row items-center h-5 w-full sticky top-0 z-10" @pointerdown.stop="handleTimelinePointerDown" @pointermove="handleTimelineScrub">
+          <!-- markers -->
+          <div v-for="i in (barCount * beatsPerBar)" :key="i" :style="{ width: `${colWidth}px` }">
+            <span class="text-xs font-mono absolute -translate-1/2 opacity-50">{{ i }}</span>
           </div>
+
+          <!-- playhead indicator -->
+          <span v-if="playbackMode === 'arrangement'" class="pi pi-sort-down-fill absolute text-sm -translate-x-1/2 text-(--playhead)" :style="{ left: `${playhead.col * colWidth}px` }"></span>
         </div>
 
-        <!-- playhead (only visible in arrangement mode) -->
-        <div v-if="playbackMode === 'arrangement' && playhead.playing"
-          class="absolute w-0.75 pointer-events-none playhead-color"
-          :style="{
-            transform: `translateX(${playhead.col * colWidth}px)`,
-            top: '0',
-            height: `${tracks.length * trackHeight}px`,
-            boxShadow: `-1px 0 6px var(--playhead)`
-          }"
-        ></div>
+        <!-- workspace -->
+        <div ref="workspaceContainer" class="relative shrink-0" :style="{ width: `${totalWidth}px`, height: `${arrangement.tracks.length * trackHeight}px`, cursor: cursor }"
+          @pointerdown="handlePointerDown" @dblclick="handleDoubleClick" @pointermove="handlePointerMove" @pointerup="finalizeEdit" @pointerleave="finalizeEdit" @wheel="handleWheel"
+          @dragover="handleDragOver" @drop="handleDrop" @contextmenu.prevent
+        >
+          <!-- 4-bar alternating column backgrounds -->
+          <div class="absolute inset-0 pointer-events-none" :style="{
+            backgroundImage: 'linear-gradient(to right, rgba(0,0,0,0.15) 50%, transparent 50%)',
+            backgroundSize: `${colWidth * beatsPerBar * 8}px 100%`,
+            backgroundPosition: `${colWidth * beatsPerBar * 4}px 0`
+          }"></div>
+
+          <!-- grid -->
+          <div class="absolute inset-0 arrangement-grid pointer-events-none"
+            :style="{
+              '--track-h': `${trackHeight}px`,
+              '--beat-w': `${colWidth}px`,
+              '--bar-w': `${colWidth * beatsPerBar}px`,
+              '--snap-w': `${getVisualSnapWidth(colWidth)}px`
+            }"
+          ></div>
+
+          <!-- clips -->
+          <div v-for="clip in arrangement.clips" :key="clip.id"
+            :class="['absolute border-2 clip-color rounded overflow-hidden pointer-events-none', clip.id === selectedClipId ? 'clip-border-color' : 'clip-border-muted']"
+            :style="{
+              left: `${clip.startBeat * colWidth}px`,
+              top: `${clip.track * trackHeight}px`,
+              width: `${clip.duration * colWidth}px`,
+              height: `${trackHeight}px`,
+            }"
+          >
+            <svg v-if="clipPreviews.get(clip.id)" class="absolute inset-0 w-full h-full" preserveAspectRatio="none" :viewBox="clipPreviews.get(clip.id)!.viewBox">
+              <rect
+                v-for="(note, i) in clipPreviews.get(clip.id)!.notes"
+                :key="i"
+                :x="note.x" :y="note.y"
+                :width="note.width" :height="note.height"
+                fill="white" opacity="0.6"
+              />
+            </svg>
+            <div class="relative z-10 px-1 pt-0.5 text-xs truncate drop-shadow">
+              {{ patterns.find(p => p.id === clip.patternId)?.name || 'Pattern' }}
+            </div>
+          </div>
+
+          <!-- playhead (only visible in arrangement mode) -->
+          <div v-if="playbackMode === 'arrangement' && (playhead.playing || playhead.col > 0)"
+            class="absolute w-0.75 pointer-events-none playhead-color  -translate-x-1/2"
+            :style="{
+              transform: `translateX(${playhead.col * colWidth}px)`,
+              top: '0',
+              height: `${tracks.length * trackHeight}px`,
+              boxShadow: `-1px 0 6px var(--playhead)`
+            }"
+          ></div>
+        </div>
       </div>
     </div>
   </div>

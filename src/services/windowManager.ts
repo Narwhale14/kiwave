@@ -109,8 +109,8 @@ window.addEventListener('pointermove', event => {
     if(dragState.value.type === 'resize') {
         const dx = event.clientX - dragState.value.startX;
         const dy = event.clientY - dragState.value.startY;
-        const minW = 200;
-        const minH = 100;
+        const minW = 300;
+        const minH = 150;
         const win = activeWindow.value!;
 
         if(dragState.value.edge.includes('right')) {

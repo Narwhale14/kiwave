@@ -3,8 +3,8 @@ import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref, 
 import { PianoRoll, type NoteBlock } from '../audio/PianoRoll'
 import { noteToMidi } from '../util/midi';
 import { getAudioEngine } from '../services/audioEngineManager';
-import { getVisualSnapWidth, dynamicSnap } from '../util/snap';
-import { playbackMode, registerPatternCallbacks, unregisterPatternCallbacks } from '../services/playbackModeManager';
+import { getVisualSnapWidth, dynamicSnap, dynamicSnapNearest } from '../util/snap';
+import { playbackMode, registerPatternCallbacks, unregisterPatternCallbacks, setPlaybackMode } from '../services/playbackModeManager';
 import Menu from './modals/Menu.vue';
 import NoteAutomationOverlay from './overlays/NoteAutomationOverlay.vue';
 import { ALL_PARAMETERS, PARAMETER_MAP } from '../audio/Automation';
@@ -192,8 +192,8 @@ function handleWheel(event: WheelEvent) {
   const element = pianoRollContainer.value;
   if(!element) return;
 
-  // VELOCITY EDIT (Ctrl + Hover Note)
-  if(event.ctrlKey && state.hoverNote && !activeAutomationLane.value) {
+  // VELOCITY EDIT (Click + Hover Note)
+  if(event.button === 0 && state.hoverNote && !activeAutomationLane.value) {
     event.preventDefault();
 
     const steps = Math.round(state.hoverNote.velocity / VELOCITY_SNAP);
@@ -203,8 +203,8 @@ function handleWheel(event: WheelEvent) {
     return;
   }
 
-  // HORIZONTAL ZOOM (Shift + Wheel)
-  if(event.shiftKey) {
+  // HORIZONTAL ZOOM (Ctrl + Wheel)
+  if(event.ctrlKey) {
     event.preventDefault();
   
     const mouseX = event.clientX - element.getBoundingClientRect().left;
@@ -412,6 +412,31 @@ async function handlePointerDown(event: PointerEvent) {
   }
 }
 
+function seekToPointer(event: PointerEvent) {
+  if(!workspaceContainer.value) return;
+  const rect = workspaceContainer.value.getBoundingClientRect();
+  
+  let beat = 0;
+  if(event.shiftKey) {
+    beat = (event.clientX - rect.left) / colWidth.value;
+  } else {
+    beat = dynamicSnapNearest((event.clientX - rect.left) / colWidth.value, colWidth.value);
+  }
+
+  engine.scheduler.seek(Math.max(0, beat));
+}
+
+function handleTimelinePointerDown(event: PointerEvent) {
+  if(playbackMode.value !== 'pattern') setPlaybackMode('pattern');
+  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  seekToPointer(event);
+}
+
+function handleTimelineScrub(event: PointerEvent) {
+  if(!(event.currentTarget as HTMLElement).hasPointerCapture(event.pointerId)) return;
+  seekToPointer(event);
+}
+
 function finalizeEdit() {
   if(props.roll.isResizing() && state.resizingNote) {
     const note = state.resizingNote;
@@ -520,193 +545,217 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex flex-col w-full h-full">
-    <!-- toolbar / drag handle -->
-    <div class="window-header border-b-2 border-mix-30 bg-mix-15 px-3 shrink-0"
-      @pointerdown.stop="dragWindow?.($event)">
-      <span class="text-xs font-medium">{{ props.name }} - </span>
 
-      <button class="flex flex-row items-center gap-1 px-2 py-0.5 font-mono font-bold text-xs rounded hover:bg-mix-25 transition-colors"
-        title="Instrument" @pointerdown.stop @click="channelMenu?.toggle($event)"
-      >
-        <span class="truncate max-w-24">{{ channels.find(c => c.id === selectedChannelId)?.name ?? 'Select' }}</span>
-        <span class="pi pi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': channelMenu?.isOpen }" />
-      </button>
-      <Menu ref="channelMenu" :items="channelMenuItems" />
+    <!-- top section -->
+    <div class="grid grid-cols-[50px_1fr] shrink-0 border-b-2 border-mix-30">
+      <div class="bg-mix-15 border-r-2 border-mix-30" /> <!-- box -->
 
-      <button class="flex flex-row items-center gap-1 px-2 py-0.5 rounded hover:bg-mix-25 transition-colors focus:outline-none"
-        title="Automation Lane"
-        :style="activeLaneDef ? { backgroundColor: manipulateColor(activeLaneDef.color, 0, 0.5) } : {}"
-        @pointerdown.stop @click.prevent="laneMenu?.toggle($event)"
-      >
-        <img src="/icons/automation-icon-white.png" class="w-3.5 h-3.5 object-contain" />
-        <span class="pi pi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': laneMenu?.isOpen }" />
-      </button>
-      <Menu ref="laneMenu" :items="laneMenuItems" :width="80" />
+      <div class="flex flex-col">
+        <!-- toolbar / drag handle -->
+        <div class="window-header bg-mix-15 px-3 shrink-0"
+          @pointerdown.stop="dragWindow?.($event)">
+          <span class="text-xs font-medium">{{ props.name }} - </span>
 
-      <button v-if="cachedCurves.size > 0" class="w-5 h-5 rounded flex items-center justify-center text-red-400 hover:text-red-300 shrink-0" @pointerdown.stop @click="cachedCurves.clear();" title="Clear automation curve cache">
-        <span class="pi pi-times text-xs" />
-      </button>
+          <button class="flex flex-row items-center gap-1 px-2 py-0.5 font-mono font-bold text-xs rounded hover:bg-mix-25 transition-colors"
+            title="Instrument" @pointerdown.stop @click="channelMenu?.toggle($event)"
+          >
+            <span class="truncate max-w-24">{{ channels.find(c => c.id === selectedChannelId)?.name ?? 'Select' }}</span>
+            <span class="pi pi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': channelMenu?.isOpen }" />
+          </button>
+          <Menu ref="channelMenu" :items="channelMenuItems" />
 
-      <!-- curve visibility toggles -->
-      <div v-if="parametersWithCurves.length > 0" class="flex flex-row gap-2 justify-center items-center">
-        <div class="w-px h-4 bg-mix-30 ml-1 shrink-0" />
-        <div v-for="param in parametersWithCurves" :key="`vis-${param.id}`"
-          class="w-3 h-3 rounded-sm border-2 cursor-pointer shrink-0 transition-colors"
-          :title="`${visibleCurveLanes.has(param.id) ? 'Hide' : 'Show'} ${param.label} curves`"
-          :style="{ borderColor: param.color, backgroundColor: visibleCurveLanes.has(param.id) ? param.color : 'transparent' }"
-          @pointerdown.stop
-          @click="visibleCurveLanes.has(param.id) ? visibleCurveLanes.delete(param.id) : visibleCurveLanes.add(param.id)"
-        />
+          <button class="flex flex-row items-center gap-1 px-2 py-0.5 rounded hover:bg-mix-25 transition-colors focus:outline-none"
+            title="Automation Lane"
+            :style="activeLaneDef ? { backgroundColor: manipulateColor(activeLaneDef.color, 0, 0.5) } : {}"
+            @pointerdown.stop @click.prevent="laneMenu?.toggle($event)"
+          >
+            <img src="/icons/automation-icon-white.png" class="w-3.5 h-3.5 object-contain" />
+            <span class="pi pi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': laneMenu?.isOpen }" />
+          </button>
+          <Menu ref="laneMenu" :items="laneMenuItems" :width="80" />
+
+          <button v-if="cachedCurves.size > 0" class="w-5 h-5 rounded flex items-center justify-center text-red-400 hover:text-red-300 shrink-0" @pointerdown.stop @click="cachedCurves.clear();" title="Clear automation curve cache">
+            <span class="pi pi-times text-xs" />
+          </button>
+
+          <!-- curve visibility toggles -->
+          <div v-if="parametersWithCurves.length > 0" class="flex flex-row gap-2 justify-center items-center">
+            <div class="w-px h-4 bg-mix-30 ml-1 shrink-0" />
+            <div v-for="param in parametersWithCurves" :key="`vis-${param.id}`"
+              class="w-3 h-3 rounded-sm border-2 cursor-pointer shrink-0 transition-colors"
+              :title="`${visibleCurveLanes.has(param.id) ? 'Hide' : 'Show'} ${param.label} curves`"
+              :style="{ borderColor: param.color, backgroundColor: visibleCurveLanes.has(param.id) ? param.color : 'transparent' }"
+              @pointerdown.stop
+              @click="visibleCurveLanes.has(param.id) ? visibleCurveLanes.delete(param.id) : visibleCurveLanes.add(param.id)"
+            />
+          </div>
+
+          <!-- separator -->
+          <div class="flex-1" />
+
+          <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="resetWindow?.()" title="Reset position and size">
+            <span class="pi pi-refresh text-xs" />
+          </button>
+
+          <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="closeWindow?.()" title="Close window">
+            <span class="pi pi-times text-xs" />
+          </button>
+        </div>
+
+        <ZoomScrollBar :start-percent="scrollX / totalWidth" :view-width-percent="pianoRollContainer ? pianoRollContainer.clientWidth / totalWidth : 0" @update:view="handleViewUpdate"/>
       </div>
-
-      <!-- separator -->
-      <div class="flex-1" />
-
-      <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="resetWindow?.()" title="Reset position and size">
-        <span class="pi pi-refresh text-xs" />
-      </button>
-
-      <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="closeWindow?.()" title="Close window">
-        <span class="pi pi-times text-xs" />
-      </button>
     </div>
 
-    <ZoomScrollBar :start-percent="scrollX / totalWidth" :view-width-percent="pianoRollContainer ? pianoRollContainer.clientWidth / totalWidth : 0" @update:view="handleViewUpdate"/>
-
-    <!-- piano roll -->
+    <!-- piano roll body -->
     <div ref="pianoRollContainer" class="flex-1 overflow-y-auto overflow-x-hidden grid grid-cols-[50px_1fr]" @scroll="onNativeScroll">
-      <!-- notes column -->
-      <div class="flex flex-col-reverse sticky left-0 z-50 shrink-0" ref="pianoKeysContainer" :style="{ height: `${notes.length * rowHeight}px` }">
-        <button v-for="key in notes" :key="key.midi" @pointerdown.prevent="playNote(key.midi)" @pointerup="stopNote(key.midi)" @pointerleave="stopNote(key.midi)"
-          :class="[ 'w-full text-sm select-none border-2 border-transparent hover:key border-rounded', key.isBlack ? 'key-black' : 'key-white']"
-          :style="{ height: rowHeight + 'px' }"
-        > 
-          {{ key.note }} 
-        </button>
+      <!-- piano keys with top spacer adjacent to timeline -->
+      <div class="sticky left-0 z-50 shrink-0 flex flex-col" ref="pianoKeysContainer" :style="{ height: `${notes.length * rowHeight + 20}px` }">
+        <div class="h-5 bg-mix-15 sticky top-0 z-10 border-r-2 border-b-2 border-mix-30" />
+        <div class="flex flex-col-reverse" :style="{ height: `${notes.length * rowHeight}px` }">
+          <button v-for="key in notes" :key="key.midi" @pointerdown.prevent="playNote(key.midi)" @pointerup="stopNote(key.midi)" @pointerleave="stopNote(key.midi)"
+            :class="[ 'w-full text-sm select-none border-2 border-transparent hover:key border-rounded', key.isBlack ? 'key-black' : 'key-white']"
+            :style="{ height: rowHeight + 'px' }"
+          >
+            {{ key.note }}
+          </button>
+        </div>
       </div>
 
-      <!-- workspace -->
-      <div class="relative" ref="workspaceContainer" :style="{ cursor: cursor, height: `${notes.length * rowHeight}px`, width: `${totalWidth}px`}"
-        @pointermove="handlePointerMove" @pointerleave="finalizeEdit" @pointerdown="handlePointerDown" @pointerup="finalizeEdit" @wheel="handleWheel" @contextmenu.prevent
-      >
-        <!-- 4-bar alternating column backgrounds -->
-        <div class="absolute inset-0 pointer-events-none" :style="{
-          backgroundImage: 'linear-gradient(to right, rgba(0,0,0,0.15) 50%, transparent 50%)',
-          backgroundSize: `${colWidth * beatsPerBar * 8}px 100%`,
-          backgroundPosition: `${colWidth * beatsPerBar * 4}px 0`
-        }"></div>
-
-        <!-- grid -->
-        <div class="absolute inset-0 piano-roll-grid pointer-events-none"
-          :style="{ 
-            '--row-h': `${rowHeight}px`,
-            '--beat-w': `${colWidth}px`,
-            '--bar-w': `${colWidth * beatsPerBar}px`,
-            '--snap-w': `${getVisualSnapWidth(colWidth)}px`,
-          }"
-        ></div>
-
-        <!-- row backgrounds -->
-        <div v-for="(key, i) in notes" :key="key.midi" class="absolute w-full pointer-events-none"
-          :style="{
-            top: `${(notes.length - 1 - i) * rowHeight}px`,
-            height: `${rowHeight}px`,
-            backgroundColor: key.isBlack ? 'transparent' : 'rgba(255,255,255,0.04)'
-          }"
-        ></div>
-
-        <!-- notes -->
-        <template v-for="(block, i) in roll.getNoteData" :key="i">
-          <!-- visual layer: clipped to note bounds for fills/label -->
-          <div class="absolute opacity-80 rounded-sm overflow-hidden pointer-events-none"
-            :style="{
-              top: `${block.row * rowHeight}px`,
-              left: `${block.col * colWidth}px`,
-              width: `${block.length * colWidth}px`,
-              height: `${rowHeight}px`
-            }"
-          >
-            <!-- dim background (empty velocity) -->
-            <div class="absolute inset-0 note-color opacity-30" />
-
-            <!-- velocity fill from bottom -->
-            <div v-if="block.velocity >= VELOCITY_SNAP + 1e-4" class="absolute bottom-0 left-0 w-full note-color" :style="{ height: `${block.velocity * 100}%` }" />
-            
-              <!-- velocity label on hover -->
-            <div v-if="state.hoverNote?.id === block.id"
-              class="absolute inset-y-0 left-0 flex items-center pl-1 z-10">
-              <span class="text-white font-mono leading-none select-none" style="font-size: 9px;">
-                {{ Math.round(block.velocity * 100) }}%
-              </span>
-            </div>
+      <div :style="{ width: `${totalWidth}px`, height: `${notes.length * rowHeight + 20}px` }">
+        <!-- timeline -->
+        <div class="bg-mix-10 flex flex-row items-center h-5 w-full sticky top-0 z-10" @pointerdown.stop="handleTimelinePointerDown" @pointermove="handleTimelineScrub">
+          <div v-for="i in (barCount * beatsPerBar)" :key="i" :style="{ width: `${colWidth}px` }">
+            <span class="text-xs font-mono absolute -translate-1/2 opacity-50">{{ i }}</span>
           </div>
 
-          <!-- overlay layer: not clipped, for automation overlays -->
-          <div class="absolute"
-            :style="{
-              top: `${block.row * rowHeight}px`,
-              left: `${block.col * colWidth}px`,
-              width: `${block.length * colWidth}px`,
-              height: `${rowHeight}px`
-            }"
-          >
-            <NoteAutomationOverlay v-if="activeLaneDef && block.automation.has(activeLaneDef.id)" v-bind="getOverlayLayout(block.row)"
-              :curve="block.automation.get(activeLaneDef.id)!"
-              :noteLength="block.length"
-              :widthPx="block.length * colWidth"
-              :paramColor="activeLaneDef.color"
-              :curveStyle="activeLaneDef.curveStyle ?? 'bezier'"
-              :defaultValue="activeLaneDef.getDefaultNormalized ? activeLaneDef.getDefaultNormalized(block.midi) : activeLaneDef.defaultNormalized"
-              @update="(c) => onAutomationUpdate(block.id, c)"
-            />
+          <!-- thingy that follows the playhead -->
+          <span v-if="playbackMode === 'pattern'" class="pi pi-sort-down-fill absolute text-sm font-fold -translate-x-1/2 text-(--playhead)" :style="{ left: `${playhead.col * colWidth}px` }"></span>
+        </div>
 
-            <!-- read-only curve previews -->
-            <template v-for="paramId in visibleCurveLanes" :key="`ro-${paramId}`">
-              <NoteAutomationOverlay
-                v-if="block.automation.has(paramId) && PARAMETER_MAP.get(paramId) && (!activeLaneDef || activeLaneDef.id !== paramId)"
-                v-bind="getOverlayLayout(block.row, PARAMETER_MAP.get(paramId))"
-                :curve="block.automation.get(paramId)!"
+        <!-- workspace -->
+        <div class="relative" ref="workspaceContainer" :style="{ cursor: cursor, height: `${notes.length * rowHeight}px`, width: `${totalWidth}px`}"
+          @pointermove="handlePointerMove" @pointerleave="finalizeEdit" @pointerdown="handlePointerDown" @pointerup="finalizeEdit" @wheel="handleWheel" @contextmenu.prevent
+        >
+
+          <!-- 4-bar alternating column backgrounds -->
+          <div class="absolute inset-0 pointer-events-none" :style="{
+            backgroundImage: 'linear-gradient(to right, rgba(0,0,0,0.15) 50%, transparent 50%)',
+            backgroundSize: `${colWidth * beatsPerBar * 8}px 100%`,
+            backgroundPosition: `${colWidth * beatsPerBar * 4}px 0`
+          }"></div>
+
+          <!-- grid -->
+          <div class="absolute inset-0 piano-roll-grid pointer-events-none"
+            :style="{ 
+              '--row-h': `${rowHeight}px`,
+              '--beat-w': `${colWidth}px`,
+              '--bar-w': `${colWidth * beatsPerBar}px`,
+              '--snap-w': `${getVisualSnapWidth(colWidth)}px`,
+            }"
+          ></div>
+
+          <!-- row backgrounds -->
+          <div v-for="(key, i) in notes" :key="key.midi" class="absolute w-full pointer-events-none"
+            :style="{
+              top: `${(notes.length - 1 - i) * rowHeight}px`,
+              height: `${rowHeight}px`,
+              backgroundColor: key.isBlack ? 'transparent' : 'rgba(255,255,255,0.04)'
+            }"
+          ></div>
+
+          <!-- notes -->
+          <template v-for="(block, i) in roll.getNoteData" :key="i">
+            <!-- visual layer: clipped to note bounds for fills/label -->
+            <div class="absolute opacity-80 rounded-sm overflow-hidden pointer-events-none"
+              :style="{
+                top: `${block.row * rowHeight}px`,
+                left: `${block.col * colWidth}px`,
+                width: `${block.length * colWidth}px`,
+                height: `${rowHeight}px`
+              }"
+            >
+              <!-- dim background (empty velocity) -->
+              <div class="absolute inset-0 note-color opacity-30" />
+
+              <!-- velocity fill from bottom -->
+              <div v-if="block.velocity >= VELOCITY_SNAP + 1e-4" class="absolute bottom-0 left-0 w-full note-color" :style="{ height: `${block.velocity * 100}%` }" />
+              
+              <!-- velocity label on hover -->
+              <div v-if="state.hoverNote?.id === block.id"
+                class="absolute inset-y-0 left-0 flex items-center pl-1 z-10">
+                <span class="text-white font-mono leading-none select-none" style="font-size: 9px;">
+                  {{ Math.round(block.velocity * 100) }}%
+                </span>
+              </div>
+            </div>
+
+            <!-- overlay layer: not clipped, for automation overlays -->
+            <div class="absolute"
+              :style="{
+                top: `${block.row * rowHeight}px`,
+                left: `${block.col * colWidth}px`,
+                width: `${block.length * colWidth}px`,
+                height: `${rowHeight}px`
+              }"
+            >
+              <NoteAutomationOverlay v-if="activeLaneDef && block.automation.has(activeLaneDef.id)" v-bind="getOverlayLayout(block.row)"
+                :curve="block.automation.get(activeLaneDef.id)!"
                 :noteLength="block.length"
                 :widthPx="block.length * colWidth"
-                :paramColor="PARAMETER_MAP.get(paramId)!.color"
-                :curveStyle="PARAMETER_MAP.get(paramId)!.curveStyle ?? 'bezier'"
-                :snapInterval="null"
-                :readOnly="true"
+                :paramColor="activeLaneDef.color"
+                :curveStyle="activeLaneDef.curveStyle ?? 'bezier'"
+                :defaultValue="activeLaneDef.getDefaultNormalized ? activeLaneDef.getDefaultNormalized(block.midi) : activeLaneDef.defaultNormalized"
+                @update="(c) => onAutomationUpdate(block.id, c)"
               />
-            </template>
-          </div>
-        </template>
 
-        <!-- hover cell -->
-        <div v-if="state.hoverCell && !state.hoverNote && !activeLaneDef" class="absolute border-2 opacity-50 pointer-events-none rounded-sm note-outline-color"
-          :style="{
-            top: `${state.hoverCell.row * rowHeight}px`,
-            left: `${state.hoverCell.col * colWidth}px`,
-            width: `${colWidth * state.cachedLength}px`,
-            height: `${rowHeight}px`
-          }"
-        ></div>
+              <!-- read-only curve previews -->
+              <template v-for="paramId in visibleCurveLanes" :key="`ro-${paramId}`">
+                <NoteAutomationOverlay
+                  v-if="block.automation.has(paramId) && PARAMETER_MAP.get(paramId) && (!activeLaneDef || activeLaneDef.id !== paramId)"
+                  v-bind="getOverlayLayout(block.row, PARAMETER_MAP.get(paramId))"
+                  :curve="block.automation.get(paramId)!"
+                  :noteLength="block.length"
+                  :widthPx="block.length * colWidth"
+                  :paramColor="PARAMETER_MAP.get(paramId)!.color"
+                  :curveStyle="PARAMETER_MAP.get(paramId)!.curveStyle ?? 'bezier'"
+                  :snapInterval="null"
+                  :readOnly="true"
+                />
+              </template>
+            </div>
+          </template>
 
-        <!-- hover note -->
-        <div v-if="state.hoverNote && !activeLaneDef" class="absolute border-2 opacity-25 pointer-events-none rounded-sm note-outline-color"
-          :style="{
-            top: `${state.hoverNote.row * rowHeight}px`,
-            left: `${state.hoverNote.col * colWidth}px`,
-            width: `${state.hoverNote.length * colWidth}px`,
-            height: `${rowHeight}px`
-          }"
-        ></div>
+          <!-- hover cell -->
+          <div v-if="state.hoverCell && !state.hoverNote && !activeLaneDef" class="absolute border-2 opacity-50 pointer-events-none rounded-sm note-outline-color"
+            :style="{
+              top: `${state.hoverCell.row * rowHeight}px`,
+              left: `${state.hoverCell.col * colWidth}px`,
+              width: `${colWidth * state.cachedLength}px`,
+              height: `${rowHeight}px`
+            }"
+          ></div>
 
-        <!-- playhead (only visible in pattern mode) -->
-        <div v-if="playbackMode === 'pattern' && (playhead.playing || playhead.col > 0)"
-          class="absolute w-0.75 pointer-events-none playhead-color"
-          :style="{
-            transform: `translateX(${playhead.col * colWidth}px)`,
-            top: '0',
-            height: `${notes.length * rowHeight}px`,
-            boxShadow: `-1px 0 6px var(--playhead)`
-          }"
-        ></div>
+          <!-- hover note -->
+          <div v-if="state.hoverNote && !activeLaneDef" class="absolute border-2 opacity-25 pointer-events-none rounded-sm note-outline-color"
+            :style="{
+              top: `${state.hoverNote.row * rowHeight}px`,
+              left: `${state.hoverNote.col * colWidth}px`,
+              width: `${state.hoverNote.length * colWidth}px`,
+              height: `${rowHeight}px`
+            }"
+          ></div>
+
+          <!-- playhead (only visible in pattern mode) -->
+          <div v-if="playbackMode === 'pattern' && (playhead.playing || playhead.col > 0)"
+            class="absolute w-0.75 pointer-events-none playhead-color -translate-x-1/2"
+            :style="{
+              transform: `translateX(${playhead.col * colWidth}px)`,
+              top: '0',
+              height: `${notes.length * rowHeight}px`,
+              boxShadow: `-1px 0 6px var(--playhead)`
+            }"
+          ></div>
+        </div>
       </div>
     </div>
   </div>

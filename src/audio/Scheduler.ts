@@ -43,6 +43,7 @@ export class Scheduler {
     // state
     private _isPlaying = false;
     private _pauseTime = 0;
+    private _lastSeekPosition = 0;
     private startTime = 0;
     private playheadPos = 0;
     private schedulerTimerId: number | null = null;
@@ -235,11 +236,19 @@ export class Scheduler {
         if(!ch) return;
 
         // schedule note on
-        if(noteStartBeat >= currentBeat - lookBehindTolerance && noteStartBeat < scheduleUntilBeat && !this.scheduledNoteOns.has(noteOnKey)) {
-            const scheduleTime = Math.max(now, this.beatToAudioTime(noteStartBeat));
-            const compiled = this.compileNoteAutomation(note.automation, note.pitch, scheduleTime, this._bpm);
-            ch.instrument.triggerAttack(note.id, note.pitch, scheduleTime, note.velocity, compiled);
-            this.scheduledNoteOns.add(noteOnKey);
+        if(!this.scheduledNoteOns.has(noteOnKey)) {
+            if(noteStartBeat >= currentBeat - lookBehindTolerance && noteStartBeat < scheduleUntilBeat) {
+                // normal case: note starts within the lookahead window
+                const scheduleTime = Math.max(now, this.beatToAudioTime(noteStartBeat));
+                const compiled = this.compileNoteAutomation(note.automation, note.pitch, scheduleTime, this._bpm);
+                ch.instrument.triggerAttack(note.id, note.pitch, scheduleTime, note.velocity, compiled);
+                this.scheduledNoteOns.add(noteOnKey);
+            } else if(noteStartBeat < currentBeat) {
+                // mid-note case: playhead is inside the note (e.g. after seeking), trigger immediately
+                const compiled = this.compileNoteAutomation(note.automation, note.pitch, now, this._bpm);
+                ch.instrument.triggerAttack(note.id, note.pitch, now, note.velocity, compiled);
+                this.scheduledNoteOns.add(noteOnKey);
+            }
         }
 
         // schedule note off
@@ -313,7 +322,6 @@ export class Scheduler {
         if(!this._isPlaying) return;
 
         this._isPlaying = false;
-        this._pauseTime = this._loopEnabled ? this._loopStart : 0;
 
         if(this.schedulerTimerId !== null) {
             clearInterval(this.schedulerTimerId);
@@ -336,7 +344,7 @@ export class Scheduler {
 
     stop() {
         this.pause();
-        this._pauseTime = this._loopEnabled ? this._loopStart : 0;
+        this._pauseTime = this._lastSeekPosition;
 
         if(this.playheadCallback) {
             this.playheadCallback(this.pauseTime);
@@ -416,7 +424,7 @@ export class Scheduler {
         markDirty();
     }
 
-    seek(beat: number) {
+    async seek(beat: number) {
         const wasPlaying = this._isPlaying;
 
         if(wasPlaying) {
@@ -424,6 +432,7 @@ export class Scheduler {
         }
 
         this._pauseTime = Math.max(0, beat);
+        this._lastSeekPosition = this._pauseTime;
         this.scheduledNoteOns.clear();
         this.scheduledNoteOffs.clear();
 
@@ -432,7 +441,7 @@ export class Scheduler {
         }
 
         if(wasPlaying) {
-            this.play();
+            await this.play(); // play() already calls schedulerTick() with correct startTime
         }
     }
 
