@@ -4,6 +4,7 @@ import { mixerManager } from '../audio/MixerManager';
 import { getAudioEngine } from '../services/audioEngineManager';
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
 import Knob from './controls/Knob.vue';
+import { toggleSynthWindow } from '../services/synthWindowManager';
 
 const engine = getAudioEngine();
 const showSynthPicker = ref(false);
@@ -126,7 +127,9 @@ onBeforeUnmount(() => {
       />
 
       <!-- channel name button -->
-      <button class="flex-1 text-left px-2 py-0.5 rounded text-sm font-mono bg-mix-10 border-2 border-mix-30 hover:bg-mix-20 transition-colors truncate min-w-0" >
+      <button class="flex-1 text-left px-2 py-0.5 rounded text-sm font-mono bg-mix-10 border-2 border-mix-30 hover:bg-mix-20 transition-colors truncate min-w-0"
+        @click="toggleSynthWindow(channel.id)"
+      >
         {{ channel.name }}
       </button>
 

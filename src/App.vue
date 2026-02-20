@@ -12,6 +12,8 @@ import { arrangementWindow, channelRackWindow, mixerWindow, pianoRollWindow } fr
 import { onMounted, onUnmounted, ref } from 'vue';
 import { togglePlaybackMode } from './services/playbackModeManager';
 import { initLoad } from './services/saveStateManager';
+import { closeSynthWindow, synthWindowVisible } from './services/synthWindowManager';
+import SynthWindow from './components/SynthWindow.vue';
 
 const headerBarRef = ref<InstanceType<typeof HeaderBar> | null>(null);
 
@@ -102,6 +104,19 @@ onUnmounted(() => {
         :resizing="{ left: true, right: true, top: true, bottom: true }"
       >
         <PianoRoll :roll="pattern.roll" :name="pattern.name" v-model:selectedChannelId="pattern.selectedChannelId" />
+      </Window>
+
+      <Window
+        :visible="synthWindowVisible"
+        @close="closeSynthWindow"
+        :id="'synth-window'"
+        :x="600"
+        :y="200"
+        :width="500"
+        :height="400"
+        :resizing="{left : true, right: true, top: true, bottom: true }"
+      >
+        <SynthWindow/>
       </Window>
     </div>
   </div>

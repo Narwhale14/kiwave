@@ -121,15 +121,30 @@ function finalizeEdit() {
   cursor.value = 'default';
 }
 
-function recompileArrangement() {
+function recompileArrangement(resetIfPlaying = false) {
   if(playbackMode.value !== 'arrangement') return;
 
   const engine = getAudioEngine();
   const patternMap = new Map(patterns.value.map(p => [p.id, p]));
   const compiledNotes = engine.compiler.compile(patternMap, 0, Infinity);
   engine.scheduler.setNotes(compiledNotes);
+
+  if(resetIfPlaying && engine.scheduler.isPlaying) {
+    engine.scheduler.resetSchedule();
+  }
+
   const endBeat = arrangement.getEndBeat();
   engine.scheduler.setLoop(true, 0, Math.ceil(endBeat / beatsPerBar) * beatsPerBar || beatsPerBar);
+}
+
+let recompileDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleRecompile() {
+  if(recompileDebounceTimer !== null) clearTimeout(recompileDebounceTimer);
+  recompileDebounceTimer = setTimeout(() => {
+    recompileDebounceTimer = null;
+    recompileArrangement(true);
+  }, 50);
 }
 
 function muteCircleColor(track: ArrangementTrack) {
@@ -363,7 +378,8 @@ watch(() => patterns.value.map(p => ({ id: p.id, version: p.roll._state.version 
       }
     }
   }
-  if (playbackMode.value === 'arrangement') recompileArrangement();
+  
+  if (playbackMode.value === 'arrangement') scheduleRecompile();
 });
 
 watch(playbackMode, (newMode) => {

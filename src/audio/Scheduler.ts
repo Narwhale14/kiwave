@@ -116,6 +116,12 @@ export class Scheduler {
         }
     }
 
+    private killAll() {
+        for(const channel of this.channelManager.getAllChannels()) {
+            channel.instrument.killAll();
+        }
+    }
+
     addNote(note: SchedulerNote) {
         this.notes.push(note);
     }
@@ -132,12 +138,24 @@ export class Scheduler {
 
     updateNote(id: string, updates: Partial<SchedulerNote>) {
         const note = this.notes.find(n => n.id === id);
-        if(note) {
-            Object.assign(note, updates);
+        if(!note) return;
+
+        const oldStart = note.startTime;
+        const oldEnd = oldStart + note.duration;
+
+        if(updates.startTime !== undefined && updates.startTime !== oldStart) {
+            this.scheduledNoteOns.delete(`${note.id}-on-${oldStart.toFixed(4)}`);
+            this.scheduledNoteOffs.delete(`${note.id}-off-${oldEnd.toFixed(4)}`);
+        } else if(updates.duration !== undefined && updates.duration !== note.duration) {
+            this.scheduledNoteOffs.delete(`${note.id}-off-${oldEnd.toFixed(4)}`);
         }
+
+        Object.assign(note, updates);
     }
 
     private _schedulerTick = () => {
+        if(this.audioContext.state !== 'running') return;
+        
         const now = this.audioContext.currentTime;
         const rawBeat = this._getRawBeat();
         const lookAheadBeats = this._secondsToBeats(this.lookAhead);
@@ -261,8 +279,9 @@ export class Scheduler {
     resetSchedule() {
         this.scheduledNoteOns.clear();
         this.scheduledNoteOffs.clear();
-        if (this._isPlaying) {
-            this.panicAll();
+
+        if(this._isPlaying) {
+            this.killAll();
             this._schedulerTick();
         }
     }

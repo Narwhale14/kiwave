@@ -16,6 +16,7 @@ export interface BaseSynth {
     triggerRelease(noteId: string, time: number): void;
 
     panic(): void;
+    killAll(): void;
     dispose(): void;
     resume(): void;
     getState(): unknown;
