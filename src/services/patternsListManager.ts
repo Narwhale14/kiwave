@@ -4,9 +4,6 @@ import { keyboard } from '../audio/Keyboard';
 import { focusWindow } from './windowManager';
 import { markDirty } from '../util/dirty';
 
-/**
- * interface to manage each individual piano roll (PianoRoll has note data)
- */
 export interface Pattern {
     id: string;
     num: number;

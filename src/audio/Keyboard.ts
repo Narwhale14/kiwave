@@ -1,8 +1,5 @@
 import { noteToMidi, midiToNoteName, isBlackKey } from "../util/midi";
 
-/**
- * type used to define a note
- */
 export type MidiNote = { note: string, octave: number };
 
 export class Keyboard {

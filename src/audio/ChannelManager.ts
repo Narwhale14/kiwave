@@ -120,11 +120,9 @@ export class ChannelManager {
         markDirty();
     }
 
-    // --- load/save helpers ---
+    // LOAD/SAVE HELPERS
 
-    get nextChannelIdCounter(): number {
-        return this.nextId;
-    }
+    get nextChannelIdCounter(): number { return this.nextId; }
 
     setNextId(n: number) {
         this.nextId = n;

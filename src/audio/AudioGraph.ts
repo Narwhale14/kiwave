@@ -1,12 +1,5 @@
 const RAMP_TIME = 0.005; // 5ms ramp for click-free gain changes
 
-/**
- * manages the physical Web Audio GainNode graph for all mixer tracks.
- * each mixer track has a volumeGain + panner + muteGain; channels connect to the volumeGain.
- * the analyser splitter taps from the panner output (pre-mute) so meters read even when muted.
- *
- * signal path: channel panner -> mixerVolumeGain -> mixerPanner -> [analyser] -> mixerMuteGain -> parentGain -> ... -> destination
- */
 export class AudioGraph {
     private audioContext: AudioContext;
     private gainNodes: Map<string, GainNode> = new Map();
@@ -19,7 +12,7 @@ export class AudioGraph {
 
         // soft clipper
         const softClipper = audioContext.createWaveShaper();
-        softClipper.curve = AudioGraph.makeSoftClipCurve();
+        softClipper.curve = AudioGraph._makeSoftClipCurve();
         softClipper.oversample = '4x';
 
         // safety limiter
@@ -52,12 +45,11 @@ export class AudioGraph {
         this._addAnalysers('master', masterPanner);
     }
 
-    // converts a route number to a gain node id: 0 -> 'master', n -> 'mixer-n'
     private resolveTargetId(route: number): string {
         return route === 0 ? 'master' : `mixer-${route}`;
     }
 
-    // creates a gain node and a paired panner: gain → panner → target mixer gain
+    // creates a gain node and a paired panner: gain -> panner -> target mixer gain
     addGainNode(id: string, route: number): void {
         if(this.gainNodes.has(id)) return;
         const gain = this.audioContext.createGain();
@@ -90,7 +82,7 @@ export class AudioGraph {
 
     // creates a panner node for a channel or mixer track.
     // channels: inputNode -> panner -> targetGain
-    // mixer tracks: inputNode -> panner -> [analyserSplitter] AND [muteGain → targetGain]
+    // mixer tracks: inputNode -> panner -> [analyserSplitter] AND [muteGain -> targetGain]
     // analyers tap pre-mute so meters read even when the track is muted.
     addPannerNode(id: string, inputNode: AudioNode, route: number): void {
         const panner = this.audioContext.createStereoPanner();
@@ -112,7 +104,7 @@ export class AudioGraph {
         }
     }
 
-    // taps a stereo source into a channel splitter → two analysers (L + R)
+    // taps a stereo source into a channel splitter -> two analysers (L + R)
     private _addAnalysers(id: string, source: AudioNode): void {
         const splitter = this.audioContext.createChannelSplitter(2);
         const left = this.audioContext.createAnalyser();
@@ -157,21 +149,18 @@ export class AudioGraph {
         }
     }
 
-    // smoothly ramps a gain node to a new value (5ms)
     setGain(id: string, value: number): void {
         const node = this.gainNodes.get(id);
         if(!node) return;
         node.gain.setTargetAtTime(value, this.audioContext.currentTime, RAMP_TIME);
     }
 
-    // smoothly ramps a mute gain node to a target value (use 0 to mute, 1 to unmute)
     setMuteGain(id: string, value: number): void {
         const node = this.muteGainNodes.get(id);
         if(!node) return;
         node.gain.setTargetAtTime(value, this.audioContext.currentTime, RAMP_TIME);
     }
 
-    // immediately silences a mute gain node (click-free 10ms ramp to 0)
     setMuteGainImmediate(id: string, now: number): void {
         const node = this.muteGainNodes.get(id);
         if(!node) return;
@@ -180,7 +169,6 @@ export class AudioGraph {
         node.gain.linearRampToValueAtTime(0, now + 0.01);
     }
 
-    // hard-mutes a gain node immediately (cancels scheduled values, ramps to 0 in 10ms)
     setGainImmediate(id: string, now: number): void {
         const node = this.gainNodes.get(id);
         if(!node) return;
@@ -189,7 +177,6 @@ export class AudioGraph {
         node.gain.linearRampToValueAtTime(0, now + 0.01);
     }
 
-    // smoothly ramps a panner node's position to a new value (-1 left, 0 center, 1 right)
     setPan(id: string, value: number): void {
         const node = this.pannerNodes.get(id);
         if(!node) return;
@@ -198,7 +185,7 @@ export class AudioGraph {
 
     // piecewise tanh soft clip: linear for |x| <= 0.8, saturates smoothly to ceiling of 1.0 above.
     // inaudible at normal levels; catches transient peaks before they hit the limiter.
-    private static makeSoftClipCurve(numSamples = 256): Float32Array<ArrayBuffer> {
+    private static _makeSoftClipCurve(numSamples = 256): Float32Array<ArrayBuffer> {
         const curve = new Float32Array(new ArrayBuffer(numSamples * 4));
         for(let i = 0; i < numSamples; i++) {
             const x = (i * 2) / (numSamples - 1) - 1;

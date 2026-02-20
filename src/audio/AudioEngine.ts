@@ -8,9 +8,6 @@ import { globalVolume } from "../services/settingsManager";
 import { markDirty } from '../util/dirty';
 import type { BaseSynth, SynthEntry } from "./synths";
 
-/**
- * audio engine - coordinates all audio state and routing
- */
 export class AudioEngine {
     private _audioContext = new AudioContext();
     private _audioGraph = new AudioGraph(this._audioContext);

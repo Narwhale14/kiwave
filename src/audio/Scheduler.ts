@@ -3,9 +3,6 @@ import { deriveSegments, type AutomationCurve, type CompiledNoteAutomation } fro
 import type { ChannelManager } from './ChannelManager';
 import { markDirty } from '../util/dirty';
 
-/**
- * interface used to convert note data to a type the scheduler can read
- */
 export interface SchedulerNote {
     id: string;
     pitch: number;
@@ -16,9 +13,6 @@ export interface SchedulerNote {
     automation: Map<string, AutomationCurve>; // may be empty
 }
 
-/**
- * interface used to init the scheduler
- */
 export interface SchedulerOptions {
     bpm?: number;
     lookAhead?: number;
@@ -28,19 +22,14 @@ export interface SchedulerOptions {
 type PlayheadCallback = (time: number) => void;
 type PlayStateCallback = (playing: boolean) => void;
 
-/**
- * scheduler object - schedules notes with a playhead
- */
 export class Scheduler {
     private audioContext: AudioContext;
     private channelManager: ChannelManager;
 
-    // timing
     private _bpm: number;
     private lookAhead: number;
     private scheduleInterval: number;
 
-    // state
     private _isPlaying = false;
     private _pauseTime = 0;
     private _lastSeekPosition = 0;
@@ -48,7 +37,6 @@ export class Scheduler {
     private playheadPos = 0;
     private schedulerTimerId: number | null = null;
 
-    // notes
     private notes: SchedulerNote[] = [];
     private scheduledNoteOns: Set<string> = new Set();
     private scheduledNoteOffs: Set<string> = new Set();
