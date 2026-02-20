@@ -1,11 +1,11 @@
 import { reactive } from "vue";
-import type { MiniSynth } from "./MiniSynth";
 import { markDirty } from '../util/dirty';
+import type { BaseSynth } from "./synths";
 
 export interface Channel {
     id: string;
     name: string;
-    instrument: MiniSynth;
+    instrument: BaseSynth;
     mixerTrack: number; // for routing. 0 = master
     volume: number;
     pan: number;
@@ -20,7 +20,7 @@ export class ChannelManager {
     private nextId = 1;
     onMuteStateChanged: (() => void) | null = null;
 
-    addChannel(instrument: MiniSynth, name?: string): string {
+    addChannel(instrument: BaseSynth, name?: string): string {
         const id = `channel-${this.nextId}`
         this.channels.push({
             id,
@@ -130,7 +130,7 @@ export class ChannelManager {
         this.nextId = n;
     }
 
-    addChannelWithId(instrument: MiniSynth, id: string, name: string): void {
+    addChannelWithId(instrument: BaseSynth, id: string, name: string): void {
         this.channels.push({
             id,
             name,

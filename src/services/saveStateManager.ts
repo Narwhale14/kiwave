@@ -284,7 +284,7 @@ export async function deserializeState(save: SaveFile): Promise<void> {
         if(masterSave) {
             Object.assign(master, masterSave);
         } else {
-            // legacy saves / blank saves without master — reset to defaults
+            // legacy saves / blank saves without master - reset to defaults
             Object.assign(master, { volume: 1, pan: 0, muted: false, solo: false });
         }
 
@@ -392,7 +392,6 @@ export async function saveManualProject(): Promise<SaveResult> {
     save.metadata.lastModified = now;
 
     if(currentProjectId.value !== null) {
-        // update existing project, preserve original created timestamp
         const existing = await idbGet<SaveFile>(PROJECTS_STORE, currentProjectId.value);
         if(existing) save.metadata.created = existing.metadata.created;
         await idbPut(PROJECTS_STORE, { id: currentProjectId.value, ...save });

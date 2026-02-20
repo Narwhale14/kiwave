@@ -126,7 +126,7 @@ onBeforeUnmount(() => {
       />
 
       <!-- channel name button -->
-      <button class="flex-1 text-left px-2 py-0.5 rounded text-sm font-mono bg-mix-10 border-2 border-mix-30 hover:bg-mix-20 transition-colors truncate min-w-0">
+      <button class="flex-1 text-left px-2 py-0.5 rounded text-sm font-mono bg-mix-10 border-2 border-mix-30 hover:bg-mix-20 transition-colors truncate min-w-0" >
         {{ channel.name }}
       </button>
 
@@ -142,7 +142,7 @@ onBeforeUnmount(() => {
     <Teleport to="body">
       <div v-if="showSynthPicker" ref="pickerRef" class="fixed z-9999 -translate-x-1/2 bg-mix-20 border border-mix-40 rounded shadow-lg py-0.5 min-w-max"
         :style="pickerStyle">
-        <button v-for="synth in engine.availableSynths" :key="synth.id"
+        <button v-for="synth in engine.getAvailableSynths()" :key="synth.id"
           class="px-2 py-0.5 text-xs cursor-pointer w-full text-left hover:bg-mix-30 transition-colors whitespace-nowrap"
           @click="selectSynth(synth.id)"
         >{{ synth.displayName }}</button>

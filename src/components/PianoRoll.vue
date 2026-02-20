@@ -306,7 +306,7 @@ function handlePointerMove(event: PointerEvent) {
     const oldMidi = state.draggingNote.midi;
     props.roll.move(state.draggingNote.id, newRow, newCol);
     props.roll.followNoteMove(state.draggingNote.id, oldMidi, state.draggingNote.midi);
-    instrument.value?.triggerRelease(state.draggingNote.id, instrument.value.getAudioContext().currentTime); // cancel current
+    instrument.value?.triggerRelease(state.draggingNote.id, instrument.value.getAudioContext().currentTime);
 
     const noteIndex = notes.length - 1 - newRow;
     engine.scheduler.updateNote(state.draggingNote.id, {
