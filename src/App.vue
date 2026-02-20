@@ -9,10 +9,11 @@ import Arrangement from './components/Arrangement.vue';
 import ChannelRack from './components/ChannelRack.vue';
 import Mixer from './components/Mixer.vue';
 import { arrangementWindow, channelRackWindow, mixerWindow, pianoRollWindow } from './services/layoutManager';
-import { onMounted, onUnmounted } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { togglePlaybackMode } from './services/playbackModeManager';
 import { initLoad } from './services/saveStateManager';
-import { markDirty } from './util/dirty';
+
+const headerBarRef = ref<InstanceType<typeof HeaderBar> | null>(null);
 
 function handleKeyDown(event: KeyboardEvent) {
   if(event.key.toLowerCase() === 'l') {
@@ -21,8 +22,10 @@ function handleKeyDown(event: KeyboardEvent) {
 
   if((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
     event.preventDefault();
-
-    markDirty();
+    if(headerBarRef.value) {
+      console.log('saving');
+      headerBarRef.value.saveProject();
+    }
   }
 };
 
@@ -40,7 +43,7 @@ onUnmounted(() => {
 
 <template>
   <div class="flex flex-col w-screen h-screen overflow-hidden">
-    <HeaderBar />
+    <HeaderBar ref="headerBarRef" />
 
     <div class="flex flex-1 overflow-hidden">
       <PatternsList />

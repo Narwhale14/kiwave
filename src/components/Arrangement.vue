@@ -2,7 +2,7 @@
 import { reactive, computed, watch, onMounted, onBeforeUnmount, ref, inject, nextTick } from 'vue';
 import { snapDivision, getVisualSnapWidth, dynamicSnapNearest, dynamicSnap } from '../util/snap';
 import { getAudioEngine } from '../services/audioEngineManager';
-import { playbackMode, registerArrangementCallbacks, unregisterArrangementCallbacks, setPlaybackMode } from '../services/playbackModeManager';
+import { playbackMode, registerArrangementCallbacks, unregisterArrangementCallbacks } from '../services/playbackModeManager';
 import { patterns, openPattern } from '../services/patternsListManager';
 import { arrangement } from '../audio/Arrangement';
 import type { ArrangementClip, ArrangementTrack } from '../audio/Arrangement';
@@ -10,6 +10,7 @@ import ConfirmationModal from './modals/ConfirmationModal.vue';
 import ZoomScrollBar from './controls/ZoomScrollBar.vue';
 import { MAX_ZOOM_FACTOR } from '../constants/defaults';
 import { clamp } from '../util/math';
+import Timeline from './meters/Timeline.vue';
 
 const closeWindow = inject<() => void>('closeWindow');
 const resetWindow = inject<() => void>('resetWindow');
@@ -174,18 +175,17 @@ function handleKeyDown(event: KeyboardEvent) {
   if(event.code === 'Space') {
     event.preventDefault();
 
-    // recompile if on arrangement mode + not playing
-    if (playbackMode.value === 'arrangement' && !engine.scheduler.isPlaying) {
+    if(playbackMode.value === 'arrangement' && !engine.scheduler.isPlaying) {
       recompileArrangement();
     }
     
-    engine.toggle();
+    engine.scheduler.toggle();
     return;
   }
 
   if(event.code === 'Enter') {
     event.preventDefault();
-    engine.stop();
+    engine.scheduler.stop();
     return;
   }
 }
@@ -348,31 +348,6 @@ function handleViewUpdate({ start, width }: { start: number, width: number }) {
   scrollX.value = arrangementContainer.value.scrollLeft;
 }
 
-function seekToPointer(event: PointerEvent) {
-  if(!workspaceContainer.value) return;
-  const rect = workspaceContainer.value.getBoundingClientRect();
-  
-  let beat = 0;
-  if(event.shiftKey) {
-    beat = (event.clientX - rect.left) / colWidth.value;
-  } else {
-    beat = dynamicSnapNearest((event.clientX - rect.left) / colWidth.value, colWidth.value);
-  }
-
-  engine.scheduler.seek(Math.max(0, beat));
-}
-
-function handleTimelinePointerDown(event: PointerEvent) {
-  if(playbackMode.value !== 'arrangement') setPlaybackMode('arrangement');
-  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-  seekToPointer(event);
-}
-
-function handleTimelineScrub(event: PointerEvent) {
-  if(!(event.currentTarget as HTMLElement).hasPointerCapture(event.pointerId)) return;
-  seekToPointer(event);
-}
-
 // WATCHERS
 
 // watch for arrangement changes
@@ -395,7 +370,6 @@ watch(() => patterns.value.map(p => ({ id: p.id, version: p.roll._state.version 
   if (playbackMode.value === 'arrangement') recompileArrangement();
 });
 
-// recompile when switching to arrangement mode (picks up edits made in pattern mode)
 watch(playbackMode, (newMode) => {
   if(newMode === 'arrangement') recompileArrangement();
 });
@@ -476,7 +450,7 @@ onBeforeUnmount(() => {
     <div ref="arrangementContainer" class="flex-1 overflow-x-hidden overflow-y-auto grid grid-cols-[7.5rem_1fr]" @scroll="onNativeScroll">
       <!-- track headers -->
       <div class="sticky left-0 z-50 shrink-0 flex flex-col" :style="{ height: `${arrangement.tracks.length * trackHeight + 20}px` }">
-        <div class="h-5 bg-mix-15 sticky top-0 z-10 border-r-2 border-mix-30" />
+        <div class="h-5 bg-mix-15 sticky top-0 z-10 border-r-2 border-b-2 border-mix-30" />
 
         <div v-for="track in arrangement.tracks" :key="track.id" :style="{ height: `${trackHeight}px` }"
           class="w-30 bg-mix-15 border-y-2 border-r-2 border-mix-30 flex justify-between flex-col"
@@ -507,16 +481,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div :style="{ width: `${totalWidth}px`, height: `${arrangement.tracks.length * trackHeight + 20}px` }">
-        <!-- timeline -->
-        <div class="bg-mix-10 flex flex-row items-center h-5 w-full sticky top-0 z-10" @pointerdown.stop="handleTimelinePointerDown" @pointermove="handleTimelineScrub">
-          <!-- markers -->
-          <div v-for="i in (barCount * beatsPerBar)" :key="i" :style="{ width: `${colWidth}px` }">
-            <span class="text-xs font-mono absolute -translate-1/2 opacity-50">{{ i }}</span>
-          </div>
-
-          <!-- playhead indicator -->
-          <span v-if="playbackMode === 'arrangement'" class="pi pi-sort-down-fill absolute text-sm -translate-x-1/2 text-(--playhead)" :style="{ left: `${playhead.col * colWidth}px` }"></span>
-        </div>
+        <Timeline :container="workspaceContainer" :mode="'arrangement'" :interval="colWidth" :count="barCount * beatsPerBar" :playtime="playhead.col * colWidth"/>
 
         <!-- workspace -->
         <div ref="workspaceContainer" class="relative shrink-0" :style="{ width: `${totalWidth}px`, height: `${arrangement.tracks.length * trackHeight}px`, cursor: cursor }"

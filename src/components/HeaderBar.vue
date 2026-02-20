@@ -12,11 +12,10 @@ import { getAudioEngine } from '../services/audioEngineManager';
 import Knob from './controls/Knob.vue';
 import { globalVolume, projectName, bpm } from '../services/settingsManager';
 import { DEFAULT_GLOBAL_VOLUME } from '../constants/defaults';
-import { markDirty, isDirty } from '../util/dirty';
 import Menu from './modals/Menu.vue';
 import ConfirmationModal from './modals/ConfirmationModal.vue';
 import type { MenuItem } from './modals/Menu.vue';
-import { currentProjectId, saveManualProject, getAllProjects, loadProjectById, newProject, deleteCurrentProject} from '../services/saveStateManager';
+import { currentProjectId, saveManualProject, getAllProjects, loadProjectById, newProject, deleteCurrentProject, isSaving, scheduleAutosave} from '../services/saveStateManager';
 import type { ProjectSummary } from '../services/saveStateManager';
 
 const engine = getAudioEngine();
@@ -36,7 +35,6 @@ async function refreshProjects() {
 
 onMounted(refreshProjects);
 
-// name prompt modal
 const namePromptVisible = ref(false);
 const namePromptInput = ref<HTMLInputElement | null>(null);
 const pendingName = ref('');
@@ -67,13 +65,16 @@ async function startSave() {
 
 async function confirmNameAndSave() {
   const name = pendingName.value.trim();
-  if (!name) return;
+  if(!name) return;
+
   projectName.value = name;
   const result = await saveManualProject();
-  if (result === 'duplicate_name') {
+
+  if(result === 'duplicate_name') {
     saveError.value = 'A project with this name already exists.';
-    return; // keep modal open
+    return;
   }
+
   namePromptVisible.value = false;
   saveError.value = '';
   await refreshProjects();
@@ -83,8 +84,6 @@ function cancelNamePrompt() {
   namePromptVisible.value = false;
   saveError.value = '';
 }
-
-const isInTempSave = computed(() => currentProjectId.value === null);
 
 const fileOptions = computed<MenuItem[]>(() => [
   { label: 'Save Project', action: () => { startSave(); } },
@@ -102,7 +101,7 @@ const fileOptions = computed<MenuItem[]>(() => [
   { separator: true },
 
   { label: 'New Project', action: async () => { await newProject(); } },
-  { label: 'Delete Project', disabled: isInTempSave.value, action: async () => { await deleteCurrentProject(); await refreshProjects(); } },
+  { label: 'Delete Project', disabled: currentProjectId.value === null, action: async () => { await deleteCurrentProject(); await refreshProjects(); } },
 ]);
 
 async function openFileMenu(event: MouseEvent) {
@@ -193,6 +192,15 @@ function startResize(e: PointerEvent) {
   handle.addEventListener('pointercancel', onUp, { once: true });
 }
 
+defineExpose({
+  saveProject: async() => {
+    if(currentProjectId.value === null) {
+      await startSave();
+    } else {
+      scheduleAutosave();
+    }
+  }
+});
 </script>
 
 <template>
@@ -202,24 +210,20 @@ function startResize(e: PointerEvent) {
     <!-- playback controls -->
     <div class="flex flex-row items-stretch">
       <div class="flex flex-col border-2 border-mix-25 overflow-hidden text-[9px] font-semibold rounded-l">
-        <button
-          @click="handleModeToggle($event)"
-          class="flex flex-1 justify-center items-center transition-all"
+        <button @click="handleModeToggle($event)" class="flex flex-1 justify-center items-center transition-all"
           :class="playbackMode === 'arrangement' ? 'playhead-color text-black' : 'bg-mix-10 opacity-40 hover:opacity-70'"
         >SONG</button>
         <div class="h-px bg-mix-25"></div>
-        <button
-          @click="handleModeToggle($event)"
-          class="flex-1 px-2 transition-all"
+        <button @click="handleModeToggle($event)" class="flex-1 px-2 transition-all"
           :class="playbackMode === 'pattern' ? 'playhead-color text-black' : 'bg-mix-10 opacity-40 hover:opacity-70'"
         >PAT</button>
       </div>
 
-      <button @click="() => { engine.toggle(); playButtonOn = !playButtonOn; }" class="flex items-center justify-center w-8 h-8 transition-colors bg-mix-10 hover:bg-mix-15 border-2 border-l-0 border-mix-25">
+      <button @click="() => { engine.scheduler.toggle(); playButtonOn = !playButtonOn; }" class="flex items-center justify-center w-8 h-8 transition-colors bg-mix-10 hover:bg-mix-15 border-2 border-l-0 border-mix-25">
         <span class="pi text-sm" :class="[playButtonOn ? 'pi-pause' : 'pi-play']"></span>
       </button>
 
-      <button @click="() => { engine.stop(); playButtonOn = false; }" class="flex items-center justify-center w-8 h-8 rounded-r transition-colors bg-mix-10 hover:bg-mix-15 border-2 border-l-0 border-mix-25">
+      <button @click="() => { engine.scheduler.stop(); playButtonOn = false; }" class="flex items-center justify-center w-8 h-8 rounded-r transition-colors bg-mix-10 hover:bg-mix-15 border-2 border-l-0 border-mix-25">
         <span class="pi text-sm pi-stop"></span>
       </button>
     </div>
@@ -271,10 +275,10 @@ function startResize(e: PointerEvent) {
 
     <div class="ml-auto"></div>
 
-    <!-- save indicator: red = unsaved tempsave, dim = dirty project, accent = saved project -->
+    <!-- save indicator -->
     <span class="w-2 h-2 rounded-full transition-colors duration-500"
-      :class="isInTempSave ? 'bg-red-500' : (isDirty() ? 'bg-yellow-500' : 'playhead-color opacity-40')"
-      :title="isInTempSave ? 'Unsaved project' : (isDirty() ? 'Unsaved changes' : 'Saved')"
+      :class="isSaving() ? 'bg-yellow-500' : (currentProjectId === null) ? 'bg-red-500' : 'playhead-color opacity-40'"
+      :title="currentProjectId === null ? 'Unsaved project' : (isSaving() ? 'Unsaved changes' : 'Saved')"
     />
 
     <!-- project name -->
@@ -282,7 +286,7 @@ function startResize(e: PointerEvent) {
       <input v-model="projectName" type="text" placeholder="Untitled"
         class="bg-transparent text-center text-sm font-mono font-bold w-28 outline-none leading-tight placeholder-mix-40"
         @focus="($event.target as HTMLInputElement).select()"
-        @keydown.enter="($event.target as HTMLInputElement).blur(); markDirty()"
+        @keydown.enter="($event.target as HTMLInputElement).blur();"
         @keydown.escape="($event.target as HTMLInputElement).blur()"
       />
     </div>
@@ -303,7 +307,7 @@ function startResize(e: PointerEvent) {
   <!-- project name prompt -->
   <ConfirmationModal :visible="namePromptVisible" @confirm="confirmNameAndSave" @cancel="cancelNamePrompt">
     <span class="text-xs font-mono font-bold opacity-60 mb-1">Project name</span>
-    <input ref="namePromptInput" v-model="pendingName" type="text" placeholder="My Project"
+    <input ref="namePromptInput" v-model="pendingName" type="text" placeholder="New Project"
       class="bg-mix-10 border rounded px-2 py-1 text-sm font-mono outline-none w-48 transition-colors"
       :class="saveError ? 'border-red-500' : 'border-mix-35'"
       @keydown.enter.stop="confirmNameAndSave"

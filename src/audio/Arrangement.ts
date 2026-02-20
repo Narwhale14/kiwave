@@ -1,5 +1,4 @@
 import { reactive } from "vue";
-import { markDirty } from '../util/dirty';
 
 export interface ArrangementClip {
     id: string,
@@ -107,21 +106,18 @@ export class Arrangement {
         });
 
         this.nextClipId++;
-        markDirty();
     }
 
     removeClip(id: string): void {
         const index = this._clips.findIndex(c => c.id === id);
         if(index === -1) return;
         this._clips.splice(index, 1);
-        markDirty();
     }
 
     updateClip(id: string, updates: Partial<ArrangementClip>): void {
         const clip = this._clips.find(c => c.id === id);
         if(!clip) return;
         Object.assign(clip, updates);
-        markDirty();
     }
 
     moveClip(id: string, newTrack: number, newStartBeat: number): void {
@@ -142,28 +138,24 @@ export class Arrangement {
            muted: false,
            solo: false
         });
-        markDirty();
     }
 
     removeTrack(id: string): void {
         const index = this._tracks.findIndex(t => t.id === id);
         if(index === -1) return;
         this._tracks.splice(index, 1);
-        markDirty();
     }
 
     resizeTrack(id: string, height: number): void {
         const track = this._tracks.find(t => t.id === id);
         if(!track) return;
         track.height = height;
-        markDirty();
     }
 
     setTrackName(id: string, name: string) {
         const track = this._tracks.find(t => t.id === id);
         if(!track) return;
         track.name = name;
-        markDirty();
     }
 
     getClipAt(track: number, beat: number): ArrangementClip | null {
@@ -181,7 +173,6 @@ export class Arrangement {
         }
 
         track.muted = !track.muted;
-        markDirty();
     }
 
     toggleSoloTrack(id: string) {
@@ -192,7 +183,6 @@ export class Arrangement {
             track.solo = false;
             this.soloTrackId = null;
             this._tracks.forEach(t => t.muted = false);
-            markDirty();
             return;
         }
 
@@ -204,7 +194,6 @@ export class Arrangement {
         track.solo = true;
         this.soloTrackId = id;
         this._tracks.forEach(t => { t.muted = t.id !== id });
-        markDirty();
     }
 }
 

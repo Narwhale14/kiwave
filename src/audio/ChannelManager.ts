@@ -1,5 +1,4 @@
 import { reactive } from "vue";
-import { markDirty } from '../util/dirty';
 import type { BaseSynth } from "./synths";
 
 export interface Channel {
@@ -33,13 +32,12 @@ export class ChannelManager {
             solo: false
         });
         this.nextId++;
-        markDirty();
         return id;
     }
 
     removeChannel(id: string) {
         const index = this.channels.findIndex(c => c.id === id);
-        if(index !== -1) { this.channels.splice(index, 1); markDirty(); }
+        if(index !== -1) this.channels.splice(index, 1)
     }
 
     getChannel(id: string): Channel | null {
@@ -63,21 +61,18 @@ export class ChannelManager {
         const channel = this.channels.find(c => c.id === id);
         if(!channel) return;
         channel.mixerTrack = mixerTrack;
-        markDirty();
     }
 
     setVolume(id: string, volume: number) {
         const channel = this.channels.find(c => c.id === id);
         if(!channel) return;
         channel.volume = volume;
-        markDirty();
     }
 
     setPan(id: string, pan: number) {
         const channel = this.channels.find(c => c.id === id);
         if(!channel) return;
         channel.pan = pan;
-        markDirty();
     }
 
     toggleMute(id: string) {
@@ -92,7 +87,6 @@ export class ChannelManager {
 
         channel.muted = !channel.muted;
         this.onMuteStateChanged?.();
-        markDirty();
     }
 
     toggleSolo(id: string) {
@@ -104,7 +98,6 @@ export class ChannelManager {
             this.soloChannelId = null;
             this.channels.forEach(ch => ch.muted = false);
             this.onMuteStateChanged?.();
-            markDirty();
             return;
         }
 
@@ -117,7 +110,6 @@ export class ChannelManager {
         this.soloChannelId = id;
         this.channels.forEach(ch => { ch.muted = ch.id !== id; });
         this.onMuteStateChanged?.();
-        markDirty();
     }
 
     // LOAD/SAVE HELPERS

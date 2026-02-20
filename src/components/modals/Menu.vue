@@ -86,9 +86,7 @@ defineExpose({ toggle, open, close: closeMenu, isOpen });
 
 <template>
   <Teleport to="body">
-    <div
-      ref="menuEl"
-      v-if="isOpen && anchor"
+    <div ref="menuEl" v-if="isOpen && anchor"
       class="fixed z-9999 rounded bg-mix-20 border border-mix-40 shadow-xl overflow-hidden"
       :style="{
         top: position.top + 'px',

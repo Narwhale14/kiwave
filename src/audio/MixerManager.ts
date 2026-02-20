@@ -1,5 +1,4 @@
 import { reactive } from "vue";
-import { markDirty } from '../util/dirty';
 
 export interface MixerTrack {
     id: string;
@@ -55,12 +54,11 @@ export class MixerManager {
             peakDbL: -Infinity,
             peakDbR: -Infinity,
         });
-        markDirty();
     }
 
     removeMixer(id: string) {
         const index = this.mixers.findIndex(m => m.id === id);
-        if(index !== -1) { this.mixers.splice(index, 1); markDirty(); }
+        if(index !== -1) this.mixers.splice(index, 1)
     }
 
     getMixer(id: string): MixerTrack | null {
@@ -84,28 +82,24 @@ export class MixerManager {
         const mixer = this.mixers.find(m => m.id === id);
         if(!mixer) return;
         mixer.name = name;
-        markDirty();
     }
 
     setRoute(id: string, route: number) {
         const mixer = this.mixers.find(m => m.id === id);
         if(!mixer) return;
         mixer.route = route;
-        markDirty();
     }
 
     setVolume(id: string, volume: number) {
         const mixer = this.mixers.find(m => m.id === id);
         if(!mixer) return;
         mixer.volume = volume;
-        markDirty();
     }
 
     setPan(id: string, pan: number) {
         const mixer = this.mixers.find(m => m.id === id);
         if(!mixer) return;
         mixer.pan = pan;
-        markDirty();
     }
 
     toggleMute(id: string) {
@@ -120,7 +114,6 @@ export class MixerManager {
 
         mixer.muted = !mixer.muted;
         this.onMuteStateChanged?.();
-        markDirty();
     }
 
     toggleSolo(id: string) {
@@ -132,7 +125,6 @@ export class MixerManager {
             this.soloMixerId = null;
             this.mixers.forEach(m => m.muted = false);
             this.onMuteStateChanged?.();
-            markDirty();
             return;
         }
 
@@ -146,7 +138,6 @@ export class MixerManager {
         // mute all others except master (inserts route through it)
         this.mixers.forEach(m => { m.muted = m.id !== id && m.id !== 'master'; });
         this.onMuteStateChanged?.();
-        markDirty();
     }
 
     // --- load/save helpers ---

@@ -1,4 +1,4 @@
-import { ref, watch, nextTick } from 'vue';
+import { ref, nextTick } from 'vue';
 import { getAudioEngine } from './audioEngineManager';
 import { patterns, getNextPatternNum } from './patternsListManager';
 import { globalVolume, projectName, bpm } from './settingsManager';
@@ -22,15 +22,13 @@ import { PATTERNS_LIST_WIDTH, HEADER_HEIGHT } from '../constants/layout';
 // big boi
 let _db: IDBDatabase | null = null;
 
-// auto save stuff
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let isLoading = false;
-let isSaving = false;
 
-import { dirty, markDirty } from '../util/dirty';
-watch(dirty, (ready) => { if(ready) scheduleAutosave(); });
+let savingLock = false
+const saving = ref(false); // fuh headerbuh
+export function isSaving() { return saving.value };
 
-// convenience metadata
 const SAVE_FILE_VERSION = '1.0.0';
 const DB_NAME = 'webdaw';
 const DB_VERSION = 1;
@@ -38,10 +36,9 @@ const AUTOSAVE_STORE = 'autosave';
 const PROJECTS_STORE = 'projects';
 const TEMPSAVE_KEY = 'tempsave';
 
-const AUTOSAVE_DEBOUNCE_MS = 2000;
+const AUTOSAVE_DEBOUNCE_MS = 1500;
+const SCHEDULE_SAVE_INTERVAL_MS = 45000;
 
-// tracks which project the user is currently working in
-// null = in tempsave mode (unsaved / new project)
 export const currentProjectId = ref<number | null>(null);
 
 // converting data to saveable types
@@ -337,16 +334,12 @@ export async function deserializeState(save: SaveFile): Promise<void> {
     } finally {
         await nextTick();
         isLoading = false;
-        dirty.value = false;
     }
 }
 
-// tempsave: always-on autosave for unsaved work / crash recovery
-// NOT listed in Open Project. Separate from official named projects.
-
 export async function autoSaveToDb(): Promise<void> {
-    if(isSaving) return;
-    isSaving = true;
+    if(savingLock) return;
+    savingLock = true;
 
     try {
         if(currentProjectId.value === null) {
@@ -355,14 +348,12 @@ export async function autoSaveToDb(): Promise<void> {
             await idbPut(PROJECTS_STORE, { id: currentProjectId.value, ...serializeState() });
         }
     } finally {
-        isSaving = false;
+        savingLock = false;
     }
 }
 
 export async function loadAutoSave(): Promise<SaveFile | null> {
-    // try new key first, fall back to legacy key 1
     return (await idbGet<SaveFile>(AUTOSAVE_STORE, TEMPSAVE_KEY))
-        ?? (await idbGet<SaveFile>(AUTOSAVE_STORE, 1));
 }
 
 // project management
@@ -400,7 +391,7 @@ export async function saveManualProject(): Promise<SaveResult> {
         const newId = await idbPut(PROJECTS_STORE, save);
         currentProjectId.value = newId as number;
     }
-    dirty.value = false;
+
     return 'ok';
 }
 
@@ -413,6 +404,7 @@ export async function loadProjectById(id: number): Promise<void> {
 
 function createBlankSave(): SaveFile {
     const now = Date.now();
+
     return {
         version: SAVE_FILE_VERSION,
         metadata: { projectName: '', created: now, lastModified: now },
@@ -420,7 +412,7 @@ function createBlankSave(): SaveFile {
             bpm: 140,
             globalVolume: DEFAULT_GLOBAL_VOLUME,
             snapDivision: 4,
-            playbackMode: 'pattern',
+            playbackMode: 'arrangement',
         },
         playback: { pauseTime: 0, loopEnabled: false, loopStart: 0, loopEnd: 8 },
         patterns: [
@@ -431,6 +423,10 @@ function createBlankSave(): SaveFile {
         ],
         mixers: [
             { id: 'master', name: 'Master', route: -1, volume: 1, pan: 0, muted: false, solo: false },
+            { id: 'mixer-1', name: 'Mixer 1', route: 0, volume: 1, pan: 0, muted: false, solo: false },
+            { id: 'mixer-2', name: 'Mixer 2', route: 0, volume: 1, pan: 0, muted: false, solo: false },
+            { id: 'mixer-3', name: 'Mixer 3', route: 0, volume: 1, pan: 0, muted: false, solo: false },
+            { id: 'mixer-4', name: 'Mixer 4', route: 0, volume: 1, pan: 0, muted: false, solo: false },
         ],
         arrangement: {
             clips: [],
@@ -464,28 +460,24 @@ export async function deleteCurrentProject(): Promise<void> {
 }
 
 export async function initLoad(): Promise<void> {
-    const all = await idbGetAll<SaveFile & { id: number }>(PROJECTS_STORE);
-    const recent = all.sort((a, b) => b.metadata.lastModified - a.metadata.lastModified)[0];
-    if(recent) {
-        await deserializeState(recent);
-        currentProjectId.value = recent.id;
-    } else {
-        const tempsave = await loadAutoSave();
-        if(tempsave) await deserializeState(tempsave);
-        currentProjectId.value = null;
-    }
+    const tempsave = await loadAutoSave();
+    if(tempsave) await deserializeState(tempsave);
+    currentProjectId.value = null;
 }
 
 export function scheduleAutosave(debounce = AUTOSAVE_DEBOUNCE_MS) {
     if(isLoading) return;
+
+    saving.value = true;
+
     if(autosaveTimer !== null) clearTimeout(autosaveTimer);
+
     autosaveTimer = setTimeout(() => {
         autosaveTimer = null;
-        autoSaveToDb().then(() => { dirty.value = false; }).catch(err => console.error('[saveStateManager] autosave failed:', err));
+        autoSaveToDb().then(() => saving.value = false).catch(err => console.error('[saveStateManager] autosave failed:', err));
     }, debounce);
 }
 
-export function startAutosave() {
-    watch([globalVolume, snapDivision, patternsListWidth, headerHeight, arrangementVisible, channelRackVisible, mixerVisible, projectName], markDirty);
-    watch(() => patterns.value.map(p => p.selectedChannelId).join(','), markDirty);
-}
+setInterval(() => {
+    scheduleAutosave();
+}, SCHEDULE_SAVE_INTERVAL_MS);

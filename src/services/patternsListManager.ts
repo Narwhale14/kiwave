@@ -2,7 +2,6 @@ import { ref, computed, watch } from 'vue';
 import { PianoRoll } from '../audio/PianoRoll';
 import { keyboard } from '../audio/Keyboard';
 import { focusWindow } from './windowManager';
-import { markDirty } from '../util/dirty';
 
 export interface Pattern {
     id: string;
@@ -37,23 +36,20 @@ export function addPattern(name?: string) {
     }
 
     patterns.value.push(pattern);
-    markDirty();
 }
 
 export function removePattern(num: number) {
     const patternIndex = patterns.value.findIndex(p => p.num === num);
     patterns.value.splice(patternIndex, 1);
-    markDirty();
 }
 
 export function closePattern(num: number) {
     const pattern = patterns.value.find(p => p.num === num);
-    if(pattern) { pattern.visible = false; markDirty(); }
+    if(pattern) pattern.visible = false
 }
 
 export function openPattern(num: number) {
     patterns.value.forEach(p => { p.visible = p.num === num; });
-    markDirty();
 }
 
 export function togglePattern(num: number) {
@@ -67,7 +63,6 @@ export function togglePattern(num: number) {
     }
 
     pattern.visible = !pattern.visible;
-    markDirty();
 }
 
 watch(activePattern, (pattern) => {

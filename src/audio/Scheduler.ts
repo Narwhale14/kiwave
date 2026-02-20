@@ -1,7 +1,6 @@
 import { PARAMETER_MAP } from './Automation';
 import { deriveSegments, type AutomationCurve, type CompiledNoteAutomation } from './Automation';
 import type { ChannelManager } from './ChannelManager';
-import { markDirty } from '../util/dirty';
 
 export interface SchedulerNote {
     id: string;
@@ -281,8 +280,6 @@ export class Scheduler {
             this.scheduledNoteOns.clear();
             this.scheduledNoteOffs.clear();
         }
-
-        markDirty();
     }
 
     setLoop(enabled: boolean, start?: number, end?: number) {
@@ -309,8 +306,6 @@ export class Scheduler {
                 this._pauseTime = currentBeat;
             }
         }
-
-        markDirty();
     }
 
     // CONTROLS
@@ -342,7 +337,6 @@ export class Scheduler {
 
     pause() {
         if(!this._isPlaying) return;
-
         this._isPlaying = false;
 
         if(this.schedulerTimerId !== null) {

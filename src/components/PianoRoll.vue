@@ -3,8 +3,8 @@ import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref, 
 import { PianoRoll, type NoteBlock } from '../audio/PianoRoll'
 import { noteToMidi } from '../util/midi';
 import { getAudioEngine } from '../services/audioEngineManager';
-import { getVisualSnapWidth, dynamicSnap, dynamicSnapNearest } from '../util/snap';
-import { playbackMode, registerPatternCallbacks, unregisterPatternCallbacks, setPlaybackMode } from '../services/playbackModeManager';
+import { getVisualSnapWidth, dynamicSnap } from '../util/snap';
+import { playbackMode, registerPatternCallbacks, unregisterPatternCallbacks } from '../services/playbackModeManager';
 import Menu from './modals/Menu.vue';
 import NoteAutomationOverlay from './overlays/NoteAutomationOverlay.vue';
 import { ALL_PARAMETERS, PARAMETER_MAP } from '../audio/Automation';
@@ -13,6 +13,7 @@ import { manipulateColor } from '../util/display';
 import ZoomScrollBar from './controls/ZoomScrollBar.vue';
 import { MAX_ZOOM_FACTOR } from '../constants/defaults';
 import { clamp } from '../util/math';
+import Timeline from './meters/Timeline.vue';
 
 const VELOCITY_SNAP = 0.05;
 
@@ -150,8 +151,6 @@ async function playNote(midi: number) {
   if(engine.scheduler.isPlaying) return;
   if(!instrument.value) return;
 
-  engine.scheduler.seek(10);
-
   await instrument.value.resume();
   instrument.value.noteOn(midi);
 }
@@ -216,7 +215,6 @@ function handleWheel(event: WheelEvent) {
     const maxColWidth = element.clientWidth / (barCount.value * beatsPerBar * MAX_ZOOM_FACTOR);
     colWidth.value = clamp(colWidth.value * (event.deltaY > 0 ? (1 - zoomIntensity) : (1 + zoomIntensity)), minColWidth, maxColWidth);
 
-    // sync scroll so the mouse stays over the same musical position
     nextTick(() => {
       element.scrollLeft = (zoomAnchorPercent * totalWidth.value) - mouseX;
       scrollX.value = element.scrollLeft;
@@ -246,7 +244,6 @@ function onPianoRollKeyDown(event: KeyboardEvent) {
       break;
     case 'ArrowLeft':
       event.preventDefault();
-      // Directly modify the element; onNativeScroll will catch this and update the scrollbar
       element.scrollLeft -= stepSize * multiplier;
       break;
     case 'ArrowRight':
@@ -412,31 +409,6 @@ async function handlePointerDown(event: PointerEvent) {
   }
 }
 
-function seekToPointer(event: PointerEvent) {
-  if(!workspaceContainer.value) return;
-  const rect = workspaceContainer.value.getBoundingClientRect();
-  
-  let beat = 0;
-  if(event.shiftKey) {
-    beat = (event.clientX - rect.left) / colWidth.value;
-  } else {
-    beat = dynamicSnapNearest((event.clientX - rect.left) / colWidth.value, colWidth.value);
-  }
-
-  engine.scheduler.seek(Math.max(0, beat));
-}
-
-function handleTimelinePointerDown(event: PointerEvent) {
-  if(playbackMode.value !== 'pattern') setPlaybackMode('pattern');
-  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-  seekToPointer(event);
-}
-
-function handleTimelineScrub(event: PointerEvent) {
-  if(!(event.currentTarget as HTMLElement).hasPointerCapture(event.pointerId)) return;
-  seekToPointer(event);
-}
-
 function finalizeEdit() {
   if(props.roll.isResizing() && state.resizingNote) {
     const note = state.resizingNote;
@@ -515,7 +487,7 @@ onMounted(async () => {
   loadPatternNotes();
 
   watch(playbackMode, (newMode) => {
-    if (newMode === 'pattern') {
+    if(newMode === 'pattern') {
       loadPatternNotes();
     }
   });
@@ -622,15 +594,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div :style="{ width: `${totalWidth}px`, height: `${notes.length * rowHeight + 20}px` }">
-        <!-- timeline -->
-        <div class="bg-mix-10 flex flex-row items-center h-5 w-full sticky top-0 z-10" @pointerdown.stop="handleTimelinePointerDown" @pointermove="handleTimelineScrub">
-          <div v-for="i in (barCount * beatsPerBar)" :key="i" :style="{ width: `${colWidth}px` }">
-            <span class="text-xs font-mono absolute -translate-1/2 opacity-50">{{ i }}</span>
-          </div>
-
-          <!-- thingy that follows the playhead -->
-          <span v-if="playbackMode === 'pattern'" class="pi pi-sort-down-fill absolute text-sm font-fold -translate-x-1/2 text-(--playhead)" :style="{ left: `${playhead.col * colWidth}px` }"></span>
-        </div>
+        <Timeline :container="workspaceContainer" :mode="'pattern'" :interval="colWidth" :count="barCount * beatsPerBar" :playtime="playhead.col * colWidth"/>
 
         <!-- workspace -->
         <div class="relative" ref="workspaceContainer" :style="{ cursor: cursor, height: `${notes.length * rowHeight}px`, width: `${totalWidth}px`}"

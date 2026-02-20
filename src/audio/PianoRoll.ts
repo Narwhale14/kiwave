@@ -2,7 +2,6 @@ import { reactive } from 'vue';
 import { getSnapSize } from '../util/snap'
 import { PARAMETER_MAP } from './Automation';
 import { createDefaultCurve, resizeNodes, shiftNodeValues, type AutomationCurve } from './Automation';
-import { markDirty } from '../util/dirty';
 
 export type NoteBlock = {
     id: string,
@@ -46,7 +45,6 @@ export class PianoRoll {
 
     incrementState() {
         this._state.version++;
-        markDirty();
     }
 
     loadNote(saved: Omit<NoteBlock, 'automation'> & { automation: AutomationCurve[] }): void {

@@ -103,7 +103,6 @@
 }
 
 .piano-roll-grid {
-  /* tell the browser to isolate this layer entirely */
   contain: strict; 
   transform: translateZ(0); 
   will-change: width, scroll-position;
@@ -112,12 +111,11 @@
   shape-rendering: crispEdges;
 
   background-image:
-    linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px), /* rows */
-    linear-gradient(to right, rgba(255,255,255,0.18) 2px, transparent 2px), /* bars */
-    linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px), /* beats */
-    linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px); /* snap div */
+    linear-gradient(to top, rgba(255,255,255,0.08) 1px, transparent 1px),
+    linear-gradient(to right, rgba(255,255,255,0.18) 2px, transparent 2px),
+    linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px),
+    linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px);
 
-  /* drive the repetition via size, not math */
   background-size:
     100% var(--row-h),
     var(--bar-w) 100%,
@@ -133,7 +131,7 @@
   shape-rendering: crispEdges;
 
   background-image:
-    linear-gradient(to bottom, rgba(255,255,255,0.12) 1px, transparent 1px),
+    linear-gradient(to top, rgba(255,255,255,0.12) 1px, transparent 1px),
     linear-gradient(to right, rgba(255,255,255,0.18) 2px, transparent 2px),
     linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px),
     linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px);

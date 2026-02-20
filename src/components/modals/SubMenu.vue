@@ -84,16 +84,13 @@ function calculateSubmenuPosition(index: number) {
   const rect = itemRefs.value[index].getBoundingClientRect();
   const submenuWidth = props.width ?? 160;
 
-  // default: open to the right, vertically aligned with item
   let left = rect.right;
   let top = rect.top - 4;
 
-  // flip to left if not enough space on right
-  if (left + submenuWidth > window.innerWidth) {
+  if(left + submenuWidth > window.innerWidth) {
     left = rect.left - submenuWidth;
   }
 
-  // safety clamp to screen edges
   left = Math.max(4, left);
   top = Math.max(4, top);
 
@@ -106,16 +103,13 @@ function calculateSubmenuPosition(index: number) {
     <template v-for="(item, index) in items" :key="index">
       <div v-if="item.separator" class="my-1 h-px bg-mix-40"></div>
 
-      <div v-else :ref="(element) => setItemRef(element, index)"
-        :title="item.title"
+      <div v-else :ref="(element) => setItemRef(element, index)" :title="item.title"
         class="relative flex items-center justify-between px-1.5 py-0.5 text-xs font-mono font-bold transition-colors w-full"
         :class="[
           item.disabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-mix-25 cursor-pointer',
           (hoveredIndex === index || openSubmenuIndex === index) && !item.disabled ? 'bg-mix-25' : ''
         ]"
-        @mouseenter="onMouseEnter(index, item)"
-        @mouseleave="onMouseLeave(index)"
-        @mousedown.prevent="handleClick(item)"
+        @mouseenter="onMouseEnter(index, item)" @mouseleave="onMouseLeave(index)" @mousedown.prevent="handleClick(item)"
       >
         <span class="truncate pr-1">{{ item.label }}</span>
 

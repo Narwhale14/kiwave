@@ -5,7 +5,6 @@ import { mixerManager } from "./MixerManager";
 import { ArrangementCompiler } from "./ArrangementCompiler";
 import { arrangement } from "../audio/Arrangement";
 import { globalVolume } from "../services/settingsManager";
-import { markDirty } from '../util/dirty';
 import type { BaseSynth, SynthEntry } from "./synths";
 
 export class AudioEngine {
@@ -116,7 +115,6 @@ export class AudioEngine {
         channel.volume = volume;
         const node = channel.instrument.getOutputNode();
         node.gain.setTargetAtTime(volume, this._audioContext.currentTime, 0.005);
-        markDirty();
     }
 
     setChannelPan(channelId: string, pan: number) {
@@ -124,7 +122,6 @@ export class AudioEngine {
         if(!channel) return;
         channel.pan = pan;
         this._audioGraph.setPan(channelId, pan);
-        markDirty();
     }
 
     setChannelRoute(channelId: string, mixerTrack: number) {
@@ -164,7 +161,6 @@ export class AudioEngine {
         if(!mixer) return;
         mixer.volume = volume;
         this._audioGraph.setGain(mixerId, volume);
-        markDirty();
     }
 
     setMixerPan(mixerId: string, pan: number) {
@@ -172,7 +168,6 @@ export class AudioEngine {
         if(!mixer) return;
         mixer.pan = pan;
         this._audioGraph.setPan(mixerId, pan);
-        markDirty();
     }
 
     setMixerRoute(mixerId: string, targetMixerNum: number) {
@@ -263,14 +258,6 @@ export class AudioEngine {
             }
         }
     }
-
-    // PLAYBACK CONTROLS
-
-    play() { return this.scheduler.play(); }
-    pause() { return this.scheduler.pause(); }
-    stop() { return this.scheduler.stop(); }
-    toggle() { return this.scheduler.toggle(); }
-    seek(beat: number) { this.scheduler.seek(beat); }
 
     setBpm(bpm: number) { this.scheduler.setBpm(bpm); }
     setNotes(notes: SchedulerNote[]) { this.scheduler.setNotes(notes); }
