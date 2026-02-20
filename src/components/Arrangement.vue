@@ -48,7 +48,7 @@ const clipPreviews = computed(() => {
 
     const midiMin = Math.min(...allNotes.map(n => n.midi));
     const midiMax = Math.max(...allNotes.map(n => n.midi));
-    const pad = 1; // 1 semitone breathing room above and below
+    const pad = 5;
     const viewBoxH = midiMax - midiMin + 2 * pad;
 
     const clipEnd = clip.offset + clip.duration;
@@ -66,12 +66,12 @@ const clipPreviews = computed(() => {
   return map;
 });
 
-const trackHeight = 75; // Height of each track in pixels
-const colWidth = ref(80); // Width of one beat in pixels (same as piano roll)
-const beatsPerBar = 4; // 4 beats per bar
-const numTracks = 20; // Number of tracks
+const trackHeight = 75;
+const colWidth = ref(80);
+const beatsPerBar = 4;
+const numTracks = 20;
 
-const scrollX = ref(0); // pos of horizontal scroll
+const scrollX = ref(0);
 const barCount = computed(() => Math.ceil(arrangement.getEndBeat() / beatsPerBar) + 7);
 const totalWidth = computed(() => barCount.value * beatsPerBar * colWidth.value);
 
@@ -110,7 +110,7 @@ function finalizeEdit() {
 
       if(engine.scheduler.isPlaying) {
         const beat = engine.scheduler.getCurrentBeat();
-        const margin = 4; // beats — covers lookahead + snap granularity
+        const margin = 4; // beats - covers lookahead + snap granularity
         const oldNear = state.initialBeat < beat + margin && state.initialBeat + clip.duration > beat - margin;
         const newNear = clip.startBeat < beat + margin && clip.startBeat + clip.duration > beat - margin;
         if(oldNear || newNear) engine.scheduler.resetSchedule();
@@ -240,7 +240,6 @@ function handleDrop(event: DragEvent) {
 
   const duration = pattern.roll.getEndBeat(beatsPerBar);
 
-  // create clip with pattern
   arrangement.addClip(patternId, track, startBeat, duration, 0);
   recompileArrangement();
 }
@@ -313,7 +312,6 @@ function onTrackNameKeydown(event: KeyboardEvent) {
   if(event.key === 'Escape') (event.target as HTMLInputElement).blur();
 }
 
-// for wheel keybinds
 function handleWheel(event: WheelEvent) {
   const element = arrangementContainer.value;
   if(!element) return;
@@ -350,13 +348,11 @@ function handleViewUpdate({ start, width }: { start: number, width: number }) {
 
 // WATCHERS
 
-// watch for arrangement changes
 watch(() => arrangement.clips, () => {
   if(interacting.value) return;
   if(playbackMode.value === 'arrangement') recompileArrangement();
 }, { deep: true });
 
-// watch for pattern edits
 watch(() => patterns.value.map(p => ({ id: p.id, version: p.roll._state.version })), (newPatterns, oldPatterns) => {
   if(oldPatterns) {
     for(let i = 0; i < newPatterns.length; i++) {
@@ -524,12 +520,13 @@ onBeforeUnmount(() => {
                 fill="white" opacity="0.6"
               />
             </svg>
+
             <div class="relative z-10 px-1 pt-0.5 text-xs truncate drop-shadow">
               {{ patterns.find(p => p.id === clip.patternId)?.name || 'Pattern' }}
             </div>
           </div>
 
-          <!-- playhead (only visible in arrangement mode) -->
+          <!-- playhead -->
           <div v-if="playbackMode === 'arrangement' && (playhead.playing || playhead.col > 0)"
             class="absolute w-0.75 pointer-events-none playhead-color  -translate-x-1/2"
             :style="{

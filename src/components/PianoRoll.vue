@@ -492,6 +492,10 @@ onMounted(async () => {
     }
   });
 
+  watch(() => props.roll, () => {
+    loadPatternNotes();
+  });
+
   windowElement.value?.addEventListener('keydown', onPianoRollKeyDown);
 
   if(pianoRollContainer.value) {
@@ -709,7 +713,7 @@ onBeforeUnmount(() => {
             }"
           ></div>
 
-          <!-- playhead (only visible in pattern mode) -->
+          <!-- playhead -->
           <div v-if="playbackMode === 'pattern' && (playhead.playing || playhead.col > 0)"
             class="absolute w-0.75 pointer-events-none playhead-color -translate-x-1/2"
             :style="{

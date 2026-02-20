@@ -182,8 +182,22 @@ async function idbDelete(storeName: string, key: IDBValidKey): Promise<void> {
 
 function serializeNote(note: NoteBlock): SavedNote {
     return {
-        ...note,
-        automation: [...note.automation.values()],
+        id: note.id,
+        row: note.row,
+        col: note.col,
+        length: note.length,
+        velocity: note.velocity,
+        channelId: note.channelId,
+        midi: note.midi,
+        automation: [...note.automation.values()].map(curve => ({
+            parameterId: curve.parameterId,
+            nodes: curve.nodes.map(node => ({
+                id: node.id,
+                beat: node.beat,
+                value: node.value,
+                curveTension: node.curveTension,
+            })),
+        })),
     };
 }
 
@@ -474,7 +488,7 @@ export function scheduleAutosave(debounce = AUTOSAVE_DEBOUNCE_MS) {
 
     autosaveTimer = setTimeout(() => {
         autosaveTimer = null;
-        autoSaveToDb().then(() => saving.value = false).catch(err => console.error('[saveStateManager] autosave failed:', err));
+        autoSaveToDb().then(() => saving.value = false).catch(err => { saving.value = false; console.error('[saveStateManager] autosave failed:', err); });
     }, debounce);
 }
 
