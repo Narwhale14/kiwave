@@ -1,3 +1,5 @@
+import type { CompiledNoteAutomation } from "../Automation";
+
 export interface SynthEntry {
     id: string;
     displayName: string;
@@ -12,7 +14,7 @@ export interface BaseSynth {
     noteOn(pitch: number, velocity?: number): void;
     noteOff(pitch: number): void;
 
-    triggerAttack(noteId: string, pitch: number, time: number, velocity?: number, automation?: any): void;
+    triggerAttack(noteId: string, pitch: number, time: number, velocity?: number, automation?: CompiledNoteAutomation): void;
     triggerRelease(noteId: string, time: number): void;
 
     panic(): void;

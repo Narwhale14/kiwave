@@ -18,6 +18,6 @@ const activeComponent = computed(() => {
 
 <template>
   <div class="w-full h-full flex flex-col">
-    <component v-if="activeComponent" :is="activeComponent" class="w-full h-full"/>
+    <component v-if="activeComponent" :is="activeComponent" :channel-id="activeSynthChannelId" class="w-full h-full"/>
   </div>
 </template>

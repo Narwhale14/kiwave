@@ -28,6 +28,7 @@
   --step-10: color-mix(in srgb, var(--g-start), var(--g-end) 10%);
   --step-13: color-mix(in srgb, var(--g-start), var(--g-end) 13%);
   --step-15: color-mix(in srgb, var(--g-start), var(--g-end) 15%);
+  --step-17: color-mix(in srgb, var(--g-start), var(--g-end) 17%);
   --step-20: color-mix(in srgb, var(--g-start), var(--g-end) 20%);
   --step-25: color-mix(in srgb, var(--g-start), var(--g-end) 25%);
   --step-30: color-mix(in srgb, var(--g-start), var(--g-end) 30%);
@@ -102,6 +103,11 @@
   border-color: var(--playhead);
 }
 
+.envelope-fill {
+  fill: var(--playhead);
+  fill-opacity: 0.1;
+}
+
 .piano-roll-grid {
   contain: strict; 
   transform: translateZ(0); 
@@ -170,6 +176,7 @@ input:focus {
 .bg-mix-10 { background-color: var(--step-10); }
 .bg-mix-13 { background-color: var(--step-13); }
 .bg-mix-15 { background-color: var(--step-15); }
+.bg-mix-17 { background-color: var(--step-17); }
 .bg-mix-20 { background-color: var(--step-20); }
 .bg-mix-25 { background-color: var(--step-25); }
 .bg-mix-30 { background-color: var(--step-30); }
@@ -201,6 +208,7 @@ input:focus {
 .border-mix-10 { border-color: var(--step-10); }
 .border-mix-13 { border-color: var(--step-13); }
 .border-mix-15 { border-color: var(--step-15); }
+.border-mix-17 { border-color: var(--step-17); }
 .border-mix-20 { border-color: var(--step-20); }
 .border-mix-25 { border-color: var(--step-25); }
 .border-mix-30 { border-color: var(--step-30); }

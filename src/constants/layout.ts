@@ -18,9 +18,9 @@ export const CHANNEL_RACK_WIDTH_DEFAULT = 400;
 export const ARRANGEMENT_HEIGHT_FILL_DEFAULT = 3 / 8;
 export const PIANO_ROLL_HEIGHT_FILL_DEFAULT = 5 / 8;
 export const MIXER_HEIGHT_FILL_DEFAULT = 3 / 8;
-export const SYNTH_HEIGHT_FILL_DEFAULT = 1 / 2;
+export const SYNTH_HEIGHT_FILL_DEFAULT = 5 / 8;
 
 // percent widths
 export const ARRANGEMENT_WIDTH_FILL_DEFAULT = 2 / 3;
 export const MIXER_WIDTH_FILL_DEFAULT = 1 / 3;
-export const SYNTH_WIDTH_FILL_DEFAULT = 1 / 3;
+export const SYNTH_WIDTH_FILL_DEFAULT = 1 / 2;

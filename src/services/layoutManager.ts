@@ -42,8 +42,8 @@ export const mixerWindow = computed(() => ({
 }));
 
 export const synthWindow = computed(() => ({
-  x: availableSpace.value.x + (pianoRollWindow.value.width / 5),
-  y: availableSpace.value.y + (pianoRollWindow.value.height / 8),
+  x: availableSpace.value.x + (pianoRollWindow.value.width / 3),
+  y: availableSpace.value.y + (pianoRollWindow.value.height / 5),
   width: Math.floor(availableSpace.value.width * SYNTH_WIDTH_FILL_DEFAULT),
   height: Math.floor(availableSpace.value.height * SYNTH_HEIGHT_FILL_DEFAULT)
 }));
