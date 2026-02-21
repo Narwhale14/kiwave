@@ -28,9 +28,7 @@ provide('windowElement', rootElement);
 provide('windowId', props.id);
 provide('closeWindow', () => emit('close'));
 provide('resetWindow', () => positionWindow(props.id, props.x!, props.y!, props.width!, props.height!));
-provide('dragWindow', (e: PointerEvent) => {
-  if (props.dragging) beginMove(props.id, e);
-});
+provide('dragWindow', (e: PointerEvent) => { if(props.dragging) beginMove(props.id, e); });
 
 watch(activeWindowId, id => {
   if(id === props.id) {

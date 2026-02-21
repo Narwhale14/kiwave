@@ -8,7 +8,7 @@ import HeaderBar from './components/HeaderBar.vue';
 import Arrangement from './components/Arrangement.vue';
 import ChannelRack from './components/ChannelRack.vue';
 import Mixer from './components/Mixer.vue';
-import { arrangementWindow, channelRackWindow, mixerWindow, pianoRollWindow } from './services/layoutManager';
+import { arrangementWindow, channelRackWindow, mixerWindow, pianoRollWindow, synthWindow } from './services/layoutManager';
 import { onMounted, onUnmounted, ref } from 'vue';
 import { togglePlaybackMode } from './services/playbackModeManager';
 import { initLoad } from './services/saveStateManager';
@@ -110,10 +110,10 @@ onUnmounted(() => {
         :visible="synthWindowVisible"
         @close="closeSynthWindow"
         :id="'synth-window'"
-        :x="600"
-        :y="200"
-        :width="500"
-        :height="400"
+        :x="synthWindow.x"
+        :y="synthWindow.y"
+        :width="synthWindow.width"
+        :height="synthWindow.height"
         :resizing="{left : true, right: true, top: true, bottom: true }"
       >
         <SynthWindow/>

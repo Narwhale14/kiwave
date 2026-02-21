@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import { ARRANGEMENT_HEIGHT_FILL_DEFAULT, CHANNEL_RACK_WIDTH_DEFAULT, MIXER_HEIGHT_FILL_DEFAULT, PIANO_ROLL_HEIGHT_FILL_DEFAULT, PATTERNS_LIST_WIDTH, HEADER_HEIGHT, ARRANGEMENT_WIDTH_FILL_DEFAULT, MIXER_WIDTH_FILL_DEFAULT } from '../constants/layout';
+import { ARRANGEMENT_HEIGHT_FILL_DEFAULT, CHANNEL_RACK_WIDTH_DEFAULT, MIXER_HEIGHT_FILL_DEFAULT, PIANO_ROLL_HEIGHT_FILL_DEFAULT, PATTERNS_LIST_WIDTH, HEADER_HEIGHT, ARRANGEMENT_WIDTH_FILL_DEFAULT, MIXER_WIDTH_FILL_DEFAULT, SYNTH_WIDTH_FILL_DEFAULT, SYNTH_HEIGHT_FILL_DEFAULT } from '../constants/layout';
 
 export const patternsListWidth = ref(PATTERNS_LIST_WIDTH);
 export const headerHeight = ref(HEADER_HEIGHT);
@@ -39,4 +39,11 @@ export const mixerWindow = computed(() => ({
   y: availableSpace.value.y + pianoRollWindow.value.height,
   width: Math.floor(availableSpace.value.width * MIXER_WIDTH_FILL_DEFAULT),
   height: Math.floor(availableSpace.value.height * MIXER_HEIGHT_FILL_DEFAULT)
+}));
+
+export const synthWindow = computed(() => ({
+  x: availableSpace.value.x + (pianoRollWindow.value.width / 5),
+  y: availableSpace.value.y + (pianoRollWindow.value.height / 8),
+  width: Math.floor(availableSpace.value.width * SYNTH_WIDTH_FILL_DEFAULT),
+  height: Math.floor(availableSpace.value.height * SYNTH_HEIGHT_FILL_DEFAULT)
 }));

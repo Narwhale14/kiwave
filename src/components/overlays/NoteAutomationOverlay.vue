@@ -5,10 +5,10 @@ import { snapNearest, snapDivision } from '../../util/snap';
 import { manipulateColor } from '../../util/display';
 
 const LINE_HIT_WIDTH = 16;
-const NODE_HIT_RADIUS = 8;
-const NODE_VIS_RADIUS = 4;
-const TENSION_HIT_RADIUS = 7;
-const TENSION_VIS_RADIUS = 3;
+const NODE_HIT_RADIUS = 5;
+const NODE_VIS_RADIUS = 2;
+const TENSION_HIT_RADIUS = 4;
+const TENSION_VIS_RADIUS = 2;
 const POWER_CURVE_SAMPLES = 48;
 
 const props = defineProps<{
@@ -240,18 +240,18 @@ function onTensionHandlePointerDown(event: PointerEvent, leftNodeId: string) {
 
     <template v-if="!readOnly">
       <!-- tension handle hit circles (between nodes) -->
-      <circle v-for="h in segmentHandles" :key="`tension-hit-${h.leftNodeId}`"
-        :cx="h.x" :cy="h.y" :r="TENSION_HIT_RADIUS" fill="transparent"
-        :stroke="hoveredSegmentId === h.leftNodeId ? manipulateColor(paramColor, 0.6) : 'transparent'"
+      <circle v-for="handle in segmentHandles" :key="`tension-hit-${handle.leftNodeId}`"
+        :cx="handle.x" :cy="handle.y" :r="TENSION_HIT_RADIUS" fill="transparent"
+        :stroke="hoveredSegmentId === handle.leftNodeId ? manipulateColor(paramColor, 0.6) : 'transparent'"
         style="pointer-events:all; cursor:ns-resize"
-        @pointerdown.stop="(e) => onTensionHandlePointerDown(e, h.leftNodeId)"
-        @mouseenter="hoveredSegmentId = h.leftNodeId"
+        @pointerdown.stop="(event) => onTensionHandlePointerDown(event, handle.leftNodeId)"
+        @mouseenter="hoveredSegmentId = handle.leftNodeId"
         @mouseleave="hoveredSegmentId = null"
       />
 
       <!-- tension handle visible dots -->
-      <circle v-for="h in segmentHandles" :key="`tension-vis-${h.leftNodeId}`"
-        :cx="h.x" :cy="h.y" :r="TENSION_VIS_RADIUS"
+      <circle v-for="handle in segmentHandles" :key="`tension-vis-${handle.leftNodeId}`"
+        :cx="handle.x" :cy="handle.y" :r="TENSION_VIS_RADIUS"
         :fill="manipulateColor(paramColor, 0.35)" style="pointer-events:none"
       />
 
