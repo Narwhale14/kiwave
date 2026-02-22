@@ -32,6 +32,11 @@ export function snapNearest(value: number, division: number = snapDivision.value
     return Math.round(value * division) / division;
 }
 
+export function snapNearestGrid(value: number, division: number): number {
+    if(division === 0) return value;
+    return Math.round(value / division) * division
+}
+
 export function dynamicSnapNearest(value: number, width: number) {
     const division = getDynamicSnapDivision(width);
     return snapNearest(value, division);

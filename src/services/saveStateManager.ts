@@ -228,10 +228,6 @@ export function serializeState(): SaveFile {
         solo: ch.solo,
     }));
 
-    savedChannels.forEach(channel => {
-        console.log(channel.synthState);
-    });
-
     const savedMixers = mixerManager.getAllMixers().map(({ peakDbL: _l, peakDbR: _r, ...m }) => m);
 
     const now = Date.now();

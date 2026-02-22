@@ -3,7 +3,7 @@ import { ref, reactive, onMounted, nextTick, onBeforeUnmount, inject, type Ref, 
 import { PianoRoll, type NoteBlock } from '../audio/PianoRoll'
 import { noteToMidi } from '../util/midi';
 import { getAudioEngine } from '../services/audioEngineManager';
-import { getVisualSnapWidth, dynamicSnap } from '../util/snap';
+import { getVisualSnapWidth, dynamicSnap, snapDivision } from '../util/snap';
 import { playbackMode, registerPatternCallbacks, unregisterPatternCallbacks } from '../services/playbackModeManager';
 import Menu from './modals/Menu.vue';
 import NoteAutomationOverlay from './overlays/NoteAutomationOverlay.vue';
@@ -11,9 +11,11 @@ import { ALL_PARAMETERS, PARAMETER_MAP } from '../audio/Automation';
 import { shiftNodeValues, type AutomationCurve } from '../audio/Automation';
 import { manipulateColor } from '../util/display';
 import ZoomScrollBar from './controls/ZoomScrollBar.vue';
+import Toolbar from './controls/Toolbar.vue';
 import { MAX_ZOOM_FACTOR } from '../constants/defaults';
 import { clamp } from '../util/math';
 import Timeline from './meters/Timeline.vue';
+import SelectionOverlay from './overlays/SelectionOverlay.vue';
 
 const VELOCITY_SNAP = 0.05;
 
@@ -54,6 +56,7 @@ const state = reactive({
   hoverNote: null as NoteBlock | null,
   cachedLength: 1,
   cachedVelocity: 0.8,
+  
   resizingNote: null as NoteBlock | null,
   resizeInitialLength: 0,
   draggingNote: null as NoteBlock | null,
@@ -86,6 +89,9 @@ const laneMenuItems = computed(() => ALL_PARAMETERS.map(p => ({
   label: p.label,
   action: () => toggleLane(p.id)
 })));
+
+const activeTool = ref('');
+const pianoRollTools = [{ id: 'select', label: 'Select Tool' }];
 
 const activeAutomationLane = ref<string | null>(null);
 const activeLaneDef = computed(() => activeAutomationLane.value ? PARAMETER_MAP.get(activeAutomationLane.value) ?? null : null);
@@ -256,6 +262,18 @@ function onPianoRollKeyDown(event: KeyboardEvent) {
       }
       break;
   }
+}
+
+function onSelectionComplete(bounds: { x: number, y: number, width: number, height: number }) {
+  const startRow = Math.floor(bounds.y / rowHeight.value);
+  const endRow = Math.floor((bounds.y + bounds.height) / rowHeight.value);
+
+  const startCol = Math.floor(bounds.x / colWidth.value);
+  const endCol = Math.floor((bounds.x + bounds.width) / colWidth.value);
+
+  props.roll._noteData.forEach(note => {
+    if((startCol < note.col && note.col < endCol) && (startRow < note.row && note.row < endRow)) console.log(note.id);
+  });
 }
 
 function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
@@ -541,6 +559,10 @@ onBeforeUnmount(() => {
           </button>
           <Menu ref="channelMenu" :items="channelMenuItems" />
 
+          <Toolbar :tools="pianoRollTools" v-model:activeTool="activeTool" :tool-size="18">
+            <span class="pi pi-chart-bar text-sm"></span>
+          </Toolbar>
+
           <button class="flex flex-row items-center gap-1 px-2 py-0.5 rounded hover:bg-mix-25 transition-colors focus:outline-none"
             title="Automation Lane"
             :style="activeLaneDef ? { backgroundColor: manipulateColor(activeLaneDef.color, 0, 0.5) } : {}"
@@ -724,6 +746,9 @@ onBeforeUnmount(() => {
               boxShadow: `-1px 0 6px var(--playhead)`
             }"
           ></div>
+
+          <!-- select thingy -->
+          <SelectionOverlay v-if="activeTool === 'select'" :snap-y="rowHeight" :snap-x="colWidth / snapDivision" @complete="onSelectionComplete"/>
         </div>
       </div>
     </div>
