@@ -52,19 +52,21 @@ export class MiniSynth implements BaseSynth {
     private liveVoices: Map<number, ActiveVoice> = new Map();
 
     private static readonly BASE_GAIN = 0.25;
+    private static readonly ANTI_CLICK_RAMP = 0.005; // 5ms
 
     // chorus voice parameters
     private static readonly CHORUS_BASE_DELAY_L = 0.020; // 20 ms
     private static readonly CHORUS_BASE_DELAY_R = 0.023; // 23 ms — offset gives stereo width
     private static readonly CHORUS_LFO_DETUNE = 1.03; // 3 % rate difference between L/R LFOs
 
+    // default values for instance
     private config: MiniSynthConfig = {
         waveform: 'sawtooth',
         masterVolume: 0.8,
-        adsr: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.3 },
-        filter: { type: 'lowpass' as BiquadFilterType, frequency: 20000, resonance: 1 },
-        echo: { time: 0.3, feedback: 0.4, mix: 0.2, mode: 'mono' },
-        chorus: { rate: 0.5, depth: 0.002, mix: 0.3 }
+        adsr: { attack: 0, decay: 0, sustain: 1 , release: 0 },
+        filter: { type: 'lowpass' as BiquadFilterType, frequency: 20000, resonance: 0.1 },
+        echo: { time: 0, feedback: 0, mix: 0, mode: 'stereo' },
+        chorus: { rate: 0, depth: 0, mix: 0 }
     };
 
     constructor(audioContext: AudioContext) {
@@ -239,7 +241,7 @@ export class MiniSynth implements BaseSynth {
     getOutputNode(): GainNode { return this.finalOutput; }
     getAudioContext(): AudioContext { return this.audioContext; }
     getActiveVoiceCount(): number { return this.scheduledVoices.size + this.liveVoices.size; }
-    getState() { return this.config; }
+    getState(): MiniSynthConfig { return this.config; }
 
     setState(state: Partial<MiniSynthConfig>) {
         if(state.masterVolume !== undefined) this.setMasterVolume(state.masterVolume);
@@ -279,10 +281,7 @@ export class MiniSynth implements BaseSynth {
 
         const { attack, decay, sustain } = this.config.adsr;
         const sustainLevel = envelopeTarget * sustain;
-        // Ensure the decay ramp never ends at exactly the same timestamp as the
-        // attack ramp — Web Audio would collapse them into a single event and the
-        // attack peak would never be reached.
-        const decayTime = Math.max(decay, 0.0001);
+        const decayTime = Math.max(decay, 0.0001); // to avoid collapsing attack + decay into a single event
 
         const voice: ActiveVoice = { oscillator, filter, automationGain, envelopeGain, pannerNode, pitch, sustainLevel };
 
@@ -307,7 +306,7 @@ export class MiniSynth implements BaseSynth {
         }
 
         envelopeGain.gain.setValueAtTime(0, time);
-        envelopeGain.gain.linearRampToValueAtTime(envelopeTarget, time + attack);
+        envelopeGain.gain.linearRampToValueAtTime(envelopeTarget, time + attack + MiniSynth.ANTI_CLICK_RAMP);
         envelopeGain.gain.linearRampToValueAtTime(sustainLevel, time + attack + decayTime);
 
         oscillator.start(time);
@@ -316,15 +315,11 @@ export class MiniSynth implements BaseSynth {
 
     private _stopVoice(voice: ActiveVoice, time: number, cleanupCallback: () => void) {
         const release = this.config.adsr.release;
-        // Snap to the sustain level before starting the release ramp. Without
-        // this, a note cut during the attack phase releases from mid-attack
-        // gain — producing an audible tail even when sustain = 0.
-        const SNAP = 0.005;
 
         voice.envelopeGain.gain.cancelAndHoldAtTime(time);
-        voice.envelopeGain.gain.linearRampToValueAtTime(voice.sustainLevel, time + SNAP);
-        voice.envelopeGain.gain.setTargetAtTime(0, time + SNAP, Math.max(release / 3, 0.001));
-        voice.oscillator.stop(time + SNAP + release + 0.1);
+        voice.envelopeGain.gain.linearRampToValueAtTime(voice.sustainLevel, time + MiniSynth.ANTI_CLICK_RAMP);
+        voice.envelopeGain.gain.setTargetAtTime(0, time + MiniSynth.ANTI_CLICK_RAMP, Math.max(release / 3, 0.001));
+        voice.oscillator.stop(time + MiniSynth.ANTI_CLICK_RAMP + release + 0.1);
 
         voice.oscillator.onended = () => {
             cleanupCallback();

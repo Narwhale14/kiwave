@@ -21,6 +21,8 @@ const synth = computed(() => {
   return channel?.instrument as MiniSynth | null;
 });
 
+const state = reactive(synth.value?.getState() ?? {} as MiniSynthConfig);
+
 const waveforms: Waveform[] = ['sine', 'square', 'sawtooth', 'triangle'];
 const echoModes: EchoMode[] = ['mono', 'stereo', 'ping-pong'];
 
@@ -33,46 +35,41 @@ function onWaveformSlider(value: number) {
   synth.value?.setWaveform(w);
 }
 
-const echoModeSliderValue = computed(() => echoModes.indexOf(echo.mode) / (echoModes.length - 1));
+const echoModeSliderValue = computed(() => echoModes.indexOf(state.echo.mode) / (echoModes.length - 1));
 const echoSliderHeight = 75;
 
 function onEchoModeSlider(value: number) {
   onEcho({ mode: echoModes[Math.round(value * (echoModes.length - 1))] });
 }
 
-const master = reactive({ volume: 0.8 });
-const adsr = reactive({ attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.3 });
-const filter = reactive({ cutoff: 1, resonance: 1 }); // 1 = fully open (20 kHz)
-const echo = reactive({ time: 0.3, feedback: 0.4, mix: 0.2, mode: 'mono' as EchoMode });
-const chorus = reactive({ rate: 0.5, depth: 0.002, mix: 0.3 });
-
-const filterFreqHz = computed(() => 20 * Math.pow(1000, filter.cutoff));
+const filterFreqHz = computed(() => 20 * Math.pow(1000, state.filter.frequency));
 
 function onMaster(volume: number) {
-  master.volume = volume;
+  state.masterVolume = volume;
   synth.value?.setMasterVolume(volume);
 }
 
-function onADSR(partial: Partial<typeof adsr>) {
-  Object.assign(adsr, partial);
+function onADSR(partial: Partial<typeof state.adsr>) {
+  Object.assign(state.adsr, partial);
   synth.value?.setADSR(partial);
 }
 
-function onFilter(partial: Partial<typeof filter>) {
-  Object.assign(filter, partial);
+function onFilter(partial: Partial<typeof state.filter>) {
+  Object.assign(state.filter, partial);
   const update: Partial<MiniSynthConfig['filter']> = {};
-  if(partial.cutoff !== undefined) update.frequency = 20 * Math.pow(1000, filter.cutoff);
-  if(partial.resonance !== undefined) update.resonance = filter.resonance;
+  if(partial.frequency !== undefined) update.frequency = 20 * Math.pow(1000, state.filter.frequency);
+  console.log(update.frequency);
+  if(partial.resonance !== undefined) update.resonance = state.filter.resonance;
   synth.value?.setFilter(update);
 }
 
-function onEcho(partial: Partial<typeof echo>) {
-  Object.assign(echo, partial);
+function onEcho(partial: Partial<typeof state.echo>) {
+  Object.assign(state.echo, partial);
   synth.value?.setEcho(partial);
 }
 
-function onChorus(partial: Partial<typeof chorus>) {
-  Object.assign(chorus, partial);
+function onChorus(partial: Partial<typeof state.chorus>) {
+  Object.assign(state.chorus, partial);
   synth.value?.setChorus(partial);
 }
 </script>
@@ -106,7 +103,7 @@ function onChorus(partial: Partial<typeof chorus>) {
 
           <div class="section-content">
             <div class="knob-container">
-              <Knob :model-value="master.volume" :size="60" @update:model-value="value => onMaster(value)"/>
+              <Knob :model-value="state.masterVolume" :size="60" :resistance="1" @update:model-value="value => onMaster(value)"/>
               <span class="knob-text">Vol</span>
             </div>
 
@@ -129,15 +126,15 @@ function onChorus(partial: Partial<typeof chorus>) {
 
           <div class="section-content">
             <div class="knob-container">
-              <Knob :model-value="chorus.rate" :size="60" :min="0.1" :max="3" :resistance="0.8" @update:model-value="v => onChorus({ rate: v })" />
+              <Knob :model-value="state.chorus.rate" :size="60" :max="3" :resistance="1" @update:model-value="v => onChorus({ rate: v })" />
               <span class="knob-text">Rate</span>
             </div>
             <div class="knob-container">
-              <Knob :model-value="chorus.depth" :size="60" :min="0.0001" :max="0.005" :resistance="0.85" @update:model-value="v => onChorus({ depth: v })" />
+              <Knob :model-value="state.chorus.depth" :size="60" :max="0.005" :resistance="1" @update:model-value="v => onChorus({ depth: v })" />
               <span class="knob-text">Depth</span>
             </div>
             <div class="knob-container">
-              <Knob :model-value="chorus.mix" :size="60" @update:model-value="v => onChorus({ mix: v })" />
+              <Knob :model-value="state.chorus.mix" :size="60" :resistance="1" @update:model-value="v => onChorus({ mix: v })" />
               <span class="knob-text">Mix</span>
             </div>
           </div>
@@ -153,22 +150,22 @@ function onChorus(partial: Partial<typeof chorus>) {
             <div class="flex items-start gap-1.5">
               <Slider :model-value="echoModeSliderValue" :steps="3" :height="echoSliderHeight" @update:model-value="onEchoModeSlider" />
               <div class="flex flex-col justify-between" :style="{ height: echoSliderHeight + 'px' }">
-                <span v-for="m in [...echoModes].reverse()" :key="m" class="text-[9px] leading-none capitalize" :class="echo.mode === m ? 'opacity-90' : 'opacity-30'">
+                <span v-for="m in [...echoModes].reverse()" :key="m" class="text-[9px] leading-none capitalize" :class="state.echo.mode === m ? 'opacity-90' : 'opacity-30'">
                   {{ m }}
                 </span>
               </div>
             </div>
 
             <div class="knob-container">
-              <Knob :model-value="echo.time" :size="60" :min="0" :max="2" @update:model-value="v => onEcho({ time: v })" />
+              <Knob :model-value="state.echo.time" :size="60" :max="2" :resistance="1" @update:model-value="v => onEcho({ time: v })" />
               <span class="knob-text">Time</span>
             </div>
             <div class="knob-container">
-              <Knob :model-value="echo.feedback" :size="60" :min="0" :max="0.95" @update:model-value="v => onEcho({ feedback: v })" />
-              <span class="knob-text">FB</span>
+              <Knob :model-value="state.echo.feedback" :size="60" :max="0.95" :resistance="1" @update:model-value="v => onEcho({ feedback: v })" />
+              <span class="knob-text">Feedback</span>
             </div>
             <div class="knob-container">
-              <Knob :model-value="echo.mix" :size="60" @update:model-value="v => onEcho({ mix: v })" />
+              <Knob :model-value="state.echo.mix" :size="60" :resistance="1" @update:model-value="v => onEcho({ mix: v })" />
               <span class="knob-text">Mix</span>
             </div>
           </div>
@@ -184,25 +181,25 @@ function onChorus(partial: Partial<typeof chorus>) {
 
           <div class="flex flex-col flex-1 min-h-0">
             <EnvelopeGraph
-              :attack="adsr.attack" :max-attack="2" :decay="adsr.decay" :max-decay="2" :sustain="adsr.sustain" :release="adsr.release" :max-release="5"
+              :attack="state.adsr.attack" :max-attack="2" :decay="state.adsr.decay" :max-decay="2" :sustain="state.adsr.sustain" :release="state.adsr.release" :max-release="5"
               @update:attack="v => onADSR({ attack: v })" @update:decay="v => onADSR({ decay: v })" @update:sustain="v => onADSR({ sustain: v })" @update:release="v => onADSR({ release: v })"
             />
 
             <div class="section-content-graph">
               <div class="knob-container">
-                <Knob :model-value="adsr.attack" :size="60" :min="0" :max="2" @update:model-value="v => onADSR({ attack: v })" />
+                <Knob :model-value="state.adsr.attack" :size="60" :max="2" @update:model-value="v => onADSR({ attack: v })" />
                 <span class="knob-text">Attack</span>
               </div>
               <div class="knob-container">
-                <Knob :model-value="adsr.decay" :size="60" :min="0" :max="2" @update:model-value="v => onADSR({ decay: v })" />
+                <Knob :model-value="state.adsr.decay" :size="60" :max="2" @update:model-value="v => onADSR({ decay: v })" />
                 <span class="knob-text">Decay</span>
               </div>
               <div class="knob-container">
-                <Knob :model-value="adsr.sustain" :size="60" @update:model-value="v => onADSR({ sustain: v })" />
+                <Knob :model-value="state.adsr.sustain" :size="60" @update:model-value="v => onADSR({ sustain: v })" />
                 <span class="knob-text">Sustain</span>
               </div>
               <div class="knob-container">
-                <Knob :model-value="adsr.release" :size="60" :min="0" :max="5" @update:model-value="v => onADSR({ release: v })" />
+                <Knob :model-value="state.adsr.release" :size="60" :max="5" @update:model-value="v => onADSR({ release: v })" />
                 <span class="knob-text">Release</span>
               </div>
             </div>
@@ -216,16 +213,16 @@ function onChorus(partial: Partial<typeof chorus>) {
           </div>
 
           <div class="flex flex-col flex-1 min-h-0">
-            <FilterGraph class="min-h-0" :frequency="filterFreqHz" :resonance="filter.resonance" />
+            <FilterGraph class="min-h-0" :frequency="filterFreqHz" :resonance="state.filter.resonance" />
 
             <div class="section-content-graph">
               <div class="knob-container">
-                <Knob :model-value="filter.cutoff" :size="60" :resistance="0.75" @update:model-value="v => onFilter({ cutoff: v })" />
+                <Knob :model-value="state.filter.frequency" :size="60" :resistance="1" @update:model-value="v => onFilter({ frequency: v })" />
                 <span class="knob-text">Cutoff</span>
               </div>
               <div class="knob-container">
-                <Knob :model-value="filter.resonance" :size="60" :min="0.1" :max="20" @update:model-value="v => onFilter({ resonance: v })" />
-                <span class="knob-text">Res</span>
+                <Knob :model-value="state.filter.resonance" :size="60" :min="0.1" :max="20" :default-value="0.1" @update:model-value="v => onFilter({ resonance: v })" />
+                <span class="knob-text">Resonance</span>
               </div>
             </div>
           </div>

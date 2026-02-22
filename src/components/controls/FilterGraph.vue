@@ -159,16 +159,20 @@ const paths = computed(() => {
   });
 
   const curve = `M ${curvePoints.join(' L ')}`;
-  const fill  = `M ${freqToX(freqRange.min).toFixed(2)},${yResponseBottom} L ${curvePoints.join(' L ')} L ${freqToX(freqRange.max).toFixed(2)},${yResponseBottom} Z`;
+  const fill = `M ${freqToX(freqRange.min).toFixed(2)},${yResponseBottom} L ${curvePoints.join(' L ')} L ${freqToX(freqRange.max).toFixed(2)},${yResponseBottom} Z`;
   return { curve, fill };
 });
 
 const cutoffFrequencyX = computed(() => freqToX(clamp(props.frequency, freqRange.min, freqRange.max)));
-const gridFrequencies = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
-const frequencyTicks = [
+
+const gridFrequencyTicks = [
   { frequency: 20, label: '20' },
+  { frequency: 50, label: '50' },
   { frequency: 100, label: '100' },
+  { frequency: 500, label: '500' },
   { frequency: 1000, label: '1k' },
+  { frequency: 2000, label: '2k' },
+  { frequency: 5000, label: '5k' },
   { frequency: 10000, label: '10k' },
   { frequency: 20000, label: '20k' }
 ];
@@ -178,9 +182,6 @@ const frequencyTicks = [
   <svg :viewBox="`0 0 ${viewWidth} ${viewHeight}`" class="w-full select-none">
     <!-- Background -->
     <rect :x="paddingX" :y="paddingTop" :width="drawWidth" :height="drawHeight" fill="rgba(0,0,0,0.3)" rx="2"/>
-
-    <!-- Frequency grid lines -->
-    <line v-for="frequency in gridFrequencies" :key="frequency" :x1="freqToX(frequency)" :y1="paddingTop" :x2="freqToX(frequency)" :y2="yResponseBottom" stroke="rgba(255,255,255,0.05)" stroke-width="1.5"/>
 
     <!-- 0 dB reference line -->
     <line :x1="paddingX" :y1="yZeroDecibels" :x2="paddingX + drawWidth" :y2="yZeroDecibels" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" stroke-dasharray="3,3"/>
@@ -195,7 +196,8 @@ const frequencyTicks = [
     <line :x1="cutoffFrequencyX" :y1="paddingTop" :x2="cutoffFrequencyX" :y2="yResponseBottom" stroke="rgba(74,222,128,0.35)" stroke-width="1.5" stroke-dasharray="2,2"/>
 
     <!-- frequency tick labels -->
-    <g v-for="tick in frequencyTicks" :key="tick.frequency">
+    <g v-for="tick in gridFrequencyTicks" :key="tick.frequency">
+      <line :x1="freqToX(tick.frequency)" :y1="paddingTop" :x2="freqToX(tick.frequency)" :y2="yResponseBottom" stroke="rgba(255,255,255,0.05)" stroke-width="1.5"/>
       <line :x1="freqToX(tick.frequency)" :y1="yResponseBottom" :x2="freqToX(tick.frequency)" :y2="yResponseBottom + 2" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
       <text :x="freqToX(tick.frequency)" :y="yLabelBaseline" font-size="4.5" fill="rgba(255,255,255,0.25)" text-anchor="middle" font-family="monospace">
         {{ tick.label }}

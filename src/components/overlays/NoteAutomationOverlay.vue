@@ -5,10 +5,10 @@ import { snapNearest, snapDivision } from '../../util/snap';
 import { manipulateColor } from '../../util/display';
 
 const LINE_HIT_WIDTH = 16;
-const NODE_HIT_RADIUS = 5;
-const NODE_VIS_RADIUS = 2;
-const TENSION_HIT_RADIUS = 4;
-const TENSION_VIS_RADIUS = 2;
+const NODE_HIT_RADIUS = 8;
+const NODE_VIS_RADIUS = 4;
+const TENSION_HIT_RADIUS = 6;
+const TENSION_VIS_RADIUS = 3;
 const POWER_CURVE_SAMPLES = 48;
 
 const props = defineProps<{
