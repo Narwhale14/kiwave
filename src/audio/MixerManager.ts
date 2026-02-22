@@ -13,7 +13,7 @@ export interface MixerTrack {
     // effects: Effect[];
 }
 
-export class MixerManager {
+class MixerManager {
     private mixers: MixerTrack[] = reactive([]);
     private soloMixerId: string | null = null;
     onMuteStateChanged: (() => void) | null = null;
