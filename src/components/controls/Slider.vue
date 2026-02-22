@@ -114,11 +114,18 @@ onUnmounted(() => ro?.disconnect());
   >
     <div class="absolute left-1/2 -translate-x-1/2 rounded-full bg-mix-25" :style="{ width: trackWidth + 'px', height: effectiveHeight + 'px' }" />
     
-    <div v-if="active" class="absolute left-1/2 -translate-x-1/2 rounded-full playhead-color" :style="{ width: trackWidth / 3 + 'px', height: (effectiveHeight - handleY) + 'px', bottom: 0 }" />
+    <div v-if="active" class="absolute left-1/2 -translate-x-1/2 rounded-full playhead-color" 
+      :style="{ width: trackWidth / 3 + 'px', height: (effectiveHeight - handleY) + 'px', bottom: 0 }" 
+    />
+
     <template v-if="steps !== undefined && steps > 1">
-      <div v-for="i in steps" :key="i" class="absolute left-1/2 -translate-x-1/2 rounded-full bg-mix-50 pointer-events-none" :style="{ width: (trackWidth + 6) + 'px', height: '2px', top: (usableHeight * (1 - (i - 1) / (steps - 1)) + handleHeight / 2 - 1) + 'px' }"/>
+      <div v-for="i in steps" :key="i" class="absolute left-1/2 -translate-x-1/2 rounded-full bg-mix-50 pointer-events-none" 
+        :style="{ width: (trackWidth + 6) + 'px', height: '2px', top: (usableHeight * (1 - (i - 1) / (steps - 1)) + handleHeight / 2 - 1) + 'px' }"
+      />
     </template>
 
-    <div class="absolute left-1/2 rounded general-white shadow-md" :style="{ width: (trackWidth + 14) + 'px', height: handleHeight + 'px', transform: `translateX(-50%) translateY(${handleY}px)`}" />
+    <div class="absolute left-1/2 rounded general-white shadow-md" 
+      :style="{ width: (trackWidth + 14) + 'px', height: handleHeight + 'px', transform: `translateX(-50%) translateY(${handleY}px)`}"
+    />
   </div>
 </template>

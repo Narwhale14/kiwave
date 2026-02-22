@@ -38,12 +38,13 @@ const TEMPSAVE_KEY = 'tempsave';
 
 const AUTOSAVE_DEBOUNCE_MS = 1500;
 const SCHEDULE_SAVE_INTERVAL_MS = 45000;
+const LAST_PROJECT_KEY = 'webdaw_lastProjectId';
 
 export const currentProjectId = ref<number | null>(null);
 
 // converting data to saveable types
 type SavedMixer = Omit<MixerTrack, 'peakDbL' | 'peakDbR'>;
-type SavedChannel = Omit<Channel, 'instrument'> & { synthId: string; synthNum: number };
+type SavedChannel = Omit<Channel, 'instrument'> & { synthId: string; synthNum: number; synthState?: Record<string, unknown> };
 type SavedNote = Omit<NoteBlock, 'automation'> & { automation: AutomationCurve[] };
 type SavedPattern = Omit<Pattern, 'roll'> & { notes: SavedNote[] };
 
@@ -219,12 +220,17 @@ export function serializeState(): SaveFile {
         name: ch.name,
         synthId: channelSynths.get(ch.id)?.synthId ?? 'minisynth',
         synthNum: channelSynths.get(ch.id)?.num ?? 1,
+        synthState: engine.serializeChannelState(ch.id),
         mixerTrack: ch.mixerTrack,
         volume: ch.volume,
         pan: ch.pan,
         muted: ch.muted,
         solo: ch.solo,
     }));
+
+    savedChannels.forEach(channel => {
+        console.log(channel.synthState);
+    });
 
     const savedMixers = mixerManager.getAllMixers().map(({ peakDbL: _l, peakDbR: _r, ...m }) => m);
 
@@ -292,6 +298,7 @@ export async function deserializeState(save: SaveFile): Promise<void> {
 
         const master = mixerManager.getMixer('master')!;
         const masterSave = save.mixers.find(m => m.id === 'master');
+
         if(masterSave) {
             Object.assign(master, masterSave);
         } else {
@@ -344,7 +351,7 @@ export async function deserializeState(save: SaveFile): Promise<void> {
             if(win.userModified) positionWindow(win.id, win.x, win.y, win.width, win.height);
         }
     } catch(error) {
-        throw new Error('Error deserializing state:');
+        throw error instanceof Error ? error : new Error('Error deserializing state');
     } finally {
         await nextTick();
         isLoading = false;
@@ -359,7 +366,13 @@ export async function autoSaveToDb(): Promise<void> {
         if(currentProjectId.value === null) {
             await idbPut(AUTOSAVE_STORE, { id: TEMPSAVE_KEY, ...serializeState() });
         } else {
-            await idbPut(PROJECTS_STORE, { id: currentProjectId.value, ...serializeState() });
+            const existing = await idbGet<SaveFile>(PROJECTS_STORE, currentProjectId.value);
+            const state = serializeState();
+            if(existing) {
+                state.metadata.created = existing.metadata.created;
+                if(!state.metadata.projectName) state.metadata.projectName = existing.metadata.projectName;
+            }
+            await idbPut(PROJECTS_STORE, { id: currentProjectId.value, ...state });
         }
     } finally {
         savingLock = false;
@@ -374,9 +387,7 @@ export async function loadAutoSave(): Promise<SaveFile | null> {
 
 export async function getAllProjects(): Promise<ProjectSummary[]> {
     const all = await idbGetAll<SaveFile & { id: number }>(PROJECTS_STORE);
-    return all
-        .map(p => ({ id: p.id, name: p.metadata.projectName, lastModified: p.metadata.lastModified }))
-        .sort((a, b) => b.lastModified - a.lastModified);
+    return all.map(p => ({ id: p.id, name: p.metadata.projectName, lastModified: p.metadata.lastModified })).sort((a, b) => b.lastModified - a.lastModified);
 }
 
 export type SaveResult = 'ok' | 'duplicate_name';
@@ -404,6 +415,7 @@ export async function saveManualProject(): Promise<SaveResult> {
         save.metadata.created = now;
         const newId = await idbPut(PROJECTS_STORE, save);
         currentProjectId.value = newId as number;
+        localStorage.setItem(LAST_PROJECT_KEY, String(newId));
     }
 
     return 'ok';
@@ -414,6 +426,7 @@ export async function loadProjectById(id: number): Promise<void> {
     if(!save) throw new Error(`Project ${id} not found`);
     await deserializeState(save);
     currentProjectId.value = id;
+    localStorage.setItem(LAST_PROJECT_KEY, String(id));
 }
 
 function createBlankSave(): SaveFile {
@@ -464,6 +477,7 @@ function createBlankSave(): SaveFile {
 export async function newProject(): Promise<void> {
     await deserializeState(createBlankSave());
     currentProjectId.value = null;
+    localStorage.removeItem(LAST_PROJECT_KEY);
     await autoSaveToDb();
 }
 
@@ -474,6 +488,17 @@ export async function deleteCurrentProject(): Promise<void> {
 }
 
 export async function initLoad(): Promise<void> {
+    const storedId = localStorage.getItem(LAST_PROJECT_KEY);
+    if(storedId !== null) {
+        const id = parseInt(storedId, 10);
+        try {
+            await loadProjectById(id);
+            return;
+        } catch {
+            localStorage.removeItem(LAST_PROJECT_KEY);
+        }
+    }
+
     const tempsave = await loadAutoSave();
     if(tempsave) await deserializeState(tempsave);
     currentProjectId.value = null;

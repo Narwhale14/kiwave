@@ -143,7 +143,7 @@ function scheduleRecompile() {
   if(recompileDebounceTimer !== null) clearTimeout(recompileDebounceTimer);
   recompileDebounceTimer = setTimeout(() => {
     recompileDebounceTimer = null;
-    recompileArrangement(true);
+    recompileArrangement(false);
   }, 50);
 }
 

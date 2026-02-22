@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, inject, reactive, ref } from 'vue';
+import { computed, inject, reactive } from 'vue';
 import { channelManager } from '../../audio/ChannelManager';
-import type { MiniSynth, MiniSynthConfig } from '../../audio/synths/MiniSynth';
-import type { Waveform, EchoMode } from '../../audio/synths/MiniSynth';
+import { MINISYNTH_ECHO_MODES, MINISYNTH_WAVEFORM_MODES, type MiniSynth, type MiniSynthConfig } from '../../audio/synths/MiniSynth';
 import Knob from '../controls/Knob.vue';
 import Slider from '../controls/Slider.vue';
 import EnvelopeGraph from '../controls/EnvelopeGraph.vue';
 import FilterGraph from '../controls/FilterGraph.vue';
+import { hzToNormalized } from '../../util/audio';
 
 const props = defineProps<{
   channelId: string
@@ -21,25 +21,25 @@ const synth = computed(() => {
   return channel?.instrument as MiniSynth | null;
 });
 
-const state = reactive(synth.value?.getState() ?? {} as MiniSynthConfig);
+const rawState = synth.value?.getState() ?? {} as MiniSynthConfig;
+const state = reactive({
+  ...rawState,
+  filter: { ...rawState.filter, frequency: hzToNormalized(rawState.filter?.frequency ?? 20000) },
+} as MiniSynthConfig);
 
-const waveforms: Waveform[] = ['sine', 'square', 'sawtooth', 'triangle'];
-const echoModes: EchoMode[] = ['mono', 'stereo', 'ping-pong'];
-
-const waveform = ref<Waveform>('sawtooth');
-const waveformSliderValue = computed(() => waveforms.indexOf(waveform.value) / (waveforms.length - 1));
+const waveformSliderValue = computed(() => MINISYNTH_WAVEFORM_MODES.indexOf(state.waveform) / (MINISYNTH_WAVEFORM_MODES.length - 1));
 
 function onWaveformSlider(value: number) {
-  const w = waveforms[Math.round(value * (waveforms.length - 1))]!;
-  waveform.value = w;
+  const w = MINISYNTH_WAVEFORM_MODES[Math.round(value * (MINISYNTH_WAVEFORM_MODES.length - 1))]!;
+  state.waveform = w;
   synth.value?.setWaveform(w);
 }
 
-const echoModeSliderValue = computed(() => echoModes.indexOf(state.echo.mode) / (echoModes.length - 1));
+const echoModeSliderValue = computed(() => MINISYNTH_ECHO_MODES.indexOf(state.echo.mode) / (MINISYNTH_ECHO_MODES.length - 1));
 const echoSliderHeight = 75;
 
 function onEchoModeSlider(value: number) {
-  onEcho({ mode: echoModes[Math.round(value * (echoModes.length - 1))] });
+  onEcho({ mode: MINISYNTH_ECHO_MODES[Math.round(value * (MINISYNTH_ECHO_MODES.length - 1))] });
 }
 
 const filterFreqHz = computed(() => 20 * Math.pow(1000, state.filter.frequency));
@@ -58,7 +58,6 @@ function onFilter(partial: Partial<typeof state.filter>) {
   Object.assign(state.filter, partial);
   const update: Partial<MiniSynthConfig['filter']> = {};
   if(partial.frequency !== undefined) update.frequency = 20 * Math.pow(1000, state.filter.frequency);
-  console.log(update.frequency);
   if(partial.resonance !== undefined) update.resonance = state.filter.resonance;
   synth.value?.setFilter(update);
 }
@@ -110,7 +109,7 @@ function onChorus(partial: Partial<typeof state.chorus>) {
             <div class="flex flex-row gap-1">
               <Slider :model-value="waveformSliderValue" :steps="4" :height="72" @update:model-value="onWaveformSlider" />
               <div class="flex flex-col justify-between">
-                <span v-for="w in [...waveforms].reverse()" :key="w" class="text-[9px] leading-none capitalize" :class="waveform === w ? 'opacity-90' : 'opacity-30'">
+                <span v-for="w in [...MINISYNTH_WAVEFORM_MODES].reverse()" :key="w" class="text-[9px] leading-none capitalize" :class="state.waveform === w ? 'opacity-90' : 'opacity-30'">
                   {{ w }}
                 </span>
               </div>
@@ -150,7 +149,7 @@ function onChorus(partial: Partial<typeof state.chorus>) {
             <div class="flex items-start gap-1.5">
               <Slider :model-value="echoModeSliderValue" :steps="3" :height="echoSliderHeight" @update:model-value="onEchoModeSlider" />
               <div class="flex flex-col justify-between" :style="{ height: echoSliderHeight + 'px' }">
-                <span v-for="m in [...echoModes].reverse()" :key="m" class="text-[9px] leading-none capitalize" :class="state.echo.mode === m ? 'opacity-90' : 'opacity-30'">
+                <span v-for="m in [...MINISYNTH_ECHO_MODES].reverse()" :key="m" class="text-[9px] leading-none capitalize" :class="state.echo.mode === m ? 'opacity-90' : 'opacity-30'">
                   {{ m }}
                 </span>
               </div>

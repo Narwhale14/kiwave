@@ -25,7 +25,6 @@ function handleKeyDown(event: KeyboardEvent) {
   if((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
     event.preventDefault();
     if(headerBarRef.value) {
-      console.log('saving');
       headerBarRef.value.saveProject();
     }
   }

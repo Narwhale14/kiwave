@@ -4,7 +4,10 @@ import type { CompiledNoteAutomation } from "../Automation";
 import type { BaseSynth } from "./types";
 
 export type Waveform = 'sine' | 'square' | 'sawtooth' | 'triangle';
+export const MINISYNTH_WAVEFORM_MODES: Waveform[] = ['sine', 'square', 'sawtooth', 'triangle'];
+
 export type EchoMode = 'mono' | 'stereo' | 'ping-pong';
+export const MINISYNTH_ECHO_MODES: EchoMode[] = ['mono', 'stereo', 'ping-pong'];
 
 export interface MiniSynthConfig {
     waveform: Waveform;
@@ -203,8 +206,15 @@ export class MiniSynth implements BaseSynth {
 
         this._smoothUpdate(this.echoDelayLeft.delayTime, time);
         this._smoothUpdate(this.echoDelayRight.delayTime, mode === 'stereo' ? time * 0.75 : time);
-        this._smoothUpdate(this.echoFeedbackLeft.gain, feedback);
-        this._smoothUpdate(this.echoFeedbackRight.gain, feedback);
+
+        if(mode === 'ping-pong') {
+            this._smoothUpdate(this.echoFeedbackLeft.gain, 1);
+            this._smoothUpdate(this.echoFeedbackRight.gain, feedback);
+        } else {
+            this._smoothUpdate(this.echoFeedbackLeft.gain, feedback);
+            this._smoothUpdate(this.echoFeedbackRight.gain, feedback);
+        }
+
         this._smoothUpdate(this.echoMix.gain, mix);
 
         this.echoSendRight.gain.setTargetAtTime(mode === 'ping-pong' ? 0 : 1, now, 0.05);
@@ -241,7 +251,15 @@ export class MiniSynth implements BaseSynth {
     getOutputNode(): GainNode { return this.finalOutput; }
     getAudioContext(): AudioContext { return this.audioContext; }
     getActiveVoiceCount(): number { return this.scheduledVoices.size + this.liveVoices.size; }
-    getState(): MiniSynthConfig { return this.config; }
+    getState(): MiniSynthConfig {
+        return {
+            ...this.config,
+            adsr: { ...this.config.adsr },
+            filter: { ...this.config.filter },
+            echo: { ...this.config.echo },
+            chorus: { ...this.config.chorus },
+        };
+    }
 
     setState(state: Partial<MiniSynthConfig>) {
         if(state.masterVolume !== undefined) this.setMasterVolume(state.masterVolume);
@@ -305,9 +323,10 @@ export class MiniSynth implements BaseSynth {
             }
         }
 
+        const attackEndTime = time + attack + MiniSynth.ANTI_CLICK_RAMP;
         envelopeGain.gain.setValueAtTime(0, time);
-        envelopeGain.gain.linearRampToValueAtTime(envelopeTarget, time + attack + MiniSynth.ANTI_CLICK_RAMP);
-        envelopeGain.gain.linearRampToValueAtTime(sustainLevel, time + attack + decayTime);
+        envelopeGain.gain.linearRampToValueAtTime(envelopeTarget, attackEndTime);
+        envelopeGain.gain.linearRampToValueAtTime(sustainLevel, attackEndTime + decayTime);
 
         oscillator.start(time);
         return voice;
@@ -315,11 +334,11 @@ export class MiniSynth implements BaseSynth {
 
     private _stopVoice(voice: ActiveVoice, time: number, cleanupCallback: () => void) {
         const release = this.config.adsr.release;
+        const releaseTimeConstant = Math.max(release / 3, 0.001);
 
         voice.envelopeGain.gain.cancelAndHoldAtTime(time);
-        voice.envelopeGain.gain.linearRampToValueAtTime(voice.sustainLevel, time + MiniSynth.ANTI_CLICK_RAMP);
-        voice.envelopeGain.gain.setTargetAtTime(0, time + MiniSynth.ANTI_CLICK_RAMP, Math.max(release / 3, 0.001));
-        voice.oscillator.stop(time + MiniSynth.ANTI_CLICK_RAMP + release + 0.1);
+        voice.envelopeGain.gain.setTargetAtTime(0, time, releaseTimeConstant);
+        voice.oscillator.stop(time + Math.max(release, 0.05) + 0.15);
 
         voice.oscillator.onended = () => {
             cleanupCallback();
@@ -332,15 +351,17 @@ export class MiniSynth implements BaseSynth {
     }
 
     private _killVoice(voice: ActiveVoice, time: number) {
-        voice.envelopeGain.gain.cancelScheduledValues(time);
-        voice.envelopeGain.gain.setValueAtTime(0, time);
-        voice.oscillator.stop(time);
+        voice.envelopeGain.gain.cancelAndHoldAtTime(time);
+        voice.envelopeGain.gain.linearRampToValueAtTime(0, time + MiniSynth.ANTI_CLICK_RAMP);
+        voice.oscillator.stop(time + MiniSynth.ANTI_CLICK_RAMP);
 
-        voice.oscillator.disconnect();
-        voice.filter.disconnect();
-        voice.automationGain.disconnect();
-        voice.envelopeGain.disconnect();
-        voice.pannerNode.disconnect();
+        voice.oscillator.onended = () => {
+            voice.oscillator.disconnect();
+            voice.filter.disconnect();
+            voice.automationGain.disconnect();
+            voice.envelopeGain.disconnect();
+            voice.pannerNode.disconnect();
+        };
     }
 
     private _resolveParam(voice: ActiveVoice, paramName: string): AudioParam | null {

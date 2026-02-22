@@ -14,9 +14,10 @@
   --button: #bfbfbf;
   --button-hover: #ffffff;
 
+  --playhead: #4ade80;
+
   --note: #22c55e;
   --note-outline: #86efac;
-  --playhead: #4ade80;
 
   --clip: #22c55e;
   --clip-dark: #15803d;
@@ -106,6 +107,26 @@
 .envelope-fill {
   fill: var(--playhead);
   fill-opacity: 0.1;
+}
+
+.graph-marker-dark {
+  stroke: var(--step-30);
+  stroke-opacity: 0.2;
+}
+
+.graph-marker-light {
+  stroke: var(--step-35);
+  stroke-opacity: 0.2;
+}
+
+.graph-marker-bright {
+  stroke: var(--step-75);
+  stroke-opacity: 0.35;
+}
+
+.graph-marker-green {
+  stroke: var(--playhead);
+  stroke-opacity: 0.35;
 }
 
 .piano-roll-grid {

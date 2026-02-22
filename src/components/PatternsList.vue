@@ -112,7 +112,7 @@ watch(addModalVisible, async (visible) => {
           :class="[
             'w-full text-left px-2 border-2 rounded-sm h-8 hover:border-(--note-outline)! transition-colors',
             pattern.num === activePattern?.num
-              ? 'bg-mix-30 border-(--clip-border)'
+              ? 'bg-mix-30 border-(--playhead)'
               : 'bg-mix-20 border-mix-40 text-white'
           ]"
         >

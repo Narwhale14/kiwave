@@ -368,7 +368,9 @@ export class Scheduler {
             this.animationFrameId = null;
         }
 
-        this.panicAll();
+        // killAll instead of panicAll: cuts voices immediately (with a 5 ms fade)
+        // rather than playing the full release envelope after pause.
+        this.killAll();
         if(this.playStateCallback) {
             this.playStateCallback(false);
         }

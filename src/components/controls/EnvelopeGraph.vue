@@ -34,6 +34,8 @@ const yTop = padding;
 const yBottom = viewHeight - padding;
 const stageAreaWidth = drawWidth - sustainPlateauWidth;
 
+const HANDLE_RADIUS = 3;
+
 const stages = computed(() => {
   const pixelsPerSecond = stageAreaWidth / (props.maxAttack + props.maxDecay + props.maxRelease)
 
@@ -104,23 +106,36 @@ onUnmounted(stopDrag)
 
     <!-- background -->
     <rect :x="padding" :y="padding" :width="drawWidth" :height="drawHeight" fill="var(--step-10)" rx="2"/>
-    <line v-for="x in [stages.xAttackEnd, stages.xDecayEnd, stages.xSustainEnd]" :key="x" :x1="x" :y1="padding" :x2="x" :y2="yBottom" stroke="var(--step-15)" stroke-width="1.5"/>
+    <line v-for="(x, i) in [stages.xAttackEnd, stages.xDecayEnd, stages.xSustainEnd]" :key="`${x}-${i}`" 
+      :x1="x" :y1="padding" :x2="x" :y2="yBottom" class="graph-marker-light" stroke-width="1.5"
+    />
 
     <!-- sustain level guide -->
-    <line :x1="padding" :y1="ySustainLevel" :x2="stages.xSustainEnd" :y2="ySustainLevel" stroke="rgba(74,222,128,0.1)" stroke-width="1" stroke-dasharray="2,3"/>
+    <line class="graph-marker-green" :x1="padding" :y1="ySustainLevel" :x2="stages.xSustainEnd" :y2="ySustainLevel" stroke-width="1" stroke-dasharray="2,3"/>
 
     <!-- envelope curve -->
     <path :d="envelopePath" stroke="var(--playhead)" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
     <path :d="envelopeFillPath" class="envelope-fill"/>
 
     <!-- 3 control points -->
-    <circle :cx="stages.xAttackEnd" :cy="yTop" :r="2" :fill="hovering === 'attack' ? 'var(--playhead)' : 'rgba(74,222,128,0.5)'" stroke="var(--playhead)" stroke-width="1.5"
+    <circle 
+      :cx="stages.xAttackEnd" :cy="yTop" :r="HANDLE_RADIUS" 
+      fill="var(--playhead)" :fill-opacity="hovering === 'attack' ? 1 : 0.5"
+      stroke="var(--playhead)" stroke-width="1.5"
       @mousedown="startDrag($event, 'attack')" @pointerenter="hovering = 'attack'" @pointerleave="hovering = null"
     />
-    <circle :cx="stages.xDecayEnd" :cy="ySustainLevel" :r="2" :fill="hovering === 'decay' ? 'var(--playhead)' : 'rgba(74,222,128,0.5)'" stroke="var(--playhead)" stroke-width="1.5"
+
+    <circle
+      :cx="stages.xDecayEnd" :cy="ySustainLevel" :r="HANDLE_RADIUS" 
+      fill="var(--playhead)" :fill-opacity="hovering === 'decay' ? 1 : 0.5"
+      stroke="var(--playhead)" stroke-width="1.5"
       @mousedown="startDrag($event, 'decay')" @pointerenter="hovering = 'decay'" @pointerleave="hovering = null"
     />
-    <circle :cx="stages.xReleaseEnd" :cy="yBottom" :r="2" :fill="hovering === 'release' ? 'var(--playhead)' : 'rgba(74,222,128,0.5)'" stroke="var(--playhead)" stroke-width="1.5"
+
+    <circle 
+      :cx="stages.xReleaseEnd" :cy="yBottom" :r="HANDLE_RADIUS" 
+      fill="var(--playhead)" :fill-opacity="hovering === 'release' ? 1 : 0.5" 
+      stroke="var(--playhead)" stroke-width="1.5"
       @mousedown="startDrag($event, 'release')" @pointerenter="hovering = 'release'" @pointerleave="hovering = null"
     />
   </svg>

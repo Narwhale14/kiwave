@@ -199,11 +199,19 @@ export class AudioEngine {
         mixerManager.clearMixers();
     }
 
-    loadChannel(saved: { id: string; name: string; synthId: string; synthNum: number; mixerTrack: number; volume: number; pan: number; muted: boolean; solo: boolean }) {
+    serializeChannelState(channelId: string): Record<string, unknown> | undefined {
+        const channel = channelManager.getChannel(channelId);
+        const synthMeta = this._channelSynths.get(channelId);
+        if(!channel || !synthMeta) return undefined;
+        return this._registry.get(synthMeta.synthId)?.serializeState(channel.instrument);
+    }
+
+    loadChannel(saved: { id: string; name: string; synthId: string; synthNum: number; synthState?: Record<string, unknown>; mixerTrack: number; volume: number; pan: number; muted: boolean; solo: boolean }) {
         const entry = this._registry.get(saved.synthId);
         if(!entry) return;
 
         const instrument = entry.factory(this._audioContext);
+        if(saved.synthState) entry.deserializeState(instrument, saved.synthState);
         channelManager.addChannelWithId(instrument, saved.id, saved.name);
         this._channelSynths.set(saved.id, { synthId: saved.synthId, num: saved.synthNum });
         this._audioGraph.addPannerNode(saved.id, instrument.getOutputNode(), saved.mixerTrack);

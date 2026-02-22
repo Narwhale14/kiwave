@@ -4,6 +4,8 @@ export interface SynthEntry {
     id: string;
     displayName: string;
     factory: (ctx: AudioContext) => BaseSynth;
+    serializeState: (synth: BaseSynth) => Record<string, unknown>;
+    deserializeState: (synth: BaseSynth, state: Record<string, unknown>) => void;
 }
 
 export interface BaseSynth {
@@ -21,6 +23,4 @@ export interface BaseSynth {
     killAll(): void;
     dispose(): void;
     resume(): void;
-    getState(): unknown;
-    setState(state: unknown): void;
 }

@@ -14,8 +14,8 @@ const SAMPLE_RATE = 44100;
 
 const viewWidth = 200;
 const viewHeight = 68;
-const paddingX = 6;
-const paddingTop = 6;
+const paddingX = 5;
+const paddingTop = 5;
 const paddingBottom = 14; // space for frequency labels
 const drawWidth = viewWidth  - paddingX * 2;
 const drawHeight = viewHeight - paddingTop - paddingBottom;
@@ -181,27 +181,19 @@ const gridFrequencyTicks = [
 <template>
   <svg :viewBox="`0 0 ${viewWidth} ${viewHeight}`" class="w-full select-none">
     <!-- Background -->
-    <rect :x="paddingX" :y="paddingTop" :width="drawWidth" :height="drawHeight" fill="rgba(0,0,0,0.3)" rx="2"/>
+    <rect :x="paddingX" :y="paddingTop" :width="drawWidth" :height="drawHeight" fill="var(--step-10)" rx="2"/>
 
     <!-- 0 dB reference line -->
-    <line :x1="paddingX" :y1="yZeroDecibels" :x2="paddingX + drawWidth" :y2="yZeroDecibels" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <line :x1="paddingX" :y1="yZeroDecibels" :x2="paddingX + drawWidth" :y2="yZeroDecibels" class="graph-marker-bright" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <path :d="paths.fill" class="envelope-fill"/>
 
-    <!-- fill area -->
-    <path :d="paths.fill" fill="rgba(34,197,94,0.1)"/>
+    <path :d="paths.curve" stroke="var(--playhead)" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
+    <line :x1="cutoffFrequencyX" :y1="paddingTop" :x2="cutoffFrequencyX" :y2="yResponseBottom" class="graph-marker-green" stroke-width="1.5" stroke-dasharray="2,2"/>
 
-    <!-- frequency response curve -->
-    <path :d="paths.curve" stroke="#4ade80" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
-
-    <!-- cutoff frequency marker -->
-    <line :x1="cutoffFrequencyX" :y1="paddingTop" :x2="cutoffFrequencyX" :y2="yResponseBottom" stroke="rgba(74,222,128,0.35)" stroke-width="1.5" stroke-dasharray="2,2"/>
-
-    <!-- frequency tick labels -->
     <g v-for="tick in gridFrequencyTicks" :key="tick.frequency">
-      <line :x1="freqToX(tick.frequency)" :y1="paddingTop" :x2="freqToX(tick.frequency)" :y2="yResponseBottom" stroke="rgba(255,255,255,0.05)" stroke-width="1.5"/>
-      <line :x1="freqToX(tick.frequency)" :y1="yResponseBottom" :x2="freqToX(tick.frequency)" :y2="yResponseBottom + 2" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
-      <text :x="freqToX(tick.frequency)" :y="yLabelBaseline" font-size="4.5" fill="rgba(255,255,255,0.25)" text-anchor="middle" font-family="monospace">
-        {{ tick.label }}
-      </text>
+      <line :x1="freqToX(tick.frequency)" :y1="paddingTop" :x2="freqToX(tick.frequency)" :y2="yResponseBottom" class="graph-marker-light" stroke-width="1.5"/>
+      <line :x1="freqToX(tick.frequency)" :y1="yResponseBottom" :x2="freqToX(tick.frequency)" :y2="yResponseBottom + 2" stroke="var(--step-15)" stroke-width="1.5"/>
+      <text :x="freqToX(tick.frequency)" :y="yLabelBaseline" font-size="4.5" fill="rgba(255,255,255,0.25)" text-anchor="middle" font-family="monospace">{{ tick.label }}</text>
     </g>
   </svg>
 </template>
