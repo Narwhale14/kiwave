@@ -73,7 +73,7 @@ const clipPreviews = computed(() => {
   return map;
 });
 
-const trackHeight = 75;
+const trackHeight = 65;
 const colWidth = ref(80);
 const beatsPerBar = 4;
 const numTracks = 20;
@@ -202,27 +202,54 @@ function handleKeyDown(event: KeyboardEvent) {
   const target = event.target as HTMLElement;
   if(['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
 
-  if(event.code === 'Space') {
-    event.preventDefault();
+  const element = arrangementContainer.value;
+  if(!element) return;
 
-    if(playbackMode.value === 'arrangement' && !engine.scheduler.isPlaying) {
-      recompileArrangement();
-    }
+  const stepSize = colWidth.value / 2;
+  const multiplier = event.shiftKey ? 4 : 1;
 
-    engine.scheduler.toggle();
-    return;
-  }
+  switch(event.key) {
+    case 'ArrowUp':
+      event.preventDefault();
+      element.scrollTop -= trackHeight * multiplier;
+      break;
+    case 'ArrowDown':
+      event.preventDefault();
+      element.scrollTop += trackHeight * multiplier;
+      break;
+    case 'ArrowLeft':
+      event.preventDefault();
+      element.scrollLeft -= stepSize * multiplier;
+      break;
+    case 'ArrowRight':
+      event.preventDefault();
+      element.scrollLeft += stepSize * multiplier;
+      break;
+    case ' ':
+      event.preventDefault();
+      if(playbackMode.value === 'arrangement' && !engine.scheduler.isPlaying) {
+        recompileArrangement();
+      }
 
-  if(event.code === 'Enter') {
-    event.preventDefault();
-    engine.scheduler.seek(engine.scheduler.loopStart);
-    return;
-  }
-
-  if(event.code === 'Escape') {
-    event.preventDefault();
-    state.selectedClipIds.clear();
-    return;
+      engine.scheduler.toggle();
+      break;
+    case 'Enter':
+      event.preventDefault();
+      engine.scheduler.seek(engine.scheduler.loopStart);
+      break;
+    case 'Escape':
+      event.preventDefault();
+      state.selectedClipIds.clear();
+      break;;
+    case 'p':
+      event.preventDefault();
+      if(!arrangementTools.some(tool => tool.id === 'place')) break;
+      activeTool.value = 'place';
+      break;
+    case 'e':
+      event.preventDefault();
+      if(!arrangementTools.some(tool => tool.id === 'select')) break;
+      activeTool.value = 'select';
   }
 }
 
@@ -251,13 +278,13 @@ function handlePointerMove(event: PointerEvent) {
 
       const anchorOldEnd = anchorOrig.startBeat + anchorOrig.duration;
       const anchorMinStart = Math.max(0, anchorOrig.startBeat - anchorOrig.offset);
-      const newAnchorStart = Math.max(anchorMinStart, Math.min(anchorOldEnd - 1 / snapDivision.value, snappedBeat));
+      const newAnchorStart = clamp(snappedBeat, anchorMinStart, anchorOldEnd - 1 / snapDivision.value);
       const delta = newAnchorStart - anchorOrig.startBeat;
 
       for(const [id, orig] of snapshot) {
         const oldEnd = orig.startBeat + orig.duration;
         const minStart = Math.max(0, orig.startBeat - orig.offset);
-        const newStart = Math.max(minStart, Math.min(oldEnd - 1 / snapDivision.value, orig.startBeat + delta));
+        const newStart = clamp(orig.startBeat + delta, minStart, oldEnd - 1 / snapDivision.value);
         const actualDelta = newStart - orig.startBeat;
 
         arrangement.updateClip(id, { startBeat: newStart, duration: orig.duration - actualDelta, offset: orig.offset + actualDelta });
@@ -270,7 +297,7 @@ function handlePointerMove(event: PointerEvent) {
 
       for(const [id, orig] of snapshot) {
         const newBeat = Math.max(0, dynamicSnap(orig.startBeat + deltaBeat, colWidth.value));
-        const newTrack = Math.max(0, Math.min(numTracks - 1, orig.track + deltaTrack));
+        const newTrack = clamp(deltaTrack, 0, numTracks - 1);
 
         arrangement.moveClip(id, newTrack, newBeat);
       }
@@ -313,14 +340,16 @@ function handleDrop(event: DragEvent) {
   recompileArrangement();
 }
 
-function onSelectionComplete(bounds: { x: number, y: number, width: number, height: number }) {
-  const startBeat = bounds.x / colWidth.value;
-  const endBeat = (bounds.x + bounds.width) / colWidth.value;
+function onSelectionComplete(payload: { bounds: { x: number, y: number, width: number, height: number }, shiftKey: boolean }) {
+  const startBeat = payload.bounds.x / colWidth.value;
+  const endBeat = (payload.bounds.x + payload.bounds.width) / colWidth.value;
 
-  const startTrack = Math.floor(bounds.y / trackHeight);
-  const endTrack = Math.floor((bounds.y + bounds.height) / trackHeight);
+  const startTrack = Math.floor(payload.bounds.y / trackHeight);
+  const endTrack = Math.floor((payload.bounds.y + payload.bounds.height) / trackHeight);
 
-  state.selectedClipIds.clear();
+  if(!payload.shiftKey) {
+    state.selectedClipIds.clear();
+  }
 
   for(const clip of arrangement.clips) {
     if(clip.track >= startTrack && clip.track <= endTrack &&
@@ -364,15 +393,26 @@ function handlePointerDown(event: PointerEvent) {
   }
 
   if(activeTool.value === 'select') {
+    // user selecting more notes
     if(event.button === 0) {
       if(event.shiftKey) {
-        if(state.selectedClipIds.has(clip.id)) state.selectedClipIds.delete(clip.id);
-        else state.selectedClipIds.add(clip.id);
+        // add/remove notes to select list
+        if(state.selectedClipIds.has(clip.id)) {
+          state.selectedClipIds.delete(clip.id);
+        } else {
+          state.selectedClipIds.add(clip.id);
+        }
       } else {
+        // replace selection
         state.selectedClipIds.clear();
         state.selectedClipIds.add(clip.id);
       }
+    } else {
+      if(!event.shiftKey) {
+        state.selectedClipIds.clear();
+      }
     }
+
     return;
   }
 
@@ -509,12 +549,17 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <Toolbar :tools="arrangementTools" v-model:activeTool="activeTool" :tool-size="18">
+          <!-- lil separator -->
+          <div class="w-0.5 h-5 bg-mix-30 mx-1"></div>
+
+          <Toolbar :tools="arrangementTools" v-model:activeTool="activeTool" :tool-size="18" class="gap-1.5 px-1.5">
             <template #default="{ tool }">
               <span v-if="tool.id === 'place'" class="pi pi-pencil text-sm" />
-              <span v-else-if="tool.id === 'select'" class="pi pi-stop text-sm" />
+              <span v-else-if="tool.id === 'select'" class="pi pi-expand text-sm" />
             </template>
           </Toolbar>
+
+          <div class="w-0.5 h-5 bg-mix-30 mx-1"></div>
 
           <div class="flex-1" />
 

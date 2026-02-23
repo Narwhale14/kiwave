@@ -2,12 +2,12 @@
 import { reactive, ref, onUnmounted } from 'vue';
 import { snapNearestGrid } from '../../util/snap';
 
+const dragShiftKey = ref(false);
+
 const emit = defineEmits<{
   complete: [{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
+    bounds: { x: number; y: number; width: number; height: number };
+    shiftKey: boolean ;
   }];
 }>();
 
@@ -42,6 +42,7 @@ function onPointerDown(event: PointerEvent) {
   const y = props.snapY ? snapNearestGrid(rawY, props.snapY) : rawY;
 
   isSelecting.value = true;
+  dragShiftKey.value = event.shiftKey;
 
   selection.startX = x;
   selection.startY = y;
@@ -86,10 +87,8 @@ function onPointerUp() {
   if(selection.width < 3 && selection.height < 3) return;
 
   emit('complete', {
-    x: selection.x,
-    y: selection.y,
-    width: selection.width,
-    height: selection.height
+    bounds: { x: selection.x, y: selection.y, width: selection.width, height: selection.height },
+    shiftKey: dragShiftKey.value
   });
 }
 

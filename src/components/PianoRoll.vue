@@ -263,7 +263,7 @@ function onPianoRollKeyDown(event: KeyboardEvent) {
   const stepSize = colWidth.value / 2;
   const multiplier = event.shiftKey ? 4 : 1;
 
-  switch(event.code) {
+  switch(event.key) {
     case 'ArrowUp':
       event.preventDefault();
       element.scrollTop -= rowHeight.value * multiplier;
@@ -305,16 +305,26 @@ function onPianoRollKeyDown(event: KeyboardEvent) {
       event.preventDefault();
       engine.scheduler.seek(engine.scheduler.loopStart);
       break;
+    case 'p':
+      if(!pianoRollTools.some(tool => tool.id === 'place')) break;
+      activeTool.value = 'place';
+      break;
+    case 'e':
+      if(!pianoRollTools.some(tool => tool.id === 'select')) break;
+      activeTool.value = 'select';
+      break;
   }
 }
 
-function onSelectionComplete(bounds: { x: number, y: number, width: number, height: number }) {
-  const startRow = Math.floor(bounds.y / rowHeight.value);
-  const endRow = Math.floor((bounds.y + bounds.height) / rowHeight.value);
-  const startCol = bounds.x / colWidth.value;
-  const endCol = (bounds.x + bounds.width) / colWidth.value;
+function onSelectionComplete(payload: { bounds: { x: number, y: number, width: number, height: number }, shiftKey: boolean }) {
+  const startRow = Math.floor(payload.bounds.y / rowHeight.value);
+  const endRow = Math.floor((payload.bounds.y + payload.bounds.height) / rowHeight.value);
+  const startCol = payload.bounds.x / colWidth.value;
+  const endCol = (payload.bounds.x + payload.bounds.width) / colWidth.value;
 
-  state.selectedNoteIds.clear();
+  if(!payload.shiftKey) {
+    state.selectedNoteIds.clear();
+  }
 
   for(const note of props.roll.getNoteData) {
     if(note.row >= startRow && note.row <= endRow && note.col < endCol && note.col + note.length > startCol) {
@@ -343,15 +353,26 @@ async function handlePointerDown(event: PointerEvent) {
   const hovered = props.roll.getHoveredNote({ row: cell.row, col: rawCol });
 
   if(activeTool.value === 'select') {
+    // user selecting more notes
     if(hovered?.note && event.button === 0) {
       if(event.shiftKey) {
-        if(state.selectedNoteIds.has(hovered.note.id)) state.selectedNoteIds.delete(hovered.note.id);
-        else state.selectedNoteIds.add(hovered.note.id);
+        // add/remove notes to select list
+        if(state.selectedNoteIds.has(hovered.note.id)) {
+          state.selectedNoteIds.delete(hovered.note.id);
+        } else {
+          state.selectedNoteIds.add(hovered.note.id);
+        }
       } else {
+        // replace selection
         state.selectedNoteIds.clear();
         state.selectedNoteIds.add(hovered.note.id);
       }
+    } else {
+      if(!event.shiftKey) {
+        state.selectedNoteIds.clear();
+      }
     }
+
     return;
   }
 
@@ -457,14 +478,14 @@ function handlePointerMove(event: PointerEvent) {
 
     if(type === 'resize') {
       const snappedCol = event.shiftKey ? rawCol : dynamicSnap(rawCol, colWidth.value);
-      const newAnchorLength = Math.max(0.125, snappedCol - anchor.col);
+      const newAnchorLength = Math.max(1 / snapDivision.value, snappedCol - anchor.col);
       const deltaLength = newAnchorLength - anchorOriginal.length;
 
       for(const [id, orig] of snapshot) {
         const note = props.roll.getNoteData.find(n => n.id === id);
 
         if(note) {
-          note.length = Math.max(0.125, orig.length + deltaLength);
+          note.length = Math.max(1 / snapDivision.value, orig.length + deltaLength);
           engine.scheduler.updateNote(id, { duration: note.length });
         }
       }
@@ -626,12 +647,17 @@ onBeforeUnmount(() => {
           </button>
           <Menu ref="channelMenu" :items="channelMenuItems" />
 
-          <Toolbar :tools="pianoRollTools" v-model:activeTool="activeTool" :tool-size="18">
+          <!-- lil separator -->
+          <div class="w-0.5 h-5 bg-mix-30 mx-1"></div>
+
+          <Toolbar :tools="pianoRollTools" v-model:activeTool="activeTool" :tool-size="18" class="gap-1.5 px-1.5">
             <template #default="{ tool }">
               <span v-if="tool.id === 'place'" class="pi pi-pencil text-sm" />
-              <span v-else-if="tool.id === 'select'" class="pi pi-stop text-sm" />
+              <span v-else-if="tool.id === 'select'" class="pi pi-expand text-sm" />
             </template>
           </Toolbar>
+
+          <div class="w-0.5 h-5 bg-mix-30 mx-1"></div>
 
           <button class="flex flex-row items-center gap-1 px-2 py-0.5 rounded hover:bg-mix-25 transition-colors focus:outline-none"
             title="Automation Lane"
