@@ -52,15 +52,19 @@ const dragWindow = inject<(event: PointerEvent) => void>('dragWindow');
 if(!windowElement) throw new Error('PianoRoll must be in a window');
 
 const state = reactive({
-  hoverCell: null as { row: number, col: number } | null,
+  selectedNoteIds: new Set<string>(),
   hoverNote: null as NoteBlock | null,
+  hoverCell: null as { row: number, col: number } | null,
+
   cachedLength: 1,
   cachedVelocity: 0.8,
-  
-  resizingNote: null as NoteBlock | null,
-  resizeInitialLength: 0,
-  draggingNote: null as NoteBlock | null,
-  dragStart: { row: 0, col: 0}
+
+  activeAction: null as {
+    type: 'drag' | 'resize',
+    anchor: NoteBlock,
+    snapshot: Map<string, { row: number, col: number, length: number, midi: number }>,
+    dragStart: { row: number, col: number }
+  } | null
 });
 
 const playhead = reactive({
@@ -68,9 +72,9 @@ const playhead = reactive({
   playing: false
 });
 
-const rowHeight = ref(15); // height of row (key)
-const colWidth = ref(80); // width of col (beat)
-const scrollX = ref(0); // pos of horizontal scroll
+const rowHeight = ref(15);
+const colWidth = ref(80);
+const scrollX = ref(0);
 const beatsPerBar = 4;
 
 const barCount = computed(() => Math.ceil(props.roll.getEndBeat(beatsPerBar) / beatsPerBar) + 7);
@@ -90,8 +94,8 @@ const laneMenuItems = computed(() => ALL_PARAMETERS.map(p => ({
   action: () => toggleLane(p.id)
 })));
 
-const activeTool = ref('');
-const pianoRollTools = [{ id: 'select', label: 'Select Tool' }];
+const activeTool = ref('place');
+const pianoRollTools = [{ id: 'place', label: 'Place Tool' }, { id: 'select', label: 'Select Tool' }];
 
 const activeAutomationLane = ref<string | null>(null);
 const activeLaneDef = computed(() => activeAutomationLane.value ? PARAMETER_MAP.get(activeAutomationLane.value) ?? null : null);
@@ -114,8 +118,25 @@ function toggleLane(parameterId: string) {
 
 function onAutomationUpdate(noteId: string, curve: AutomationCurve) {
   props.roll.updateCurve(noteId, curve);
-  const note = props.roll.getNoteData.find(n => n.id === noteId);
-  if(note) cachedCurves.set(curve.parameterId, { curve, noteMidi: note.midi });
+  const sourceNote = props.roll.getNoteData.find(n => n.id === noteId);
+  if(!sourceNote) return;
+
+  cachedCurves.set(curve.parameterId, { curve, noteMidi: sourceNote.midi });
+
+  if(state.selectedNoteIds.size <= 1) return;
+
+  const def = PARAMETER_MAP.get(curve.parameterId);
+  for(const note of props.roll.getNoteData) {
+    if(note.id === noteId || !state.selectedNoteIds.has(note.id) || !note.automation.has(curve.parameterId)) continue;
+    let nodes = curve.nodes;
+
+    if(def?.followNote && def.getDefaultNormalized) {
+      const delta = def.getDefaultNormalized(note.midi) - def.getDefaultNormalized(sourceNote.midi);
+      nodes = shiftNodeValues(nodes, delta);
+    }
+    
+    props.roll.updateCurve(note.id, { ...curve, nodes });
+  }
 }
 
 function cacheNoteState(note: NoteBlock) {
@@ -167,7 +188,11 @@ function stopNote(midi: number) {
 
 function updatePatternLoop() {
   if(playbackMode.value !== 'pattern') return;
-  engine.scheduler.setLoop(true, 0, props.roll.getEndBeat(beatsPerBar));
+
+  const newEnd = props.roll.getEndBeat(beatsPerBar);
+  if(newEnd !== engine.scheduler.loopEnd) {
+    engine.scheduler.setLoop(true, 0, newEnd);
+  }
 }
 
 function getCellFromPointer(event: PointerEvent) {
@@ -192,12 +217,11 @@ function onNativeScroll() {
   }
 }
 
-// for wheel keybinds
 function handleWheel(event: WheelEvent) {
   const element = pianoRollContainer.value;
   if(!element) return;
 
-  // VELOCITY EDIT (Click + Hover Note)
+  // velocity edit
   if(event.button === 0 && state.hoverNote && !activeAutomationLane.value) {
     event.preventDefault();
 
@@ -208,7 +232,7 @@ function handleWheel(event: WheelEvent) {
     return;
   }
 
-  // HORIZONTAL ZOOM (Ctrl + Wheel)
+  // horizontal zoom
   if(event.ctrlKey) {
     event.preventDefault();
   
@@ -256,10 +280,30 @@ function onPianoRollKeyDown(event: KeyboardEvent) {
       event.preventDefault();
       element.scrollLeft += stepSize * multiplier;
       break;
+    case 'Delete': {
+      event.preventDefault();
+      if(state.selectedNoteIds.size === 0) return;
+
+      state.selectedNoteIds.forEach(id => {
+      const index = props.roll.getNoteData.findIndex(note => note.id === id);
+        if(index !== -1) {
+          props.roll.deleteNote(index);
+          engine.scheduler?.removeNote(id);
+        }
+      });
+
+      state.selectedNoteIds.clear();
+      updatePatternLoop();
+      break;
+    }
     case 'Escape':
-      if(activeAutomationLane.value) {
-        activeAutomationLane.value = null;
-      }
+      event.preventDefault();
+      state.selectedNoteIds.clear();
+      if(activeAutomationLane.value) activeAutomationLane.value = null;
+      break;
+    case 'Enter':
+      event.preventDefault();
+      engine.scheduler.seek(engine.scheduler.loopStart);
       break;
   }
 }
@@ -267,13 +311,16 @@ function onPianoRollKeyDown(event: KeyboardEvent) {
 function onSelectionComplete(bounds: { x: number, y: number, width: number, height: number }) {
   const startRow = Math.floor(bounds.y / rowHeight.value);
   const endRow = Math.floor((bounds.y + bounds.height) / rowHeight.value);
+  const startCol = bounds.x / colWidth.value;
+  const endCol = (bounds.x + bounds.width) / colWidth.value;
 
-  const startCol = Math.floor(bounds.x / colWidth.value);
-  const endCol = Math.floor((bounds.x + bounds.width) / colWidth.value);
+  state.selectedNoteIds.clear();
 
-  props.roll._noteData.forEach(note => {
-    if((startCol < note.col && note.col < endCol) && (startRow < note.row && note.row < endRow)) console.log(note.id);
-  });
+  for(const note of props.roll.getNoteData) {
+    if(note.row >= startRow && note.row <= endRow && note.col < endCol && note.col + note.length > startCol) {
+      state.selectedNoteIds.add(note.id);
+    }
+  }
 }
 
 function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
@@ -285,169 +332,193 @@ function isNearRightEdge(event: PointerEvent, note: NoteBlock) {
   return Math.abs(pointerX - noteRightX) <= region;
 }
 
-function handlePointerMove(event: PointerEvent) {
-  if(activeLaneDef.value) return;
-  if(props.roll.isResizing() && state.resizingNote) {
-    const pointerX = event.clientX - workspaceContainer.value!.getBoundingClientRect().left;
-    const rawCol = pointerX / colWidth.value;
-    const snappedCol = event.shiftKey ? rawCol : dynamicSnap(rawCol, colWidth.value);
-    state.cachedLength = props.roll.resize(snappedCol);
+async function handlePointerDown(event: PointerEvent) {
+  if(activeAutomationLane.value || !workspaceContainer.value) return;
 
-    engine.scheduler.updateNote(state.resizingNote.id, {
-      duration: state.resizingNote.length
-    });
-
-    cursor.value = 'w-resize';
-    return;
-  }
-
+  const containerRect = workspaceContainer.value.getBoundingClientRect();
   const cell = getCellFromPointer(event);
   state.hoverCell = cell;
 
-  const rawCol = (event.clientX - workspaceContainer.value!.getBoundingClientRect().left) / colWidth.value;
+  const rawCol = (event.clientX - containerRect.left) / colWidth.value;
   const hovered = props.roll.getHoveredNote({ row: cell.row, col: rawCol });
-  state.hoverNote = hovered?.note ?? null;
 
-  if(hovered?.note && isNearRightEdge(event, hovered.note)) {
-    cursor.value = 'w-resize';
-  } else {
-    cursor.value = 'default';
-  }
-
-  if(state.draggingNote) {
-    const newCol = cell.col - state.dragStart.col;
-    const newRow = cell.row - state.dragStart.row;
-
-    const oldMidi = state.draggingNote.midi;
-    props.roll.move(state.draggingNote.id, newRow, newCol);
-    props.roll.followNoteMove(state.draggingNote.id, oldMidi, state.draggingNote.midi);
-    const noteInstrument = engine.channelManager.getChannel(state.draggingNote.channelId)?.instrument;
-    noteInstrument?.triggerRelease(state.draggingNote.id, noteInstrument.getAudioContext().currentTime);
-
-    const noteIndex = notes.length - 1 - newRow;
-    engine.scheduler.updateNote(state.draggingNote.id, {
-      startTime: Math.max(0, newCol),
-      pitch: notes[noteIndex]?.midi
-    });
-  }
-}
-
-// when user left/right clicks on the piano roll
-async function handlePointerDown(event: PointerEvent) {
-  if(!state.hoverCell) return;
-  if(activeAutomationLane.value) return; // note editing disabled while a lane is active
-
-  const rawCol = (event.clientX - workspaceContainer.value!.getBoundingClientRect().left) / colWidth.value;
-  const hovered = props.roll.getHoveredNote({ row: state.hoverCell.row, col: rawCol });
-
-  // right click delete
-  if(hovered?.note) {
-    if(event.button === 2) {
-      const noteToDelete = hovered.note;
-      props.roll.deleteNote(hovered.index);
-
-      if(engine.scheduler) {
-        engine.scheduler.removeNote(noteToDelete.id);
-        updatePatternLoop();
+  if(activeTool.value === 'select') {
+    if(hovered?.note && event.button === 0) {
+      if(event.shiftKey) {
+        if(state.selectedNoteIds.has(hovered.note.id)) state.selectedNoteIds.delete(hovered.note.id);
+        else state.selectedNoteIds.add(hovered.note.id);
+      } else {
+        state.selectedNoteIds.clear();
+        state.selectedNoteIds.add(hovered.note.id);
       }
     }
+    return;
+  }
 
-    // copy state on any left-click (click, drag, or resize)
-    if(event.button === 0) cacheNoteState(hovered.note);
+  // interacting with an existing note
+  if(hovered?.note) {
+    if(!state.selectedNoteIds.has(hovered.note.id)) {
+      if(!event.shiftKey) state.selectedNoteIds.clear();
+      state.selectedNoteIds.add(hovered.note.id);
+    }
 
-    // resize
-    if(isNearRightEdge(event, hovered.note)) {
-      state.resizingNote = hovered.note;
-      state.resizeInitialLength = hovered.note.length;
-      props.roll.startResize(hovered.note);
+    // delete note
+    if(event.button === 2) {
+      const noteToDeleteId = hovered.note.id;
+      
+      props.roll.deleteNote(hovered.index);
+      engine.scheduler?.removeNote(noteToDeleteId);
+      state.selectedNoteIds.delete(noteToDeleteId);
+      
+      updatePatternLoop();
       return;
     }
 
-    // drag
-    state.draggingNote = hovered.note;
-    state.dragStart = {
-      row: state.hoverCell.row - hovered.note.row,
-      col: state.hoverCell.col - hovered.note.col
-    }
+    // drag/resize note
+    if(event.button === 0) {
+      cacheNoteState(hovered.note);
 
-    return;
-  }
-
-  // place
-  if(event.button === 0 && !hovered?.note) {
-    const noteId = generateNoteId();
-    const midi = props.roll.addNote(state.hoverCell, noteId, state.cachedLength, state.cachedVelocity, selectedChannelId.value);
-
-    // add note to scheduler
-    if(engine.scheduler) {
-      const noteBlocks = props.roll.getNoteData;
-      const newNote = noteBlocks[noteBlocks.length - 1];
-
-      if(newNote) {
-        // apply cached curves, scaling beats to new length and shifting values to new note's pitch
-        for(const [parameterId, { curve: cachedCurve, noteMidi: cachedMidi }] of cachedCurves) {
-          props.roll.activateLane(newNote.id, parameterId);
-          const originalLength = cachedCurve.nodes[cachedCurve.nodes.length - 1]!.beat;
-          const scale = originalLength > 0 ? newNote.length / originalLength : 1;
-          let nodes = cachedCurve.nodes.map(n => ({ ...n, beat: n.beat * scale }));
-          const def = PARAMETER_MAP.get(parameterId);
-
-          if(def?.followNote && def.getDefaultNormalized) {
-            const delta = def.getDefaultNormalized(newNote.midi) - def.getDefaultNormalized(cachedMidi);
-            nodes = shiftNodeValues(nodes, delta);
-          }
-          
-          props.roll.updateCurve(newNote.id, { ...cachedCurve, nodes });
-        }
-
-        engine.scheduler.addNote({
-          id: newNote.id,
-          pitch: newNote.midi,
-          startTime: newNote.col,
-          duration: newNote.length,
-          velocity: newNote.velocity,
-          channel: newNote.channelId,
-          automation: newNote.automation,
-        });
-
-        state.draggingNote = newNote;
-        state.dragStart = {
-          row: state.hoverCell.row - newNote.row,
-          col: state.hoverCell.col - newNote.col
+      const snapshot = new Map<string, { row: number, col: number, length: number, midi: number }>();
+      for(const note of props.roll.getNoteData) {
+        if(state.selectedNoteIds.has(note.id)) {
+          snapshot.set(note.id, { row: note.row, col: note.col, length: note.length, midi: note.midi });
         }
       }
 
+      const type = isNearRightEdge(event, hovered.note) ? 'resize' : 'drag';
+      state.activeAction = { type, anchor: hovered.note, snapshot, dragStart: cell };
+      if(type === 'resize') props.roll.startResize(hovered.note);
+    }
+    return;
+  }
+
+  // placing
+  if(event.button === 0 && !hovered?.note) {
+    state.selectedNoteIds.clear();
+    
+    const noteId = generateNoteId();
+    const midi = props.roll.addNote(cell, noteId, state.cachedLength, state.cachedVelocity, selectedChannelId.value);
+
+    const noteBlocks = props.roll.getNoteData;
+    const newNote = noteBlocks[noteBlocks.length - 1];
+
+    if(newNote && engine.scheduler) {
+      for(const [parameterId, { curve: cachedCurve, noteMidi: cachedMidi }] of cachedCurves) {
+        props.roll.activateLane(newNote.id, parameterId);
+        const originalLength = cachedCurve.nodes[cachedCurve.nodes.length - 1]!.beat;
+        const scale = originalLength > 0 ? newNote.length / originalLength : 1;
+        let nodes = cachedCurve.nodes.map(n => ({ ...n, beat: n.beat * scale }));
+        const def = PARAMETER_MAP.get(parameterId);
+
+        if(def?.followNote && def.getDefaultNormalized) {
+          const delta = def.getDefaultNormalized(newNote.midi) - def.getDefaultNormalized(cachedMidi);
+          nodes = shiftNodeValues(nodes, delta);
+        }
+        
+        props.roll.updateCurve(newNote.id, { ...cachedCurve, nodes });
+      }
+      
+      engine.scheduler.addNote({
+        id: newNote.id,
+        pitch: newNote.midi,
+        startTime: newNote.col,
+        duration: newNote.length,
+        velocity: newNote.velocity,
+        channel: newNote.channelId,
+        automation: newNote.automation,
+      });
+
+      state.selectedNoteIds.add(newNote.id);
+
+      const snapshot = new Map<string, { row: number, col: number, length: number, midi: number }>();
+      snapshot.set(newNote.id, { row: newNote.row, col: newNote.col, length: newNote.length, midi: newNote.midi });
+      
+      state.activeAction = { type: 'drag', anchor: newNote, snapshot, dragStart: cell };
       updatePatternLoop();
     }
 
-    // preview note
     await playNote(midi);
     setTimeout(() => stopNote(midi), 150);
-
-    return;
   }
 }
 
-function finalizeEdit() {
-  if(props.roll.isResizing() && state.resizingNote) {
-    const note = state.resizingNote;
-    const oldLength = state.resizeInitialLength;
-    props.roll.stopResize();
+function handlePointerMove(event: PointerEvent) {
+  if(activeLaneDef.value || !workspaceContainer.value) return;
+  const containerRect = workspaceContainer.value.getBoundingClientRect();
+  
+  const cell = getCellFromPointer(event);
+  state.hoverCell = cell;
+  const rawCol = (event.clientX - containerRect.left) / colWidth.value;
 
-    if(note.automation.size > 0 && note.length !== oldLength) {
-      props.roll.updateAutomationForResize(note.id, oldLength, note.length);
+  // execute action
+  if(state.activeAction) {
+    const { type, anchor, snapshot } = state.activeAction;
+    const anchorOriginal = snapshot.get(anchor.id)!;
+
+    if(type === 'resize') {
+      const snappedCol = event.shiftKey ? rawCol : dynamicSnap(rawCol, colWidth.value);
+      const newAnchorLength = Math.max(0.125, snappedCol - anchor.col);
+      const deltaLength = newAnchorLength - anchorOriginal.length;
+
+      for(const [id, orig] of snapshot) {
+        const note = props.roll.getNoteData.find(n => n.id === id);
+
+        if(note) {
+          note.length = Math.max(0.125, orig.length + deltaLength);
+          engine.scheduler.updateNote(id, { duration: note.length });
+        }
+      }
+
+      state.cachedLength = newAnchorLength;
+      cursor.value = 'w-resize';
+    } else {
+      const { dragStart } = state.activeAction;
+      const deltaRow = cell.row - dragStart.row;
+      const deltaCol = cell.col - dragStart.col;
+
+      for(const [id, orig] of snapshot) {
+        const newRow = orig.row + deltaRow;
+        const newCol = Math.max(0, orig.col + deltaCol);
+        props.roll.move(id, newRow, newCol);
+
+        const note = props.roll.getNoteData.find(n => n.id === id);
+        if(note) props.roll.followNoteMove(id, orig.midi, note.midi);
+      }
+    }
+    return;
+  }
+
+  const hovered = props.roll.getHoveredNote({ row: cell.row, col: rawCol });
+  state.hoverNote = hovered?.note ?? null;
+  cursor.value = (hovered?.note && isNearRightEdge(event, hovered.note)) ? 'w-resize' : 'default';
+}
+
+function finalizeEdit() {
+  if(state.activeAction) {
+    const { type, snapshot } = state.activeAction;
+
+    if(type === 'resize') {
+      props.roll.stopResize();
+
+      for(const [id, orig] of snapshot) {
+        const note = props.roll.getNoteData.find(n => n.id === id);
+        if(note && note.automation.size > 0 && note.length !== orig.length) {
+          props.roll.updateAutomationForResize(id, orig.length, note.length);
+        }
+      }
+    } else {
+      for(const [id] of snapshot) {
+        const note = props.roll.getNoteData.find(n => n.id === id);
+        if(note) engine.scheduler.updateNote(id, { startTime: note.col, pitch: note.midi });
+      }
+
+      engine.scheduler.resetSchedule();
     }
 
     updatePatternLoop();
-    state.resizingNote = null;
   }
 
-  if(state.draggingNote) {
-    updatePatternLoop();
-    state.draggingNote = null;
-    state.dragStart = { row: 0, col: 0 };
-  }
-
+  state.activeAction = null;
   state.hoverCell = null;
   state.hoverNote = null;
   cursor.value = 'default';
@@ -455,10 +526,6 @@ function finalizeEdit() {
 
 function handleViewUpdate({ start, width }: { start: number, width: number }) {
   if(!pianoRollContainer.value) return;
-
-  // start and width are the current position and width percent of the slider's track
-  // start = 0 means the slider is at the far left
-  // width = 1 means the width is 100% of the slider's track
 
   colWidth.value = pianoRollContainer.value.clientWidth / (width * barCount.value * beatsPerBar);
   pianoRollContainer.value.scrollLeft = start * totalWidth.value;
@@ -560,7 +627,10 @@ onBeforeUnmount(() => {
           <Menu ref="channelMenu" :items="channelMenuItems" />
 
           <Toolbar :tools="pianoRollTools" v-model:activeTool="activeTool" :tool-size="18">
-            <span class="pi pi-chart-bar text-sm"></span>
+            <template #default="{ tool }">
+              <span v-if="tool.id === 'place'" class="pi pi-pencil text-sm" />
+              <span v-else-if="tool.id === 'select'" class="pi pi-stop text-sm" />
+            </template>
           </Toolbar>
 
           <button class="flex flex-row items-center gap-1 px-2 py-0.5 rounded hover:bg-mix-25 transition-colors focus:outline-none"
@@ -672,7 +742,7 @@ onBeforeUnmount(() => {
               <div v-if="block.velocity >= VELOCITY_SNAP + 1e-4" class="absolute bottom-0 left-0 w-full note-color" :style="{ height: `${block.velocity * 100}%` }" />
               
               <!-- velocity label on hover -->
-              <div v-if="state.hoverNote?.id === block.id"
+              <div v-if="state.hoverNote?.id === block.id && activeTool === 'place'"
                 class="absolute inset-y-0 left-0 flex items-center pl-1 z-10">
                 <span class="text-white font-mono leading-none select-none" style="font-size: 9px;">
                   {{ Math.round(block.velocity * 100) }}%
@@ -680,15 +750,11 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <!-- overlay layer: not clipped, for automation overlays -->
-            <div class="absolute"
-              :style="{
-                top: `${block.row * rowHeight}px`,
-                left: `${block.col * colWidth}px`,
-                width: `${block.length * colWidth}px`,
-                height: `${rowHeight}px`
-              }"
-            >
+            <!-- overlay layer -->
+            <div class="absolute" :style="{ top: `${block.row * rowHeight}px`, left: `${block.col * colWidth}px`, width: `${block.length * colWidth}px`, height: `${rowHeight}px` }">
+              <!-- selection outline -->
+              <div v-if="state.selectedNoteIds.has(block.id) && !activeLaneDef" class="absolute inset-0 border-2 rounded-sm note-outline-color opacity-60 pointer-events-none" />
+
               <NoteAutomationOverlay v-if="activeLaneDef && block.automation.has(activeLaneDef.id)" v-bind="getOverlayLayout(block.row)"
                 :curve="block.automation.get(activeLaneDef.id)!"
                 :noteLength="block.length"
@@ -717,7 +783,7 @@ onBeforeUnmount(() => {
           </template>
 
           <!-- hover cell -->
-          <div v-if="state.hoverCell && !state.hoverNote && !activeLaneDef" class="absolute border-2 opacity-50 pointer-events-none rounded-sm note-outline-color"
+          <div v-if="state.hoverCell && !state.hoverNote && !activeLaneDef && activeTool === 'place'" class="absolute border-2 opacity-50 pointer-events-none rounded-sm note-outline-color"
             :style="{
               top: `${state.hoverCell.row * rowHeight}px`,
               left: `${state.hoverCell.col * colWidth}px`,

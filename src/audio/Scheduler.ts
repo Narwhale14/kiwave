@@ -309,21 +309,16 @@ export class Scheduler {
         if(start !== undefined) this._loopStart = Math.max(0, start);
         if(end !== undefined) this._loopEnd = Math.max(this._loopStart, end);
 
-        if(wasPlaying && this._loopEnabled) {
-            if(currentBeat >= this.loopEnd || currentBeat < this._loopStart) {
-                this.startTime = this.audioContext.currentTime;
-                this._pauseTime = this.loopStart;
+        if(wasPlaying && this._loopEnabled && (currentBeat >= this.loopEnd || currentBeat < this._loopStart)) {
+            this.startTime = this.audioContext.currentTime;
+            this._pauseTime = this.loopStart;
 
-                this.panicAll();
-                this.scheduledNoteOns.clear();
-                this.scheduledNoteOffs.clear();
+            this.panicAll();
+            this.scheduledNoteOns.clear();
+            this.scheduledNoteOffs.clear();
 
-                if(this.playheadCallback) this.playheadCallback(this.loopStart);
-                this._schedulerTick();
-            } else {
-                this.startTime = this.audioContext.currentTime;
-                this._pauseTime = currentBeat;
-            }
+            if(this.playheadCallback) this.playheadCallback(this.loopStart);
+            this._schedulerTick();
         }
     }
 

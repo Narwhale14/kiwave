@@ -64,17 +64,19 @@ export class ArrangementCompiler {
 
         for(const note of patternNotes) {
             const noteStartInPattern = note.col - clip.offset;
-            if(noteStartInPattern < 0 || noteStartInPattern >= clip.duration) continue;
+            const noteEndInPattern = noteStartInPattern + note.length;
 
-            const noteStartInArrangement = clip.startBeat + noteStartInPattern;
-            const noteDuration = Math.min(note.length, clip.duration - noteStartInPattern);
-            if(noteDuration <= 0) continue;
+            if(noteEndInPattern <= 0 || noteStartInPattern >= clip.duration) continue;
+
+            const clampedStart = Math.max(0, noteStartInPattern);
+            const clampedDuration = Math.min(clip.duration, noteEndInPattern) - clampedStart;
+            if(clampedDuration <= 0) continue;
 
             schedulerNotes.push({
                 id: `${clip.id}-${note.id}`,
                 pitch: note.midi,
-                startTime: noteStartInArrangement,
-                duration: noteDuration,
+                startTime: clip.startBeat + clampedStart,
+                duration: clampedDuration,
                 velocity: note.velocity,
                 channel: note.channelId,
                 automation: note.automation,

@@ -13,7 +13,7 @@ export interface Channel {
     // color: string; // visually
 }
 
-class ChannelManager {
+export class ChannelManager {
     private channels: Channel[] = reactive([]);
     private soloChannelId: string | null = null;
     private nextId = 1;

@@ -8,6 +8,8 @@ import { arrangement } from '../audio/Arrangement';
 import type { ArrangementClip, ArrangementTrack } from '../audio/Arrangement';
 import ConfirmationModal from './modals/ConfirmationModal.vue';
 import ZoomScrollBar from './controls/ZoomScrollBar.vue';
+import Toolbar from './controls/Toolbar.vue';
+import SelectionOverlay from './overlays/SelectionOverlay.vue';
 import { MAX_ZOOM_FACTOR } from '../constants/defaults';
 import { clamp } from '../util/math';
 import Timeline from './meters/Timeline.vue';
@@ -27,16 +29,21 @@ const arrangementContainer = ref<HTMLDivElement | null>(null);
 const workspaceContainer = ref<HTMLDivElement | null>(null);
 
 const cursor = ref('default');
-const interacting = ref(false);
-const selectedClipId = ref<string | null>(null);
+
 const state = reactive({
-  draggingClip: null as ArrangementClip | null,
-  resizingClip: null as ArrangementClip | null,
-  dragStart: { beat: 0, track: 0 },
-  initialBeat: 0,
-  initialTrack: 0,
-  initialDuration: 0,
+  hoverClip: null as ArrangementClip | null,
+  selectedClipIds: new Set<string>(),
+
+  activeAction: null as {
+    type: 'drag' | 'resize-right' | 'resize-left',
+    anchor: ArrangementClip,
+    snapshot: Map<string, { startBeat: number, track: number, duration: number, offset: number }>,
+    dragStart: { beat: number, track: number }
+  } | null
 });
+
+const activeTool = ref('place');
+const arrangementTools = [{ id: 'place', label: 'Place/Edit' }, { id: 'select', label: 'Select' }];
 
 const clipPreviews = computed(() => {
   const map = new Map<string, ClipPreview>();
@@ -90,34 +97,42 @@ function isNearRightEdge(x: number, clip: ArrangementClip): boolean {
   return Math.abs(x - (clip.startBeat + clip.duration) * colWidth.value) <= 12;
 }
 
+function isNearLeftEdge(x: number, clip: ArrangementClip): boolean {
+  return Math.abs(x - clip.startBeat * colWidth.value) <= 12;
+}
+
 function finalizeEdit() {
-  if(state.draggingClip || state.resizingClip) {
-    const clip = state.draggingClip || state.resizingClip;
+  if(state.activeAction) {
+    const { snapshot } = state.activeAction;
 
-    const changed = state.draggingClip
-      ? state.draggingClip.startBeat !== state.initialBeat || state.draggingClip.track !== state.initialTrack
-      : state.resizingClip
-        ? state.resizingClip.duration !== state.initialDuration
-        : false;
+    let changed = false;
+    let nearPlayhead = false;
+    const beat = engine.scheduler.getCurrentBeat();
+    const margin = 4;
 
-    state.draggingClip = null;
-    state.resizingClip = null;
-    state.dragStart = { beat: 0, track: 0 };
-    interacting.value = false;
-    if(changed && clip && playbackMode.value === 'arrangement') {
-      engine.compiler.invalidateClip(clip.id);
-      recompileArrangement();
+    for(const [id, orig] of snapshot) {
+      const clip = arrangement.clips.find(c => c.id === id);
+      if(!clip) continue;
 
-      if(engine.scheduler.isPlaying) {
-        const beat = engine.scheduler.getCurrentBeat();
-        const margin = 4; // beats - covers lookahead + snap granularity
-        const oldNear = state.initialBeat < beat + margin && state.initialBeat + clip.duration > beat - margin;
+      if(clip.startBeat !== orig.startBeat || clip.track !== orig.track || clip.duration !== orig.duration) {
+        changed = true;
+        engine.compiler.invalidateClip(id);
+
+        const oldNear = orig.startBeat < beat + margin && orig.startBeat + orig.duration > beat - margin;
         const newNear = clip.startBeat < beat + margin && clip.startBeat + clip.duration > beat - margin;
-        if(oldNear || newNear) engine.scheduler.resetSchedule();
+
+        if(oldNear || newNear) nearPlayhead = true;
       }
+    }
+
+    if(changed && playbackMode.value === 'arrangement') {
+      recompileArrangement();
+      if(engine.scheduler.isPlaying && nearPlayhead) engine.scheduler.resetSchedule();
     }
   }
 
+  state.activeAction = null;
+  state.hoverClip = null;
   cursor.value = 'default';
 }
 
@@ -193,96 +208,147 @@ function handleKeyDown(event: KeyboardEvent) {
     if(playbackMode.value === 'arrangement' && !engine.scheduler.isPlaying) {
       recompileArrangement();
     }
-    
+
     engine.scheduler.toggle();
     return;
   }
 
   if(event.code === 'Enter') {
     event.preventDefault();
-    engine.scheduler.stop();
+    engine.scheduler.seek(engine.scheduler.loopStart);
+    return;
+  }
+
+  if(event.code === 'Escape') {
+    event.preventDefault();
+    state.selectedClipIds.clear();
     return;
   }
 }
 
 function handlePointerMove(event: PointerEvent) {
-  if(!arrangementContainer.value) return;
+  if(!workspaceContainer.value) return;
   const { x, y } = getWorkspacePos(event);
   const rawBeat = x / colWidth.value;
   const track = Math.floor(y / trackHeight);
 
-  if(state.resizingClip) {
-    const newDuration = Math.max(1 / snapDivision.value, dynamicSnapNearest(rawBeat, colWidth.value) - state.resizingClip.startBeat);
-    arrangement.resizeClip(state.resizingClip.id, newDuration);
-    cursor.value = 'w-resize';
-    return;
-  }
+  if(state.activeAction) {
+    const { type, anchor, snapshot, dragStart } = state.activeAction;
+    const anchorOrig = snapshot.get(anchor.id)!;
 
-  if(state.draggingClip) {
-    const newBeat = Math.max(0, dynamicSnap(rawBeat - state.dragStart.beat, colWidth.value));
-    const newTrack = Math.max(0, Math.min(numTracks - 1, track - state.dragStart.track));
-    arrangement.moveClip(state.draggingClip.id, newTrack, newBeat);
-    cursor.value = 'grabbing';
+    if(type === 'resize-right') {
+      const snappedBeat = dynamicSnapNearest(rawBeat, colWidth.value);
+      const newAnchorDuration = Math.max(1 / snapDivision.value, snappedBeat - anchorOrig.startBeat);
+      const deltaLength = newAnchorDuration - anchorOrig.duration;
+
+      for(const [id, orig] of snapshot) {
+        arrangement.resizeClip(id, Math.max(1 / snapDivision.value, orig.duration + deltaLength), orig.offset);
+      }
+
+      cursor.value = 'w-resize';
+    } else if(type === 'resize-left') {
+      const snappedBeat = dynamicSnapNearest(rawBeat, colWidth.value);
+
+      const anchorOldEnd = anchorOrig.startBeat + anchorOrig.duration;
+      const anchorMinStart = Math.max(0, anchorOrig.startBeat - anchorOrig.offset);
+      const newAnchorStart = Math.max(anchorMinStart, Math.min(anchorOldEnd - 1 / snapDivision.value, snappedBeat));
+      const delta = newAnchorStart - anchorOrig.startBeat;
+
+      for(const [id, orig] of snapshot) {
+        const oldEnd = orig.startBeat + orig.duration;
+        const minStart = Math.max(0, orig.startBeat - orig.offset);
+        const newStart = Math.max(minStart, Math.min(oldEnd - 1 / snapDivision.value, orig.startBeat + delta));
+        const actualDelta = newStart - orig.startBeat;
+
+        arrangement.updateClip(id, { startBeat: newStart, duration: orig.duration - actualDelta, offset: orig.offset + actualDelta });
+      }
+
+      cursor.value = 'w-resize';
+    } else {
+      const deltaBeat = rawBeat - dragStart.beat;
+      const deltaTrack = track - dragStart.track;
+
+      for(const [id, orig] of snapshot) {
+        const newBeat = Math.max(0, dynamicSnap(orig.startBeat + deltaBeat, colWidth.value));
+        const newTrack = Math.max(0, Math.min(numTracks - 1, orig.track + deltaTrack));
+
+        arrangement.moveClip(id, newTrack, newBeat);
+      }
+
+      cursor.value = 'grabbing';
+    }
     return;
   }
 
   const hovered = arrangement.getClipAt(track, rawBeat);
-  cursor.value = hovered ? (isNearRightEdge(x, hovered) ? 'w-resize' : 'grab') : 'default';
+  state.hoverClip = hovered;
+
+  if(activeTool.value === 'select' || !hovered) {
+    cursor.value = 'default';
+  } else if(isNearLeftEdge(x, hovered) || isNearRightEdge(x, hovered)) {
+    cursor.value = 'w-resize';
+  } else {
+    cursor.value = 'grab';
+  }
 }
 
 function handleDragOver(event: DragEvent) {
   event.preventDefault();
-  if(event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'copy';
-  }
+  if(event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
 }
 
 function handleDrop(event: DragEvent) {
   event.preventDefault();
-
   const patternId = event.dataTransfer?.getData('pattern-id');
   if(!patternId) return;
 
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
-
-  const startBeat = dynamicSnap(x / colWidth.value, colWidth.value);
-  const track = Math.floor(y / trackHeight);
+  const startBeat = dynamicSnap((event.clientX - rect.left) / colWidth.value, colWidth.value);
+  const track = Math.floor((event.clientY - rect.top) / trackHeight);
 
   const pattern = patterns.value.find(p => p.id === patternId);
   if(!pattern) return;
 
-  const duration = pattern.roll.getEndBeat(beatsPerBar);
-
-  arrangement.addClip(patternId, track, startBeat, duration, 0);
+  arrangement.addClip(patternId, track, startBeat, pattern.roll.getEndBeat(beatsPerBar), 0);
   recompileArrangement();
 }
 
-function onAddKeyDown(event: KeyboardEvent) {
-  if(event.key === 'Enter') {
-    event.preventDefault();
-    createTrack();
+function onSelectionComplete(bounds: { x: number, y: number, width: number, height: number }) {
+  const startBeat = bounds.x / colWidth.value;
+  const endBeat = (bounds.x + bounds.width) / colWidth.value;
+
+  const startTrack = Math.floor(bounds.y / trackHeight);
+  const endTrack = Math.floor((bounds.y + bounds.height) / trackHeight);
+
+  state.selectedClipIds.clear();
+
+  for(const clip of arrangement.clips) {
+    if(clip.track >= startTrack && clip.track <= endTrack &&
+       clip.startBeat < endBeat && clip.startBeat + clip.duration > startBeat) {
+      state.selectedClipIds.add(clip.id);
+    }
   }
+}
+
+function onAddKeyDown(event: KeyboardEvent) {
+  if(event.key === 'Enter') { event.preventDefault(); createTrack(); }
 }
 
 function handleDoubleClick(event: MouseEvent) {
   if(!workspaceContainer.value) return;
   const rect = workspaceContainer.value.getBoundingClientRect();
   const rawBeat = (event.clientX - rect.left) / colWidth.value;
-  const track = Math.floor((event.clientY - rect.top) / trackHeight);
 
+  const track = Math.floor((event.clientY - rect.top) / trackHeight);
   const clip = arrangement.getClipAt(track, rawBeat);
   if(!clip) return;
 
   const pattern = patterns.value.find(p => p.id === clip.patternId);
-  if(!pattern) return;
-  openPattern(pattern.num);
+  if(pattern) openPattern(pattern.num);
 }
 
 function handlePointerDown(event: PointerEvent) {
-  if(event.detail === 2) return;
-  if(!arrangementContainer.value) return;
+  if(event.detail === 2 || !workspaceContainer.value) return;
   const { x, y } = getWorkspacePos(event);
   const rawBeat = x / colWidth.value;
   const track = Math.floor(y / trackHeight);
@@ -291,30 +357,53 @@ function handlePointerDown(event: PointerEvent) {
   if(!clip) return;
 
   if(event.button === 2) {
-    if (selectedClipId.value === clip.id) selectedClipId.value = null;
+    state.selectedClipIds.delete(clip.id);
     arrangement.removeClip(clip.id);
     recompileArrangement();
     return;
   }
 
-  selectedClipId.value = clip.id;
-  interacting.value = true;
-  if(isNearRightEdge(x, clip)) {
-    state.resizingClip = clip;
-    state.initialDuration = clip.duration;
+  if(activeTool.value === 'select') {
+    if(event.button === 0) {
+      if(event.shiftKey) {
+        if(state.selectedClipIds.has(clip.id)) state.selectedClipIds.delete(clip.id);
+        else state.selectedClipIds.add(clip.id);
+      } else {
+        state.selectedClipIds.clear();
+        state.selectedClipIds.add(clip.id);
+      }
+    }
+    return;
+  }
+
+  if(!state.selectedClipIds.has(clip.id)) {
+    state.selectedClipIds.clear();
+    state.selectedClipIds.add(clip.id);
+  }
+
+  const snapshot = new Map<string, { startBeat: number, track: number, duration: number, offset: number }>();
+  for(const c of arrangement.clips) {
+    if(state.selectedClipIds.has(c.id)) {
+      snapshot.set(c.id, { startBeat: c.startBeat, track: c.track, duration: c.duration, offset: c.offset });
+    }
+  }
+
+  const dragStart = { beat: rawBeat, track };
+
+  if(isNearLeftEdge(x, clip)) {
+    state.activeAction = { type: 'resize-left', anchor: clip, snapshot, dragStart };
+    cursor.value = 'w-resize';
+  } else if(isNearRightEdge(x, clip)) {
+    state.activeAction = { type: 'resize-right', anchor: clip, snapshot, dragStart };
     cursor.value = 'w-resize';
   } else {
-    state.draggingClip = clip;
-    state.dragStart = { beat: rawBeat - clip.startBeat, track: track - clip.track };
-    state.initialBeat = clip.startBeat;
-    state.initialTrack = clip.track;
+    state.activeAction = { type: 'drag', anchor: clip, snapshot, dragStart };
     cursor.value = 'grabbing';
   }
 }
 
 function commitTrackName(id: string, event: Event) {
   const input = event.target as HTMLInputElement;
-
   if(input.value) {
     arrangement.setTrackName(id, input.value);
   } else {
@@ -323,39 +412,31 @@ function commitTrackName(id: string, event: Event) {
 }
 
 function onTrackNameKeydown(event: KeyboardEvent) {
-  if(event.key === 'Enter') (event.target as HTMLInputElement).blur();
-  if(event.key === 'Escape') (event.target as HTMLInputElement).blur();
+  if(event.key === 'Enter' || event.key === 'Escape') (event.target as HTMLInputElement).blur();
 }
 
 function handleWheel(event: WheelEvent) {
   const element = arrangementContainer.value;
-  if(!element) return;
+  if(!element || !event.ctrlKey) return;
+  event.preventDefault();
 
-  // HORIZONTAL ZOOM (Ctrl + Wheel)
-  if(event.ctrlKey) {
-    event.preventDefault();
-  
-    const mouseX = event.clientX - element.getBoundingClientRect().left;
-    const zoomAnchorPercent = (mouseX + element.scrollLeft) / totalWidth.value;
+  const mouseX = event.clientX - element.getBoundingClientRect().left;
+  const zoomAnchorPercent = (mouseX + element.scrollLeft) / totalWidth.value;
+  const zoomIntensity = 0.15;
 
-    const zoomIntensity = 0.15;
+  const minColWidth = element.clientWidth / (barCount.value * beatsPerBar);
+  const maxColWidth = element.clientWidth / (barCount.value * beatsPerBar * MAX_ZOOM_FACTOR);
 
-    const minColWidth = element.clientWidth / (barCount.value * beatsPerBar);
-    const maxColWidth = element.clientWidth / (barCount.value * beatsPerBar * MAX_ZOOM_FACTOR);
-    colWidth.value = clamp(colWidth.value * (event.deltaY > 0 ? (1 - zoomIntensity) : (1 + zoomIntensity)), minColWidth, maxColWidth);
+  colWidth.value = clamp(colWidth.value * (event.deltaY > 0 ? (1 - zoomIntensity) : (1 + zoomIntensity)), minColWidth, maxColWidth);
 
-    // sync scroll so the mouse stays over the same musical position
-    nextTick(() => {
-      element.scrollLeft = (zoomAnchorPercent * totalWidth.value) - mouseX;
-      scrollX.value = element.scrollLeft;
-    });
-    return;
-  }
+  nextTick(() => {
+    element.scrollLeft = (zoomAnchorPercent * totalWidth.value) - mouseX;
+    scrollX.value = element.scrollLeft;
+  });
 }
 
 function handleViewUpdate({ start, width }: { start: number, width: number }) {
   if(!arrangementContainer.value) return;
-
   colWidth.value = arrangementContainer.value.clientWidth / (width * barCount.value * beatsPerBar);
   arrangementContainer.value.scrollLeft = start * totalWidth.value;
   scrollX.value = arrangementContainer.value.scrollLeft;
@@ -364,7 +445,7 @@ function handleViewUpdate({ start, width }: { start: number, width: number }) {
 // WATCHERS
 
 watch(() => arrangement.clips, () => {
-  if(interacting.value) return;
+  if(state.activeAction) return;
   if(playbackMode.value === 'arrangement') recompileArrangement();
 }, { deep: true });
 
@@ -373,13 +454,11 @@ watch(() => patterns.value.map(p => ({ id: p.id, version: p.roll._state.version 
     for(let i = 0; i < newPatterns.length; i++) {
       const np = newPatterns[i];
       const op = oldPatterns[i];
-      if (np && op && np.version !== op.version) {
-        engine.compiler.invalidatePattern(np.id);
-      }
+      if(np && op && np.version !== op.version) engine.compiler.invalidatePattern(np.id);
     }
   }
-  
-  if (playbackMode.value === 'arrangement') scheduleRecompile();
+
+  if(playbackMode.value === 'arrangement') scheduleRecompile();
 });
 
 watch(playbackMode, (newMode) => {
@@ -387,38 +466,27 @@ watch(playbackMode, (newMode) => {
 });
 
 watch(addModalVisible, async (visible) => {
-  if(visible) {
-    await nextTick();
-    nameInput.value?.focus();
-  }
+  if(visible) { await nextTick(); nameInput.value?.focus(); }
 });
 
 // LIFECYCLE
 
 onMounted(() => {
-  const playheadCallback = (beat: number) => {
-    playhead.col = beat;
-  };
+  registerArrangementCallbacks(
+    (beat: number) => { playhead.col = beat; },
+    (playing: boolean) => { playhead.playing = playing; }
+  );
 
-  const playStateCallback = (playing: boolean) => {
-    playhead.playing = playing;
-  };
-
-  registerArrangementCallbacks(playheadCallback, playStateCallback);
   window.addEventListener('keydown', handleKeyDown);
-
-  if (playbackMode.value === 'arrangement') {
-    recompileArrangement();
-  }
+  if(playbackMode.value === 'arrangement') recompileArrangement();
 });
 
 onBeforeUnmount(() => {
   unregisterArrangementCallbacks();
+  
   if(playbackMode.value === 'arrangement') {
     engine.scheduler.setNotes([]);
-    if(engine.scheduler.isPlaying) {
-      engine.scheduler.stop();
-    }
+    if(engine.scheduler.isPlaying) engine.scheduler.stop();
   }
 
   window.removeEventListener('keydown', handleKeyDown);
@@ -428,12 +496,11 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex flex-col w-full h-full bg-mix-20 overflow-hidden">
     <div class="grid grid-cols-[7.5rem_1fr] shrink-0 border-b-2 border-mix-30">
-      <div class="bg-mix-15 border-r-2 border-mix-30" /> <!-- bocks LMFAOOOOO -->
+      <div class="bg-mix-15 border-r-2 border-mix-30" />
 
       <div class="flex flex-col">
         <!-- toolbar / drag handle -->
-        <div class="window-header bg-mix-15 px-3 shrink-0"
-          @pointerdown.stop="dragWindow?.($event)">
+        <div class="window-header bg-mix-15 px-3 shrink-0" @pointerdown.stop="dragWindow?.($event)">
           <span class="text-xs font-medium">Arrangement</span>
 
           <div class="flex justify-center items-center p-1 shrink-0">
@@ -442,13 +509,18 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <!-- separator -->
+          <Toolbar :tools="arrangementTools" v-model:activeTool="activeTool" :tool-size="18">
+            <template #default="{ tool }">
+              <span v-if="tool.id === 'place'" class="pi pi-pencil text-sm" />
+              <span v-else-if="tool.id === 'select'" class="pi pi-stop text-sm" />
+            </template>
+          </Toolbar>
+
           <div class="flex-1" />
 
           <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="resetWindow?.()" title="Reset position and size">
             <span class="pi pi-refresh text-xs" />
           </button>
-
           <button class="w-6 h-6 rounded util-button flex items-center justify-center" @pointerdown.stop @click="closeWindow?.()">
             <span class="pi pi-times text-xs" />
           </button>
@@ -467,7 +539,6 @@ onBeforeUnmount(() => {
         <div v-for="track in arrangement.tracks" :key="track.id" :style="{ height: `${trackHeight}px` }"
           class="w-30 bg-mix-15 border-y-2 border-r-2 border-mix-30 flex justify-between flex-col"
         >
-          <!-- name input box -->
           <div class="flex items-start justify-between px-2 pt-1">
             <input v-model="track.name" class="px2 py-0.5 rounded text-sm font-mono bg-mix-10 focus:outline-none w-full text-center truncate px-1 border-2 border-mix-30"
               @focus="($event.target as HTMLInputElement).select()"
@@ -476,12 +547,10 @@ onBeforeUnmount(() => {
             />
           </div>
 
-          <!-- buttons -->
           <div class="flex justify-between px-2 pb-1 items-center">
             <button @click="arrangement.removeTrack(track.id)" class="flex justify-center w-6">
               <span class="pi pi-times text-sm text-red-400"></span>
             </button>
-
             <button @click="arrangement.toggleMuteTrack(track.id)" @contextmenu.prevent="arrangement.toggleSoloTrack(track.id)"
               class="flex items-center justify-center w-6 h-6 rounded self-end shrink-0 focus:outline-none"
               :title="track.solo ? 'Solo (right-click to toggle)' : track.muted ? 'Unmute' : 'Mute (right-click to solo)'"
@@ -497,7 +566,8 @@ onBeforeUnmount(() => {
 
         <!-- workspace -->
         <div ref="workspaceContainer" class="relative shrink-0" :style="{ width: `${totalWidth}px`, height: `${arrangement.tracks.length * trackHeight}px`, cursor: cursor }"
-          @pointerdown="handlePointerDown" @dblclick="handleDoubleClick" @pointermove="handlePointerMove" @pointerup="finalizeEdit" @pointerleave="finalizeEdit" @wheel="handleWheel"
+          @pointerdown="handlePointerDown" @dblclick="handleDoubleClick" @pointermove="handlePointerMove"
+          @pointerup="finalizeEdit" @pointerleave="finalizeEdit" @wheel="handleWheel"
           @dragover="handleDragOver" @drop="handleDrop" @contextmenu.prevent
         >
           <!-- 4-bar alternating column backgrounds -->
@@ -519,7 +589,7 @@ onBeforeUnmount(() => {
 
           <!-- clips -->
           <div v-for="clip in arrangement.clips" :key="clip.id"
-            :class="['absolute border-2 clip-color rounded overflow-hidden pointer-events-none', clip.id === selectedClipId ? 'clip-border-color' : 'clip-border-muted']"
+            :class="['absolute border-2 clip-color rounded overflow-hidden pointer-events-none', state.selectedClipIds.has(clip.id) ? 'clip-border-color' : 'clip-border-muted']"
             :style="{
               left: `${clip.startBeat * colWidth}px`,
               top: `${clip.track * trackHeight}px`,
@@ -528,15 +598,11 @@ onBeforeUnmount(() => {
             }"
           >
             <svg v-if="clipPreviews.get(clip.id)" class="absolute inset-0 w-full h-full" preserveAspectRatio="none" :viewBox="clipPreviews.get(clip.id)!.viewBox">
-              <rect
-                v-for="(note, i) in clipPreviews.get(clip.id)!.notes"
-                :key="i"
-                :x="note.x" :y="note.y"
-                :width="note.width" :height="note.height"
+              <rect v-for="(note, i) in clipPreviews.get(clip.id)!.notes" :key="i"
+                :x="note.x" :y="note.y" :width="note.width" :height="note.height"
                 fill="white" opacity="0.6"
               />
             </svg>
-
             <div class="relative z-10 px-1 pt-0.5 text-xs truncate drop-shadow">
               {{ patterns.find(p => p.id === clip.patternId)?.name || 'Pattern' }}
             </div>
@@ -544,7 +610,7 @@ onBeforeUnmount(() => {
 
           <!-- playhead -->
           <div v-if="playbackMode === 'arrangement' && (playhead.playing || playhead.col > 0)"
-            class="absolute w-0.75 pointer-events-none playhead-color  -translate-x-1/2"
+            class="absolute w-0.75 pointer-events-none playhead-color -translate-x-1/2"
             :style="{
               transform: `translateX(${playhead.col * colWidth}px)`,
               top: '0',
@@ -552,6 +618,9 @@ onBeforeUnmount(() => {
               boxShadow: `-1px 0 6px var(--playhead)`
             }"
           ></div>
+
+          <!-- selection overlay -->
+          <SelectionOverlay v-if="activeTool === 'select'" :snap-y="trackHeight" :snap-x="colWidth / snapDivision" @complete="onSelectionComplete" />
         </div>
       </div>
     </div>
@@ -560,7 +629,7 @@ onBeforeUnmount(() => {
   <!-- fill extra space -->
   <span class="flex-1 bg-mix-15 border-t-2 border-mix-30"/>
 
-  <!-- add mixer modal -->
+  <!-- add track modal -->
   <ConfirmationModal :visible="addModalVisible" :x="addPos.x" :y="addPos.y" @confirm="createTrack" @cancel="addModalVisible = false; name = ''">
     <input ref="nameInput" v-model="name" @keydown="onAddKeyDown" :placeholder="`Track ${nextTrackNum} name`" class="bg-mix-25 p-2 rounded-md" />
   </ConfirmationModal>
