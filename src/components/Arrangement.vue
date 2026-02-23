@@ -38,7 +38,7 @@ const state = reactive({
     type: 'drag' | 'resize-right' | 'resize-left',
     anchor: ArrangementClip,
     snapshot: Map<string, { startBeat: number, track: number, duration: number, offset: number }>,
-    dragStart: { beat: number, track: number }
+    dragStart: { beat: number }
   } | null
 });
 
@@ -253,72 +253,6 @@ function handleKeyDown(event: KeyboardEvent) {
   }
 }
 
-function handlePointerMove(event: PointerEvent) {
-  if(!workspaceContainer.value) return;
-  const { x, y } = getWorkspacePos(event);
-  const rawBeat = x / colWidth.value;
-  const track = Math.floor(y / trackHeight);
-
-  if(state.activeAction) {
-    const { type, anchor, snapshot, dragStart } = state.activeAction;
-    const anchorOrig = snapshot.get(anchor.id)!;
-
-    if(type === 'resize-right') {
-      const snappedBeat = dynamicSnapNearest(rawBeat, colWidth.value);
-      const newAnchorDuration = Math.max(1 / snapDivision.value, snappedBeat - anchorOrig.startBeat);
-      const deltaLength = newAnchorDuration - anchorOrig.duration;
-
-      for(const [id, orig] of snapshot) {
-        arrangement.resizeClip(id, Math.max(1 / snapDivision.value, orig.duration + deltaLength), orig.offset);
-      }
-
-      cursor.value = 'w-resize';
-    } else if(type === 'resize-left') {
-      const snappedBeat = dynamicSnapNearest(rawBeat, colWidth.value);
-
-      const anchorOldEnd = anchorOrig.startBeat + anchorOrig.duration;
-      const anchorMinStart = Math.max(0, anchorOrig.startBeat - anchorOrig.offset);
-      const newAnchorStart = clamp(snappedBeat, anchorMinStart, anchorOldEnd - 1 / snapDivision.value);
-      const delta = newAnchorStart - anchorOrig.startBeat;
-
-      for(const [id, orig] of snapshot) {
-        const oldEnd = orig.startBeat + orig.duration;
-        const minStart = Math.max(0, orig.startBeat - orig.offset);
-        const newStart = clamp(orig.startBeat + delta, minStart, oldEnd - 1 / snapDivision.value);
-        const actualDelta = newStart - orig.startBeat;
-
-        arrangement.updateClip(id, { startBeat: newStart, duration: orig.duration - actualDelta, offset: orig.offset + actualDelta });
-      }
-
-      cursor.value = 'w-resize';
-    } else {
-      const deltaBeat = rawBeat - dragStart.beat;
-      const deltaTrack = track - dragStart.track;
-
-      for(const [id, orig] of snapshot) {
-        const newBeat = Math.max(0, dynamicSnap(orig.startBeat + deltaBeat, colWidth.value));
-        const newTrack = clamp(deltaTrack, 0, numTracks - 1);
-
-        arrangement.moveClip(id, newTrack, newBeat);
-      }
-
-      cursor.value = 'grabbing';
-    }
-    return;
-  }
-
-  const hovered = arrangement.getClipAt(track, rawBeat);
-  state.hoverClip = hovered;
-
-  if(activeTool.value === 'select' || !hovered) {
-    cursor.value = 'default';
-  } else if(isNearLeftEdge(x, hovered) || isNearRightEdge(x, hovered)) {
-    cursor.value = 'w-resize';
-  } else {
-    cursor.value = 'grab';
-  }
-}
-
 function handleDragOver(event: DragEvent) {
   event.preventDefault();
   if(event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
@@ -361,19 +295,6 @@ function onSelectionComplete(payload: { bounds: { x: number, y: number, width: n
 
 function onAddKeyDown(event: KeyboardEvent) {
   if(event.key === 'Enter') { event.preventDefault(); createTrack(); }
-}
-
-function handleDoubleClick(event: MouseEvent) {
-  if(!workspaceContainer.value) return;
-  const rect = workspaceContainer.value.getBoundingClientRect();
-  const rawBeat = (event.clientX - rect.left) / colWidth.value;
-
-  const track = Math.floor((event.clientY - rect.top) / trackHeight);
-  const clip = arrangement.getClipAt(track, rawBeat);
-  if(!clip) return;
-
-  const pattern = patterns.value.find(p => p.id === clip.patternId);
-  if(pattern) openPattern(pattern.num);
 }
 
 function handlePointerDown(event: PointerEvent) {
@@ -422,9 +343,9 @@ function handlePointerDown(event: PointerEvent) {
   }
 
   const snapshot = new Map<string, { startBeat: number, track: number, duration: number, offset: number }>();
-  for(const c of arrangement.clips) {
-    if(state.selectedClipIds.has(c.id)) {
-      snapshot.set(c.id, { startBeat: c.startBeat, track: c.track, duration: c.duration, offset: c.offset });
+  for(const clip of arrangement.clips) {
+    if(state.selectedClipIds.has(clip.id)) {
+      snapshot.set(clip.id, { startBeat: clip.startBeat, track: clip.track, duration: clip.duration, offset: clip.offset });
     }
   }
 
@@ -440,6 +361,85 @@ function handlePointerDown(event: PointerEvent) {
     state.activeAction = { type: 'drag', anchor: clip, snapshot, dragStart };
     cursor.value = 'grabbing';
   }
+}
+
+function handlePointerMove(event: PointerEvent) {
+  if(!workspaceContainer.value) return;
+  const { x, y } = getWorkspacePos(event);
+  const rawBeat = x / colWidth.value;
+  const track = Math.floor(y / trackHeight);
+
+  if(state.activeAction) {
+    const { type, anchor, snapshot, dragStart } = state.activeAction;
+    const anchorOrig = snapshot.get(anchor.id)!;
+
+    if(type === 'resize-right') {
+      const snappedBeat = dynamicSnapNearest(rawBeat, colWidth.value);
+      const newAnchorDuration = Math.max(1 / snapDivision.value, snappedBeat - anchorOrig.startBeat);
+      const deltaLength = newAnchorDuration - anchorOrig.duration;
+
+      for(const [id, orig] of snapshot) {
+        arrangement.resizeClip(id, Math.max(1 / snapDivision.value, orig.duration + deltaLength), orig.offset);
+      }
+
+      cursor.value = 'w-resize';
+    } else if(type === 'resize-left') {
+      const snappedBeat = dynamicSnapNearest(rawBeat, colWidth.value);
+
+      const anchorOldEnd = anchorOrig.startBeat + anchorOrig.duration;
+      const anchorMinStart = Math.max(0, anchorOrig.startBeat - anchorOrig.offset);
+      const newAnchorStart = clamp(snappedBeat, anchorMinStart, anchorOldEnd - 1 / snapDivision.value);
+      const delta = newAnchorStart - anchorOrig.startBeat;
+
+      for(const [id, orig] of snapshot) {
+        const oldEnd = orig.startBeat + orig.duration;
+        const minStart = Math.max(0, orig.startBeat - orig.offset);
+        const newStart = clamp(orig.startBeat + delta, minStart, oldEnd - 1 / snapDivision.value);
+        const actualDelta = newStart - orig.startBeat;
+
+        arrangement.updateClip(id, { startBeat: newStart, duration: orig.duration - actualDelta, offset: orig.offset + actualDelta });
+      }
+
+      cursor.value = 'w-resize';
+    } else { // drag (idk why drag start track doesn't need to exist???)
+      const deltaBeat = rawBeat - dragStart.beat;
+
+      for(const [id, orig] of snapshot) {
+        const newBeat = Math.max(0, dynamicSnap(orig.startBeat + deltaBeat, colWidth.value));
+        const newTrack = clamp(track, 0, numTracks - 1);
+
+        arrangement.moveClip(id, newTrack, newBeat);
+      }
+
+      cursor.value = 'grabbing';
+    }
+
+    return;
+  }
+
+  const hovered = arrangement.getClipAt(track, rawBeat);
+  state.hoverClip = hovered;
+
+  if(activeTool.value === 'select' || !hovered) {
+    cursor.value = 'default';
+  } else if(isNearLeftEdge(x, hovered) || isNearRightEdge(x, hovered)) {
+    cursor.value = 'w-resize';
+  } else {
+    cursor.value = 'grab';
+  }
+}
+
+function handleDoubleClick(event: MouseEvent) {
+  if(!workspaceContainer.value) return;
+  const rect = workspaceContainer.value.getBoundingClientRect();
+  const rawBeat = (event.clientX - rect.left) / colWidth.value;
+
+  const track = Math.floor((event.clientY - rect.top) / trackHeight);
+  const clip = arrangement.getClipAt(track, rawBeat);
+  if(!clip) return;
+
+  const pattern = patterns.value.find(p => p.id === clip.patternId);
+  if(pattern) openPattern(pattern.num);
 }
 
 function commitTrackName(id: string, event: Event) {

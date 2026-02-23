@@ -2,6 +2,7 @@
 import { dynamicSnapNearest } from '../../util/snap';
 import { getAudioEngine } from '../../services/audioEngineManager';
 import { playbackMode, setPlaybackMode, type PlaybackMode } from '../../services/playbackModeManager';
+import { computed } from 'vue';
 
 const engine = getAudioEngine();
 
@@ -12,6 +13,17 @@ const props = defineProps<{
   count: number;
   playtime: number;
 }>();
+
+const labelStep = computed(() => {
+  const minLabelSpace = 40;
+  let step = 1;
+
+  while((step * props.interval) < minLabelSpace) {
+    step *= 2;
+  }
+
+  return step;
+});
 
 function seekToPointer(event: PointerEvent, container: HTMLDivElement) {
   if(!container) return;
@@ -43,8 +55,8 @@ function handleTimelineScrub(event: PointerEvent) {
 
 <template>
   <div class="bg-mix-10 flex flex-row items-center h-5 w-full sticky top-0 z-10 border-b-2 border-mix-5" @pointerdown.stop="handleTimelinePointerDown" @pointermove="handleTimelineScrub">
-    <div v-for="i in (count)" :key="i" :style="{ width: `${interval}px` }">
-      <span class="text-xs font-mono absolute -translate-1/2 opacity-50">{{ i }}</span>
+    <div v-for="i in count" :key="i" :style="{ width: `${interval}px` }">
+      <span v-if="(i - 1) % labelStep === 0" class="text-xs font-mono absolute -translate-1/2 opacity-50">{{ i }}</span>
     </div>
 
     <span v-if="playbackMode === props.mode" class="pi pi-sort-down-fill absolute text-sm font-fold -translate-x-1/2 text-(--playhead)" :style="{ left: `${playtime}px` }"></span>

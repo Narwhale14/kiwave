@@ -93,7 +93,7 @@ function onChorus(partial: Partial<typeof state.chorus>) {
 
     <!-- synth body -->
     <div class="flex flex-col gap-2 p-3 font-mono min-w-200 h-full min-h-128">
-      <div class="flex flex-row items-center gap-2 h-full flex-1">
+      <div class="flex flex-row items-center gap-2 h-full flex-2">
         <!-- body box -->
         <div class="box-container border-4 border-mix-10">
           <div class="border-b-4 border-mix-10 px-2 shrink-0">
@@ -101,8 +101,8 @@ function onChorus(partial: Partial<typeof state.chorus>) {
           </div>
 
           <div class="section-content">
-            <div class="knob-container">
-              <Knob :model-value="state.masterVolume" :size="60" :resistance="1" @update:model-value="value => onMaster(value)"/>
+            <div class="knob-container knob-row">
+              <Knob :model-value="state.masterVolume" :size="60" :resistance="1" :default-value="0.8" @update:model-value="value => onMaster(value)"/>
               <span class="knob-text">Vol</span>
             </div>
 
@@ -124,17 +124,19 @@ function onChorus(partial: Partial<typeof state.chorus>) {
           </div>
 
           <div class="section-content">
-            <div class="knob-container">
-              <Knob :model-value="state.chorus.rate" :size="60" :max="3" :resistance="1" @update:model-value="v => onChorus({ rate: v })" />
-              <span class="knob-text">Rate</span>
-            </div>
-            <div class="knob-container">
-              <Knob :model-value="state.chorus.depth" :size="60" :max="0.005" :resistance="1" @update:model-value="v => onChorus({ depth: v })" />
-              <span class="knob-text">Depth</span>
-            </div>
-            <div class="knob-container">
-              <Knob :model-value="state.chorus.mix" :size="60" :resistance="1" @update:model-value="v => onChorus({ mix: v })" />
-              <span class="knob-text">Mix</span>
+            <div class="knob-row">
+              <div class="knob-container">
+                <Knob :model-value="state.chorus.rate" :size="60" :max="3" :resistance="1" :default-value="0" @update:model-value="v => onChorus({ rate: v })" />
+                <span class="knob-text">Rate</span>
+              </div>
+              <div class="knob-container">
+                <Knob :model-value="state.chorus.depth" :size="60" :max="0.005" :resistance="1" :default-value="0" @update:model-value="v => onChorus({ depth: v })" />
+                <span class="knob-text">Depth</span>
+              </div>
+              <div class="knob-container">
+                <Knob :model-value="state.chorus.mix" :size="60" :resistance="1" :default-value="0" @update:model-value="v => onChorus({ mix: v })" />
+                <span class="knob-text">Mix</span>
+              </div>
             </div>
           </div>
         </div>
@@ -155,23 +157,25 @@ function onChorus(partial: Partial<typeof state.chorus>) {
               </div>
             </div>
 
-            <div class="knob-container">
-              <Knob :model-value="state.echo.time" :size="60" :max="2" :resistance="1" @update:model-value="v => onEcho({ time: v })" />
-              <span class="knob-text">Time</span>
-            </div>
-            <div class="knob-container">
-              <Knob :model-value="state.echo.feedback" :size="60" :max="0.95" :resistance="1" @update:model-value="v => onEcho({ feedback: v })" />
-              <span class="knob-text">Feedback</span>
-            </div>
-            <div class="knob-container">
-              <Knob :model-value="state.echo.mix" :size="60" :resistance="1" @update:model-value="v => onEcho({ mix: v })" />
-              <span class="knob-text">Mix</span>
+            <div class="knob-row">
+              <div class="knob-container">
+                <Knob :model-value="state.echo.time" :size="60" :max="2" :resistance="1" :default-value="0" @update:model-value="v => onEcho({ time: v })" />
+                <span class="knob-text">Time</span>
+              </div>
+              <div class="knob-container">
+                <Knob :model-value="state.echo.feedback" :size="60" :max="0.95" :resistance="1" :default-value="0" @update:model-value="v => onEcho({ feedback: v })" />
+                <span class="knob-text">Feedback</span>
+              </div>
+              <div class="knob-container">
+                <Knob :model-value="state.echo.mix" :size="60" :resistance="1" :default-value="0" @update:model-value="v => onEcho({ mix: v })" />
+                <span class="knob-text">Mix</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="flex flex-row items-center gap-2 h-full flex-2">
+      <div class="flex flex-row items-center gap-2 h-full flex-3">
         <!-- ADSR box-->
         <div class="box-container border-4 border-mix-10">
           <div class="border-b-4 border-mix-10 px-2 shrink-0">
@@ -185,21 +189,23 @@ function onChorus(partial: Partial<typeof state.chorus>) {
             />
 
             <div class="section-content-graph">
-              <div class="knob-container">
-                <Knob :model-value="state.adsr.attack" :size="60" :max="2" @update:model-value="v => onADSR({ attack: v })" />
-                <span class="knob-text">Attack</span>
-              </div>
-              <div class="knob-container">
-                <Knob :model-value="state.adsr.decay" :size="60" :max="2" @update:model-value="v => onADSR({ decay: v })" />
-                <span class="knob-text">Decay</span>
-              </div>
-              <div class="knob-container">
-                <Knob :model-value="state.adsr.sustain" :size="60" @update:model-value="v => onADSR({ sustain: v })" />
-                <span class="knob-text">Sustain</span>
-              </div>
-              <div class="knob-container">
-                <Knob :model-value="state.adsr.release" :size="60" :max="5" @update:model-value="v => onADSR({ release: v })" />
-                <span class="knob-text">Release</span>
+              <div class="knob-row">
+                <div class="knob-container">
+                  <Knob :model-value="state.adsr.attack" :size="60" :max="2" :resistance="1" :default-value="0" @update:model-value="v => onADSR({ attack: v })" />
+                  <span class="knob-text">Attack</span>
+                </div>
+                <div class="knob-container">
+                  <Knob :model-value="state.adsr.decay" :size="60" :max="2" :resistance="1" :default-value="0" @update:model-value="v => onADSR({ decay: v })" />
+                  <span class="knob-text">Decay</span>
+                </div>
+                <div class="knob-container">
+                  <Knob :model-value="state.adsr.sustain" :size="60" :resistance="1" :default-value="1" @update:model-value="v => onADSR({ sustain: v })" />
+                  <span class="knob-text">Sustain</span>
+                </div>
+                <div class="knob-container">
+                  <Knob :model-value="state.adsr.release" :size="60" :max="5" :resistance="1" :default-value="0" @update:model-value="v => onADSR({ release: v })" />
+                  <span class="knob-text">Release</span>
+                </div>
               </div>
             </div>
           </div>
@@ -215,13 +221,15 @@ function onChorus(partial: Partial<typeof state.chorus>) {
             <FilterGraph class="min-h-0" :frequency="filterFreqHz" :resonance="state.filter.resonance" />
 
             <div class="section-content-graph">
-              <div class="knob-container">
-                <Knob :model-value="state.filter.frequency" :size="60" :resistance="1" @update:model-value="v => onFilter({ frequency: v })" />
-                <span class="knob-text">Cutoff</span>
-              </div>
-              <div class="knob-container">
-                <Knob :model-value="state.filter.resonance" :size="60" :min="0.1" :max="20" :default-value="0.1" @update:model-value="v => onFilter({ resonance: v })" />
-                <span class="knob-text">Resonance</span>
+              <div class="knob-row">
+                <div class="knob-container">
+                  <Knob :model-value="state.filter.frequency" :size="60" :resistance="1" :default-value="1" @update:model-value="v => onFilter({ frequency: v })" />
+                  <span class="knob-text">Cutoff</span>
+                </div>
+                <div class="knob-container">
+                  <Knob :model-value="state.filter.resonance" :size="60" :min="0.1" :max="20" :default-value="0.1" @update:model-value="v => onFilter({ resonance: v })" />
+                  <span class="knob-text">Resonance</span>
+                </div>
               </div>
             </div>
           </div>
@@ -253,8 +261,8 @@ function onChorus(partial: Partial<typeof state.chorus>) {
   justify-content: center;
   flex: 1;
   align-items: center;
-  gap: 0.75rem; /* gap-3 */
-  padding: 0.75rem; /* p-3 */
+  gap: 0.75rem;
+  padding: 0.75rem;
 }
 
 .section-content-graph {
@@ -270,6 +278,19 @@ function onChorus(partial: Partial<typeof state.chorus>) {
   font-size: 12px;
   opacity: 40%;
   margin-top: 10px
+}
+
+.knob-row {
+  display: inherit;
+  justify-content: inherit;
+  flex: inherit;
+  align-items: inherit;
+  gap: inherit;
+  padding: inherit;
+
+  background-color: var(--step-15);
+  border-radius: var(--radius-2xl);
+  border: 4px solid var(--step-13);
 }
 
 .knob-container {
