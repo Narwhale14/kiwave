@@ -68,6 +68,7 @@ export function setPlaybackMode(mode: PlaybackMode) {
     }
 
     engine.scheduler.setNotes([]);
+    engine.scheduler.seek(engine.scheduler.loopStart);
     playbackMode.value = mode;
     updateActiveCallbacks();
 }
