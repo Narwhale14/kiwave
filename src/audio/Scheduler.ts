@@ -308,8 +308,6 @@ export class Scheduler {
 
     setLoop(enabled: boolean, start?: number, end?: number) {
         const wasPlaying = this._isPlaying;
-        // Capture the visual beat BEFORE changing bounds — modulo changes below
-        // would give a different result for the same rawBeat.
         const currentBeat = this.getCurrentBeat();
 
         const prevStart = this._loopStart;
@@ -325,7 +323,6 @@ export class Scheduler {
         const boundsChanged = this._loopStart !== prevStart || this._loopEnd !== prevEnd || !prevEnabled;
 
         if(currentBeat >= this.loopEnd || currentBeat < this._loopStart) {
-            // Playhead is now outside the new loop bounds — jump to loop start.
             this.startTime = this.audioContext.currentTime;
             this._pauseTime = this.loopStart;
 
@@ -336,22 +333,15 @@ export class Scheduler {
             if(this.playheadCallback) this.playheadCallback(this.loopStart);
             this._schedulerTick();
         } else if(boundsChanged) {
-            // Bounds changed but playhead is still in range.
-            // Re-anchor so the visual beat is preserved (rawBeat % newLoopLength
-            // would otherwise jump to a different position).
             this.startTime = this.audioContext.currentTime;
             this._pauseTime = currentBeat;
             this.scheduledNoteOns.clear();
             this.scheduledNoteOffs.clear();
-            // Pre-mark notes the playhead has already passed so the scheduler
-            // doesn't re-trigger them on the next tick.
+
             this._markAlreadyScheduled(currentBeat);
         }
     }
 
-    // After re-anchoring, populate scheduledNoteOns/Offs for notes that
-    // have already been triggered in the current loop iteration to prevent
-    // them from being re-attacked.
     private _markAlreadyScheduled(currentBeat: number) {
         for(const note of this.notes) {
             if(note.startTime <= currentBeat) {
@@ -405,12 +395,11 @@ export class Scheduler {
             this.animationFrameId = null;
         }
 
-        // killAll instead of panicAll: cuts voices immediately (with a 5 ms fade)
-        // rather than playing the full release envelope after pause.
         this.killAll();
         if(this.playStateCallback) {
             this.playStateCallback(false);
         }
+        
         if(this.playheadCallback) {
             this.playheadCallback(this._pauseTime);
         }
