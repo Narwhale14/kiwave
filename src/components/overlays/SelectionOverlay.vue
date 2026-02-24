@@ -100,7 +100,7 @@ onUnmounted(() => {
 
 <template>
   <div ref="containerRef" class="absolute inset-0" @pointerdown="onPointerDown">
-    <div v-if="isSelecting" class="absolute border border-blue-400 bg-blue-400/20 pointer-events-none"
+    <div v-if="isSelecting" class="absolute border-2 border-blue-400 bg-blue-400/20 pointer-events-none rounded-2xl"
       :style="{ left: selection.x + 'px', top: selection.y + 'px', width: selection.width + 'px', height: selection.height + 'px' }"
     />
   </div>
