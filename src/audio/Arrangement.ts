@@ -29,6 +29,10 @@ export class Arrangement {
         this.addTrack('Track 2');
         this.addTrack('Track 3');
         this.addTrack('Track 4');
+        this.addTrack('Track 5');
+        this.addTrack('Track 6');
+        this.addTrack('Track 7');
+        this.addTrack('Track 8');
     }
 
     get clips(): ArrangementClip[] {
