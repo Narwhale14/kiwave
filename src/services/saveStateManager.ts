@@ -354,39 +354,6 @@ export async function deserializeState(save: SaveFile): Promise<void> {
     }
 }
 
-export function exportProject() {
-    const state = serializeState();
-    const json = JSON.stringify(state, null, 2);
-
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${state.metadata.projectName || 'project'}.kwv`;
-    anchor.click();
-
-    URL.revokeObjectURL(url);
-}
-
-export async function importProject(file: File): Promise<void> {
-    const text = await file.text();
-
-    let parsed: SaveFile;
-
-    try {
-        parsed = JSON.parse(text);
-    } catch {
-        throw new Error('Invalid profile file (malformed JSON)');
-    }
-
-    if(!parsed.version || !parsed.metadata || !parsed.global) {
-        throw new Error('Invalid project file');
-    }
-
-    await deserializeState(parsed);
-}
-
 export async function autoSaveToDb(): Promise<void> {
     if(savingLock) return;
     savingLock = true;

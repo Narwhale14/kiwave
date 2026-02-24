@@ -15,7 +15,7 @@ import { DEFAULT_GLOBAL_VOLUME } from '../constants/defaults';
 import Menu from './modals/Menu.vue';
 import ConfirmationModal from './modals/ConfirmationModal.vue';
 import type { MenuItem } from './modals/Menu.vue';
-import { currentProjectId, saveManualProject, getAllProjects, loadProjectById, newProject, deleteCurrentProject, isSaving, scheduleAutosave, exportProject, importProject} from '../services/saveStateManager';
+import { currentProjectId, saveManualProject, getAllProjects, loadProjectById, newProject, deleteCurrentProject, isSaving, scheduleAutosave} from '../services/saveStateManager';
 import type { ProjectSummary } from '../services/saveStateManager';
 
 const engine = getAudioEngine();
@@ -26,7 +26,6 @@ watch(bpm, val => { bpmInput.value = String(val); });
 
 const snapMenu = ref<InstanceType<typeof Menu> | null>(null);
 const fileMenu = ref<InstanceType<typeof Menu> | null>(null);
-const fileInput = ref<HTMLInputElement | null>(null);
 
 const savedProjects = ref<ProjectSummary[]>([]);
 
@@ -99,10 +98,6 @@ const fileOptions = computed<MenuItem[]>(() => [
         }))
       : [{ label: 'No saved projects', disabled: true }]
   },
-  { separator: true},
-  
-  { label: 'Export File', action: () => { exportProject(); } },
-  { label: 'Import File', action: () => { fileInput.value?.click() } },
   { separator: true },
 
   { label: 'New Project', action: async () => { await newProject(); } },
@@ -117,19 +112,6 @@ async function openFileMenu(event: MouseEvent) {
   }
   await refreshProjects();
   fileMenu.value?.open(element);
-}
-
-async function handleFileUpload(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if(!input.files?.length) return;
-
-    try {
-        await importProject(input.files[0]!);
-    } catch(error) {
-        console.log(error);
-    }
-
-    input.value = '';
 }
 
 function commitBpm() {
@@ -333,7 +315,4 @@ defineExpose({
     />
     <span v-if="saveError" class="text-xs text-red-400 font-mono">{{ saveError }}</span>
   </ConfirmationModal>
-
-  <!-- import -->
-  <input type="file" accept=".kwv" ref="fileInput" style="display:none" @change="handleFileUpload"/>
 </template>
