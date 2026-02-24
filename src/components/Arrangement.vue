@@ -106,9 +106,6 @@ function finalizeEdit() {
     const { snapshot } = state.activeAction;
 
     let changed = false;
-    let nearPlayhead = false;
-    const beat = engine.scheduler.getCurrentBeat();
-    const margin = 4;
 
     for(const [id, orig] of snapshot) {
       const clip = arrangement.clips.find(c => c.id === id);
@@ -117,17 +114,11 @@ function finalizeEdit() {
       if(clip.startBeat !== orig.startBeat || clip.track !== orig.track || clip.duration !== orig.duration) {
         changed = true;
         engine.compiler.invalidateClip(id);
-
-        const oldNear = orig.startBeat < beat + margin && orig.startBeat + orig.duration > beat - margin;
-        const newNear = clip.startBeat < beat + margin && clip.startBeat + clip.duration > beat - margin;
-
-        if(oldNear || newNear) nearPlayhead = true;
       }
     }
 
     if(changed && playbackMode.value === 'arrangement') {
       recompileArrangement();
-      if(engine.scheduler.isPlaying && nearPlayhead) engine.scheduler.resetSchedule();
     }
   }
 

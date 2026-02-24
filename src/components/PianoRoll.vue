@@ -532,8 +532,6 @@ function finalizeEdit() {
         const note = props.roll.getNoteData.find(n => n.id === id);
         if(note) engine.scheduler.updateNote(id, { startTime: note.col, pitch: note.midi });
       }
-
-      engine.scheduler.resetSchedule();
     }
 
     updatePatternLoop();

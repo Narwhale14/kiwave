@@ -146,8 +146,13 @@ export class Scheduler {
         if(updates.startTime !== undefined && updates.startTime !== oldStart) {
             this.scheduledNoteOns.delete(`${note.id}-on-${oldStart.toFixed(4)}`);
             this.scheduledNoteOffs.delete(`${note.id}-off-${oldEnd.toFixed(4)}`);
-        } else if(updates.duration !== undefined && updates.duration !== note.duration) {
-            this.scheduledNoteOffs.delete(`${note.id}-off-${oldEnd.toFixed(4)}`);
+        } else {
+            if(updates.pitch !== undefined && updates.pitch !== note.pitch) {
+                this.scheduledNoteOns.delete(`${note.id}-on-${oldStart.toFixed(4)}`);
+            }
+            if(updates.duration !== undefined && updates.duration !== note.duration) {
+                this.scheduledNoteOffs.delete(`${note.id}-off-${oldEnd.toFixed(4)}`);
+            }
         }
 
         Object.assign(note, updates);
@@ -303,13 +308,24 @@ export class Scheduler {
 
     setLoop(enabled: boolean, start?: number, end?: number) {
         const wasPlaying = this._isPlaying;
+        // Capture the visual beat BEFORE changing bounds — modulo changes below
+        // would give a different result for the same rawBeat.
         const currentBeat = this.getCurrentBeat();
+
+        const prevStart = this._loopStart;
+        const prevEnd = this._loopEnd;
+        const prevEnabled = this._loopEnabled;
 
         this._loopEnabled = enabled;
         if(start !== undefined) this._loopStart = Math.max(0, start);
         if(end !== undefined) this._loopEnd = Math.max(this._loopStart, end);
 
-        if(wasPlaying && this._loopEnabled && (currentBeat >= this.loopEnd || currentBeat < this._loopStart)) {
+        if(!wasPlaying || !this._loopEnabled) return;
+
+        const boundsChanged = this._loopStart !== prevStart || this._loopEnd !== prevEnd || !prevEnabled;
+
+        if(currentBeat >= this.loopEnd || currentBeat < this._loopStart) {
+            // Playhead is now outside the new loop bounds — jump to loop start.
             this.startTime = this.audioContext.currentTime;
             this._pauseTime = this.loopStart;
 
@@ -319,6 +335,32 @@ export class Scheduler {
 
             if(this.playheadCallback) this.playheadCallback(this.loopStart);
             this._schedulerTick();
+        } else if(boundsChanged) {
+            // Bounds changed but playhead is still in range.
+            // Re-anchor so the visual beat is preserved (rawBeat % newLoopLength
+            // would otherwise jump to a different position).
+            this.startTime = this.audioContext.currentTime;
+            this._pauseTime = currentBeat;
+            this.scheduledNoteOns.clear();
+            this.scheduledNoteOffs.clear();
+            // Pre-mark notes the playhead has already passed so the scheduler
+            // doesn't re-trigger them on the next tick.
+            this._markAlreadyScheduled(currentBeat);
+        }
+    }
+
+    // After re-anchoring, populate scheduledNoteOns/Offs for notes that
+    // have already been triggered in the current loop iteration to prevent
+    // them from being re-attacked.
+    private _markAlreadyScheduled(currentBeat: number) {
+        for(const note of this.notes) {
+            if(note.startTime <= currentBeat) {
+                this.scheduledNoteOns.add(`${note.id}-on-${note.startTime.toFixed(4)}`);
+            }
+            const noteEnd = note.startTime + note.duration;
+            if(noteEnd <= currentBeat) {
+                this.scheduledNoteOffs.add(`${note.id}-off-${noteEnd.toFixed(4)}`);
+            }
         }
     }
 
