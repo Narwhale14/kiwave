@@ -107,7 +107,7 @@ function onChorus(partial: Partial<typeof state.chorus>) {
             </div>
 
             <div class="flex flex-row gap-1">
-              <Slider :model-value="waveformSliderValue" :steps="4" :height="72" @update:model-value="onWaveformSlider" />
+              <Slider :model-value="waveformSliderValue" :steps="MINISYNTH_WAVEFORM_MODES.length" :height="72" @update:model-value="onWaveformSlider" />
               <div class="flex flex-col justify-between">
                 <span v-for="w in [...MINISYNTH_WAVEFORM_MODES].reverse()" :key="w" class="text-[9px] leading-none capitalize" :class="state.waveform === w ? 'opacity-90' : 'opacity-30'">
                   {{ w }}

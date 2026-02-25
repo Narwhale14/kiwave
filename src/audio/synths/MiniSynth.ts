@@ -3,8 +3,8 @@ import { midiToFrequency } from "../../util/midi";
 import type { CompiledNoteAutomation } from "../Automation";
 import type { BaseSynth } from "./types";
 
-export type Waveform = 'sine' | 'square' | 'sawtooth' | 'triangle';
-export const MINISYNTH_WAVEFORM_MODES: Waveform[] = ['sine', 'square', 'sawtooth', 'triangle'];
+export type Waveform = 'sine' | 'square' | 'sawtooth' | 'triangle' | 'noise';
+export const MINISYNTH_WAVEFORM_MODES: Waveform[] = ['sine', 'square', 'sawtooth', 'triangle', 'noise'];
 
 export type EchoMode = 'mono' | 'stereo' | 'ping-pong';
 export const MINISYNTH_ECHO_MODES: EchoMode[] = ['mono', 'stereo', 'ping-pong'];
@@ -19,7 +19,7 @@ export interface MiniSynthConfig {
 }
 
 interface ActiveVoice {
-    oscillator: OscillatorNode;
+    source: OscillatorNode | AudioBufferSourceNode;
     filter: BiquadFilterNode;
     automationGain: GainNode;
     envelopeGain: GainNode;
@@ -32,6 +32,7 @@ export class MiniSynth implements BaseSynth {
     readonly id = 'minisynth';
 
     private audioContext: AudioContext;
+    private noiseBuffer!: AudioBuffer;
 
     private masterGain: GainNode;
     private finalOutput: GainNode;
@@ -81,7 +82,27 @@ export class MiniSynth implements BaseSynth {
         this.masterGain.gain.value = this.config.masterVolume;
         this.finalOutput.gain.value = 1;
 
+        this._setupNoiseBuffer();
         this._setupEffectsBus();
+    }
+
+    private _setupNoiseBuffer() {
+        const bufferSize = 2 * this.audioContext.sampleRate;
+        this.noiseBuffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
+
+        const data = this.noiseBuffer.getChannelData(0);
+        let lfsr = 1;
+
+        for (let i = 0; i < data.length; i++) {
+            const bit = (lfsr ^ (lfsr >> 1)) & 1;
+            lfsr = (lfsr >> 1) | (bit << 14);
+            data[i] = (lfsr & 1) ? 1 : -1;
+        }
+
+        /* metallic
+        const bit = ((lfsr & 1) ^ ((lfsr >> 6) & 1));
+        lfsr = (lfsr >> 1) | (bit << 14);
+        */
     }
 
     private _setupEffectsBus() {
@@ -181,7 +202,12 @@ export class MiniSynth implements BaseSynth {
         this.config.waveform = waveform;
 
         const allVoices = [...this.scheduledVoices.values(), ...this.liveVoices.values()];
-        allVoices.forEach(voice => voice.oscillator.type = waveform);
+
+        allVoices.forEach(voice => {
+            if(voice.source instanceof OscillatorNode) {
+                voice.source.type = waveform as OscillatorType;
+            }
+        });
     }
 
     setADSR(adsr: Partial<MiniSynthConfig['adsr']>) {
@@ -274,21 +300,32 @@ export class MiniSynth implements BaseSynth {
 
     private _startVoice(pitch: number, time: number, velocity: number, automation: CompiledNoteAutomation = new Map()): ActiveVoice {
         const envelopeTarget = clamp(velocity, 0, 1) * MiniSynth.BASE_GAIN * 2;
+
+        // voice form
+        let source: OscillatorNode | AudioBufferSourceNode;
+        if(this.config.waveform === 'noise') {
+            const noise = this.audioContext.createBufferSource();
+            noise.buffer = this.noiseBuffer;
+            noise.loop = true;
+            source = noise;
+        } else {
+            const osc = this.audioContext.createOscillator();
+            osc.type = this.config.waveform;
+            osc.frequency.setValueAtTime(midiToFrequency(pitch), time);
+            source = osc;
+        }
         
-        const oscillator = this.audioContext.createOscillator();
+        // post noise nodes
         const filter = this.audioContext.createBiquadFilter();
         const automationGain = this.audioContext.createGain();
         const envelopeGain = this.audioContext.createGain();
         const pannerNode = this.audioContext.createStereoPanner();
 
-        oscillator.type = this.config.waveform;
-        oscillator.frequency.setValueAtTime(midiToFrequency(pitch), time);
-
         filter.type = this.config.filter.type;
         filter.frequency.setValueAtTime(this.config.filter.frequency, time);
         filter.Q.setValueAtTime(this.config.filter.resonance, time);
 
-        oscillator.connect(filter);
+        source.connect(filter);
         filter.connect(automationGain);
         automationGain.connect(envelopeGain);
         envelopeGain.connect(pannerNode);
@@ -301,7 +338,7 @@ export class MiniSynth implements BaseSynth {
         const sustainLevel = envelopeTarget * sustain;
         const decayTime = Math.max(decay, 0.0001); // to avoid collapsing attack + decay into a single event
 
-        const voice: ActiveVoice = { oscillator, filter, automationGain, envelopeGain, pannerNode, pitch, sustainLevel };
+        const voice: ActiveVoice = { source, filter, automationGain, envelopeGain, pannerNode, pitch, sustainLevel };
 
         // apply automation
         for(const [paramName, events] of automation) {
@@ -328,7 +365,7 @@ export class MiniSynth implements BaseSynth {
         envelopeGain.gain.linearRampToValueAtTime(envelopeTarget, attackEndTime);
         envelopeGain.gain.linearRampToValueAtTime(sustainLevel, attackEndTime + decayTime);
 
-        oscillator.start(time);
+        source.start(time);
         return voice;
     }
 
@@ -338,11 +375,11 @@ export class MiniSynth implements BaseSynth {
 
         voice.envelopeGain.gain.cancelAndHoldAtTime(time);
         voice.envelopeGain.gain.setTargetAtTime(0, time, releaseTimeConstant);
-        voice.oscillator.stop(time + Math.max(release, 0.05) + 0.15);
+        voice.source.stop(time + Math.max(release, 0.05) + 0.15);
 
-        voice.oscillator.onended = () => {
+        voice.source.onended = () => {
             cleanupCallback();
-            voice.oscillator.disconnect();
+            voice.source.disconnect();
             voice.filter.disconnect();
             voice.automationGain.disconnect();
             voice.envelopeGain.disconnect();
@@ -353,10 +390,10 @@ export class MiniSynth implements BaseSynth {
     private _killVoice(voice: ActiveVoice, time: number) {
         voice.envelopeGain.gain.cancelAndHoldAtTime(time);
         voice.envelopeGain.gain.linearRampToValueAtTime(0, time + MiniSynth.ANTI_CLICK_RAMP);
-        voice.oscillator.stop(time + MiniSynth.ANTI_CLICK_RAMP);
+        voice.source.stop(time + MiniSynth.ANTI_CLICK_RAMP);
 
-        voice.oscillator.onended = () => {
-            voice.oscillator.disconnect();
+        voice.source.onended = () => {
+            voice.source.disconnect();
             voice.filter.disconnect();
             voice.automationGain.disconnect();
             voice.envelopeGain.disconnect();
@@ -366,7 +403,10 @@ export class MiniSynth implements BaseSynth {
 
     private _resolveParam(voice: ActiveVoice, paramName: string): AudioParam | null {
         switch(paramName) {
-            case 'frequency': return voice.oscillator.frequency;
+            case 'frequency':
+                return voice.source instanceof OscillatorNode
+                    ? voice.source.frequency
+                    : null;
             case 'filterFreq': return voice.filter.frequency;
             case 'gain': return voice.automationGain.gain;
             case 'pan': return voice.pannerNode.pan;
