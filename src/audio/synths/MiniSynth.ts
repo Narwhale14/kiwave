@@ -9,6 +9,9 @@ export const MINISYNTH_WAVEFORM_MODES: Waveform[] = ['sine', 'square', 'sawtooth
 export type EchoMode = 'mono' | 'stereo' | 'ping-pong';
 export const MINISYNTH_ECHO_MODES: EchoMode[] = ['mono', 'stereo', 'ping-pong'];
 
+export type NoiseMode = 'retro' | 'metallic';
+export const MINISYNTH_NOISE_MODES: NoiseMode[] = ['retro', 'metallic'];
+
 export interface MiniSynthConfig {
     waveform: Waveform;
     masterVolume: number;
@@ -16,10 +19,11 @@ export interface MiniSynthConfig {
     filter: { type: BiquadFilterType, frequency: number, resonance: number };
     echo: { time: number, feedback: number, mix: number, mode: EchoMode };
     chorus: { rate: number, depth: number, mix: number };
+    noiseMode?: NoiseMode;
 }
 
 interface ActiveVoice {
-    source: OscillatorNode | AudioBufferSourceNode;
+    source: OscillatorNode | AudioWorkletNode;
     filter: BiquadFilterNode;
     automationGain: GainNode;
     envelopeGain: GainNode;
@@ -32,7 +36,6 @@ export class MiniSynth implements BaseSynth {
     readonly id = 'minisynth';
 
     private audioContext: AudioContext;
-    private noiseBuffer!: AudioBuffer;
 
     private masterGain: GainNode;
     private finalOutput: GainNode;
@@ -82,27 +85,7 @@ export class MiniSynth implements BaseSynth {
         this.masterGain.gain.value = this.config.masterVolume;
         this.finalOutput.gain.value = 1;
 
-        this._setupNoiseBuffer();
         this._setupEffectsBus();
-    }
-
-    private _setupNoiseBuffer() {
-        const bufferSize = 2 * this.audioContext.sampleRate;
-        this.noiseBuffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
-
-        const data = this.noiseBuffer.getChannelData(0);
-        let lfsr = 1;
-
-        for (let i = 0; i < data.length; i++) {
-            const bit = (lfsr ^ (lfsr >> 1)) & 1;
-            lfsr = (lfsr >> 1) | (bit << 14);
-            data[i] = (lfsr & 1) ? 1 : -1;
-        }
-
-        /* metallic
-        const bit = ((lfsr & 1) ^ ((lfsr >> 6) & 1));
-        lfsr = (lfsr >> 1) | (bit << 14);
-        */
     }
 
     private _setupEffectsBus() {
@@ -302,23 +285,30 @@ export class MiniSynth implements BaseSynth {
         const envelopeTarget = clamp(velocity, 0, 1) * MiniSynth.BASE_GAIN * 2;
 
         // voice form
-        let source: OscillatorNode | AudioBufferSourceNode;
+        let source: OscillatorNode | AudioWorkletNode;
         if(this.config.waveform === 'noise') {
-            const noise = this.audioContext.createBufferSource();
-            noise.buffer = this.noiseBuffer;
-            noise.loop = true;
-            source = noise;
+            const noiseNode = new AudioWorkletNode(
+                this.audioContext,
+                'nes-noise'
+            );
+
+            const freqParam = noiseNode.parameters.get('frequency');
+            freqParam?.setValueAtTime(midiToFrequency(pitch), time);
+            const modeParam = noiseNode.parameters.get('mode');
+            modeParam?.setValueAtTime(this.config.noiseMode === 'metallic' ? 1 : 0, time);
+            source = noiseNode;
         } else {
-            const osc = this.audioContext.createOscillator();
-            osc.type = this.config.waveform;
-            osc.frequency.setValueAtTime(midiToFrequency(pitch), time);
-            source = osc;
+            const oscillator = this.audioContext.createOscillator();
+            oscillator.type = this.config.waveform as OscillatorType;
+            oscillator.frequency.setValueAtTime(midiToFrequency(pitch), time);
+            source = oscillator;
         }
         
         // post noise nodes
         const filter = this.audioContext.createBiquadFilter();
         const automationGain = this.audioContext.createGain();
         const envelopeGain = this.audioContext.createGain();
+        envelopeGain.gain.value = 0;
         const pannerNode = this.audioContext.createStereoPanner();
 
         filter.type = this.config.filter.type;
@@ -365,7 +355,7 @@ export class MiniSynth implements BaseSynth {
         envelopeGain.gain.linearRampToValueAtTime(envelopeTarget, attackEndTime);
         envelopeGain.gain.linearRampToValueAtTime(sustainLevel, attackEndTime + decayTime);
 
-        source.start(time);
+        if(source instanceof OscillatorNode) source.start(time);
         return voice;
     }
 
@@ -375,30 +365,44 @@ export class MiniSynth implements BaseSynth {
 
         voice.envelopeGain.gain.cancelAndHoldAtTime(time);
         voice.envelopeGain.gain.setTargetAtTime(0, time, releaseTimeConstant);
-        voice.source.stop(time + Math.max(release, 0.05) + 0.15);
 
-        voice.source.onended = () => {
+        const cleanup = () => {
             cleanupCallback();
             voice.source.disconnect();
             voice.filter.disconnect();
             voice.automationGain.disconnect();
             voice.envelopeGain.disconnect();
             voice.pannerNode.disconnect();
+        };
+
+        if(voice.source instanceof OscillatorNode) {
+            voice.source.stop(time + Math.max(release, 0.05) + 0.15);
+            voice.source.onended = cleanup;
+        } else {
+            const delayMs = (time - this.audioContext.currentTime + Math.max(release, 0.05) + 0.15) * 1000;
+            setTimeout(cleanup, Math.max(0, delayMs));
         }
     }
 
     private _killVoice(voice: ActiveVoice, time: number) {
         voice.envelopeGain.gain.cancelAndHoldAtTime(time);
         voice.envelopeGain.gain.linearRampToValueAtTime(0, time + MiniSynth.ANTI_CLICK_RAMP);
-        voice.source.stop(time + MiniSynth.ANTI_CLICK_RAMP);
 
-        voice.source.onended = () => {
+        const cleanup = () => {
             voice.source.disconnect();
             voice.filter.disconnect();
             voice.automationGain.disconnect();
             voice.envelopeGain.disconnect();
             voice.pannerNode.disconnect();
         };
+
+        if(voice.source instanceof OscillatorNode) {
+            voice.source.stop(time + MiniSynth.ANTI_CLICK_RAMP);
+            voice.source.onended = cleanup;
+        } else {
+            const delayMs = (time - this.audioContext.currentTime + MiniSynth.ANTI_CLICK_RAMP) * 1000;
+            setTimeout(cleanup, Math.max(0, delayMs));
+        }
     }
 
     private _resolveParam(voice: ActiveVoice, paramName: string): AudioParam | null {

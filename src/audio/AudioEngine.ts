@@ -21,6 +21,8 @@ export class AudioEngine {
     private _compiler = new ArrangementCompiler(arrangement);
 
     constructor(initialSynths: SynthEntry[]) {
+        void this._initAudioWorklet(this._audioContext);
+
         initialSynths.forEach(entry => this.registerSynth(entry));
         this._initGraph();
 
@@ -54,6 +56,10 @@ export class AudioEngine {
         for(const channel of channelManager.getAllChannels()) {
             this._audioGraph.addPannerNode(channel.id, channel.instrument.getOutputNode(), channel.mixerTrack);
         }
+    }
+
+    private async _initAudioWorklet(ctx: AudioContext) {
+        await ctx.audioWorklet.addModule('/audio/nes-noise-processor.js');
     }
 
     // SYNTH REGISTRY
