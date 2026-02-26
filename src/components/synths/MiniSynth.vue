@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, inject, reactive } from 'vue';
+import { computed, inject, reactive, ref } from 'vue';
 import { channelManager } from '../../audio/ChannelManager';
-import { MINISYNTH_ECHO_MODES, MINISYNTH_WAVEFORM_MODES, type MiniSynth, type MiniSynthConfig } from '../../audio/synths/MiniSynth';
+import { MINISYNTH_ECHO_MODES, MINISYNTH_NOISE_MODES, MINISYNTH_WAVEFORM_MODES, type MiniSynth, type MiniSynthConfig, type NoiseMode } from '../../audio/synths/MiniSynth';
 import Knob from '../controls/Knob.vue';
 import Slider from '../controls/Slider.vue';
 import EnvelopeGraph from '../controls/EnvelopeGraph.vue';
 import FilterGraph from '../controls/FilterGraph.vue';
 import { hzToNormalized } from '../../util/audio';
+import Menu from '../modals/Menu.vue';
 
 const props = defineProps<{
   channelId: string
@@ -27,6 +28,17 @@ const state = reactive({
   filter: { ...rawState.filter, frequency: hzToNormalized(rawState.filter?.frequency ?? 20000) },
 } as MiniSynthConfig);
 
+const noiseMenu = ref<InstanceType<typeof Menu> | null>(null);
+const noiseMenuItems = MINISYNTH_NOISE_MODES.map(mode => ({
+  label: mode.charAt(0).toUpperCase() + mode.slice(1),
+  action: () => setNoiseMode(mode)
+}));
+
+function setNoiseMode(mode: NoiseMode) {
+  state.noiseMode = mode;
+  synth.value?.setNoiseMode(mode);
+}
+
 const waveformSliderValue = computed(() => MINISYNTH_WAVEFORM_MODES.indexOf(state.waveform) / (MINISYNTH_WAVEFORM_MODES.length - 1));
 
 function onWaveformSlider(value: number) {
@@ -36,7 +48,8 @@ function onWaveformSlider(value: number) {
 }
 
 const echoModeSliderValue = computed(() => MINISYNTH_ECHO_MODES.indexOf(state.echo.mode) / (MINISYNTH_ECHO_MODES.length - 1));
-const echoSliderHeight = 75;
+const sliderHeight = 75;
+
 
 function onEchoModeSlider(value: number) {
   onEcho({ mode: MINISYNTH_ECHO_MODES[Math.round(value * (MINISYNTH_ECHO_MODES.length - 1))] });
@@ -100,14 +113,23 @@ function onChorus(partial: Partial<typeof state.chorus>) {
             <span class="header-text">BODY CONTROLS</span>
           </div>
 
-          <div class="section-content">
+          <div class="section-content relative">
             <div class="knob-container knob-row">
               <Knob :model-value="state.masterVolume" :size="60" :resistance="1" :default-value="0.8" @update:model-value="value => onMaster(value)"/>
               <span class="knob-text">Vol</span>
             </div>
 
-            <div class="flex flex-row gap-1">
-              <Slider :model-value="waveformSliderValue" :steps="MINISYNTH_WAVEFORM_MODES.length" :height="72" @update:model-value="onWaveformSlider" />
+            <div class="relative flex flex-row gap-1">
+              <button v-if="state.waveform === 'noise'" class="absolute bottom-full left-0 mb-2.5 flex border-2 border-mix-25 rounded bg-mix-10 px-2 py-0.5 hover:bg-mix-20 text-xs font-mono font-bold capitalize w-full justify-center"
+                @click="noiseMenu?.toggle($event)"
+              >
+                {{ state.noiseMode ?? 'retro' }}
+              </button>
+
+              <Menu ref="noiseMenu" :items="noiseMenuItems" />
+
+              <Slider :model-value="waveformSliderValue" :steps="MINISYNTH_WAVEFORM_MODES.length" :height="sliderHeight" @update:model-value="onWaveformSlider" />
+              
               <div class="flex flex-col justify-between">
                 <span v-for="w in [...MINISYNTH_WAVEFORM_MODES].reverse()" :key="w" class="text-[9px] leading-none capitalize" :class="state.waveform === w ? 'opacity-90' : 'opacity-30'">
                   {{ w }}
@@ -149,8 +171,8 @@ function onChorus(partial: Partial<typeof state.chorus>) {
 
           <div class="section-content">
             <div class="flex items-start gap-1.5">
-              <Slider :model-value="echoModeSliderValue" :steps="3" :height="echoSliderHeight" @update:model-value="onEchoModeSlider" />
-              <div class="flex flex-col justify-between" :style="{ height: echoSliderHeight + 'px' }">
+              <Slider :model-value="echoModeSliderValue" :steps="3" :height="sliderHeight" @update:model-value="onEchoModeSlider" />
+              <div class="flex flex-col justify-between" :style="{ height: sliderHeight + 'px' }">
                 <span v-for="m in [...MINISYNTH_ECHO_MODES].reverse()" :key="m" class="text-[9px] leading-none capitalize" :class="state.echo.mode === m ? 'opacity-90' : 'opacity-30'">
                   {{ m }}
                 </span>

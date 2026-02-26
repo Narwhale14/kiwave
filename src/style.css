@@ -52,6 +52,11 @@ button {
   display: flex;
 }
 
+button:focus {
+  outline: none;
+  box-shadow: none;
+}
+
 .dropdown-button:focus, .util-button:focus {
   outline: none;
   box-shadow: none;

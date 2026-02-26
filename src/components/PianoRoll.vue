@@ -89,10 +89,10 @@ const channelMenuItems = computed(() => channels.value.map(ch => ({
 
 // lane menu dropdown
 const laneMenu = ref<InstanceType<typeof Menu> | null>(null);
-const laneMenuItems = computed(() => ALL_PARAMETERS.map(p => ({
+const laneMenuItems = ALL_PARAMETERS.map(p => ({
   label: p.label,
   action: () => toggleLane(p.id)
-})));
+}));
 
 const activeTool = ref('place');
 const pianoRollTools = [{ id: 'place', label: 'Place Tool' }, { id: 'select', label: 'Select Tool' }];
@@ -665,7 +665,7 @@ onBeforeUnmount(() => {
             <img src="/icons/automation-icon-white.png" class="w-3.5 h-3.5 object-contain" />
             <span class="pi pi-chevron-down text-xs transition-transform" :class="{ 'rotate-180': laneMenu?.isOpen }" />
           </button>
-          <Menu ref="laneMenu" :items="laneMenuItems" :width="80" />
+          <Menu ref="laneMenu" :items="laneMenuItems" :width="85" />
 
           <button v-if="cachedCurves.size > 0" class="w-5 h-5 rounded flex items-center justify-center text-red-400 hover:text-red-300 shrink-0" @pointerdown.stop @click="cachedCurves.clear();" title="Clear automation curve cache">
             <span class="pi pi-times text-xs" />

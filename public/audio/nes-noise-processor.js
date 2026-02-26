@@ -5,7 +5,7 @@ export class NesNoiseProcessor extends AudioWorkletProcessor {
                 name: 'frequency',
                 defaultValue: 440,
                 minValue: 0,
-                maxValue: 20000,
+                maxValue: 96000,
                 automationRate: 'a-rate'
             },
             {
@@ -25,25 +25,28 @@ export class NesNoiseProcessor extends AudioWorkletProcessor {
     }
 
     process(inputs, outputs, parameters) {
-        const output = outputs[0][0];
+        const channels = outputs[0];
         const freqParam = parameters.frequency;
         const modeParam = parameters.mode;
 
-        for(let i = 0; i < output.length; i++) {
+        for(let i = 0; i < channels[0].length; i++) {
             const frequency = freqParam.length > 1 ? freqParam[i] : freqParam[0];
             const mode = modeParam.length > 1 ? modeParam[i] : modeParam[0];
 
             const step = frequency / sampleRate;
             this.phase += step;
 
-            if(this.phase >= 1) {
+            while(this.phase >= 1) {
                 this.phase -= 1;
                 const tap = mode >= 0.5 ? 6 : 1;
                 const bit = ((this.lfsr & 1) ^ (this.lfsr >> tap) & 1) & 1;
                 this.lfsr = (this.lfsr >> 1) | (bit << 14);
             }
 
-            output[i] = (this.lfsr & 1) ? 1 : -1;
+            const sample = (this.lfsr & 1) ? 1 : -1;
+            for(let ch = 0; ch < channels.length; ch++) {
+                channels[ch][i] = sample;
+            }
         }
 
         return true;

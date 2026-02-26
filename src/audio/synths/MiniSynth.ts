@@ -240,6 +240,16 @@ export class MiniSynth implements BaseSynth {
         }
     }
 
+    setNoiseMode(mode: NoiseMode) {
+        this.config.noiseMode = mode;
+        const allVoices = [...this.scheduledVoices.values(), ...this.liveVoices.values()];
+        allVoices.forEach(voice => {
+            if(voice.source instanceof AudioWorkletNode) {
+                voice.source.parameters.get('mode')?.setValueAtTime(mode === 'metallic' ? 1 : 0, this.audioContext.currentTime);
+            }
+        });
+    }
+
     setChorus(chorus: Partial<MiniSynthConfig['chorus']>) {
         this.config.chorus = { ...this.config.chorus, ...chorus };
 
@@ -277,6 +287,7 @@ export class MiniSynth implements BaseSynth {
         if(state.filter) this.setFilter(state.filter);
         if(state.echo) this.setEcho(state.echo);
         if(state.chorus) this.setChorus(state.chorus);
+        if(state.noiseMode) this.setNoiseMode(state.noiseMode);
     }
 
     // voice lifecycle
@@ -289,11 +300,12 @@ export class MiniSynth implements BaseSynth {
         if(this.config.waveform === 'noise') {
             const noiseNode = new AudioWorkletNode(
                 this.audioContext,
-                'nes-noise'
+                'nes-noise',
+                { numberOfInputs: 0, outputChannelCount: [2] }
             );
 
             const freqParam = noiseNode.parameters.get('frequency');
-            freqParam?.setValueAtTime(midiToFrequency(pitch), time);
+            freqParam?.setValueAtTime(midiToFrequency(pitch + 36), time);
             const modeParam = noiseNode.parameters.get('mode');
             modeParam?.setValueAtTime(this.config.noiseMode === 'metallic' ? 1 : 0, time);
             source = noiseNode;
